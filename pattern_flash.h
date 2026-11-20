@@ -1,0 +1,51 @@
+#ifndef _PATTERN_FLASH_H
+#define _PATTERN_FLASH_H
+
+// Stores one .ledanim pattern (webui/compression.js's format, spec in
+// docs/ANIMATION_FORMAT.md) in a fixed region of the CH643's own code
+// flash, so it survives power loss and can autoplay on boot without a
+// host connected. See docs/ANIMATION_FORMAT.md and
+// docs/WEBUSB_PROTOCOL.md for the wire protocol this backs.
+//
+// Reserved region: the top 32KB of the 62KB flash. This firmware
+// currently compiles to under 8KB, so there's a large margin before
+// code growth could ever reach this region -- but see
+// PatternFlash_SanityCheck() for a runtime guard against that anyway,
+// since a silent linker/flash-region collision would be a real (if
+// unlikely) way to corrupt a stored pattern or running code.
+#include <stdint.h>
+
+#define PATTERN_FLASH_BASE  0x08007800u // 0x08000000 + (62*1024 - 32*1024)
+#define PATTERN_FLASH_SIZE  0x8000u     // 32KB
+#define PATTERN_FLASH_PAGE  256u        // fast-program/erase granularity (CH643RM.PDF 20.4.5/20.4.6)
+
+// True if the stored region starts with the .ledanim magic ("LA02") --
+// the simplest possible validity check, and one that's naturally false
+// on erased (all-0xFF) flash, so "nothing stored yet" and "corrupt" both
+// just read as invalid rather than needing a separate sentinel.
+int PatternFlash_IsValid( void );
+
+// Direct read access -- flash is memory-mapped, so this is just a cast,
+// no copy. Only meaningful when PatternFlash_IsValid() is true.
+static inline const uint8_t *PatternFlash_Data( void )
+{
+	return (const uint8_t *)PATTERN_FLASH_BASE;
+}
+
+// Erases the whole reserved region (64 pages). Call once before a fresh
+// upload. ~64 page-erase cycles; not fast, not meant to be called often.
+void PatternFlash_EraseAll( void );
+
+// Streaming write, used by the WebUSB chunk/commit handlers (data can
+// arrive in small, arbitrarily-sized pieces -- a USB packet at a time --
+// not aligned to flash's 256-byte page granularity). Buffers incoming
+// bytes in RAM one page at a time and flushes each page to flash as soon
+// as it fills, instead of buffering the whole pattern in RAM (which
+// wouldn't fit next to everything else in 20KB).
+void PatternFlash_BeginWrite( void );
+void PatternFlash_WriteBytes( const uint8_t *data, uint8_t len );
+// Flushes any final partial page (padded with 0xFF, flash's erased
+// value) -- call once after the last PatternFlash_WriteBytes().
+void PatternFlash_FinishWrite( void );
+
+#endif

@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starfish LED matrix control</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+	<h1>Starfish LED matrix</h1>
+	<div class="conn-controls">
+		<span id="conn-status">Not connected</span>
+		<span id="device-mode"></span>
+		<button id="connect-btn">Connect over WebUSB</button>
+		<button id="disconnect-btn" hidden>Disconnect</button>
+	</div>
+</header>
+
+<main>
+	<section class="board-pane">
+		<div id="board-container" aria-label="LED matrix preview, click or drag to paint"></div>
+		<p class="hint">
+			Click or drag across the round LEDs to paint. Diamond-shaped dots
+			are 4-pin RGB accent LEDs -- click one to set its color. Every LED
+			on the board is addressable.
+		</p>
+		<details class="board-photo">
+			<summary>What the real board looks like</summary>
+			<img src="board_render.jpg" alt="KiCad render of the hackerhotel2027 starfish PCB" width="600">
+		</details>
+	</section>
+
+	<aside class="side-panel">
+
+		<fieldset>
+			<legend>Brush</legend>
+			<label>
+				Brightness
+				<input type="range" id="brush-value" min="0" max="255" value="255">
+				<output id="brush-value-readout">255</output>
+			</label>
+			<label>
+				<input type="checkbox" id="erase-mode">
+				Erase (paint at 0 regardless of brightness above)
+			</label>
+			<label>
+				Brush size
+				<select id="brush-radius">
+					<option value="0">Single LED</option>
+					<option value="2.5">Small</option>
+					<option value="5">Large</option>
+				</select>
+			</label>
+			<label>
+				<input type="checkbox" id="live-send" checked>
+				Send each stroke to the device immediately
+			</label>
+		</fieldset>
+
+		<fieldset id="rgb-editor" hidden>
+			<legend>RGB LED <span id="rgb-editor-label"></span></legend>
+			<label>
+				Color
+				<input type="color" id="rgb-color-input" value="#000000">
+			</label>
+			<p class="hint">
+				A 4-pin RGB accent LED -- driven as three ordinary channels
+				in the same frame, not a separate protocol feature (see
+				<code>docs/LEDPWM_MATRIX.md</code>).
+			</p>
+			<div class="button-row">
+				<button id="rgb-editor-off-btn">Turn off</button>
+				<button id="rgb-editor-close-btn">Close</button>
+			</div>
+		</fieldset>
+
+		<fieldset>
+			<legend>Device</legend>
+			<div class="builtin-row">
+				<button class="builtin-btn" data-pattern="0">All on</button>
+				<button class="builtin-btn" data-pattern="1">Column chase</button>
+				<button class="builtin-btn" data-pattern="2">Row chase</button>
+				<button class="builtin-btn" data-pattern="3">Breathe</button>
+			</div>
+			<div class="button-row">
+				<button id="clear-btn">Clear matrix</button>
+				<button id="send-frame-btn">Send current frame to device</button>
+			</div>
+		</fieldset>
+
+		<fieldset>
+			<legend>Row/column test</legend>
+			<p class="hint">
+				Bring-up debugging: isolates one row or column at full
+				brightness so a dead or miswired row/column is obvious at a
+				glance, without clicking every LED on it by hand. Requires a
+				connected device.
+			</p>
+			<label>
+				Row (0-15)
+				<input type="range" id="test-row-input" min="0" max="15" value="0">
+				<output id="test-row-readout">0</output>
+			</label>
+			<div class="button-row">
+				<button id="test-row-prev-btn">&larr; Row</button>
+				<button id="test-row-btn">Test row</button>
+				<button id="test-row-next-btn">Row &rarr;</button>
+			</div>
+			<label>
+				Column (0-23)
+				<input type="range" id="test-col-input" min="0" max="23" value="0">
+				<output id="test-col-readout">0</output>
+			</label>
+			<div class="button-row">
+				<button id="test-col-prev-btn">&larr; Col</button>
+				<button id="test-col-btn">Test column</button>
+				<button id="test-col-next-btn">Col &rarr;</button>
+			</div>
+			<div class="button-row">
+				<button id="test-stop-btn">Clear / stop test</button>
+			</div>
+
+			<p class="hint">
+				Test single pixel: freezes the scan to one row and lights
+				exactly one LED on it.
+			</p>
+			<label>
+				Pixel row (0-15)
+				<input type="number" id="test-pixel-row-input" min="0" max="15" value="0">
+			</label>
+			<label>
+				Pixel column (0-23)
+				<input type="number" id="test-pixel-col-input" min="0" max="23" value="0">
+			</label>
+			<div class="button-row">
+				<button id="test-pixel-btn">Test single pixel</button>
+			</div>
+		</fieldset>
+
+		<fieldset>
+			<legend>Import from video</legend>
+			<label>
+				Video file
+				<input type="file" id="video-file-input" accept="video/*">
+			</label>
+			<label>
+				Frame rate (fps)
+				<input type="number" id="video-fps" min="1" max="20" value="8">
+			</label>
+			<label>
+				Start at (seconds)
+				<input type="number" id="video-start" min="0" step="0.1" value="0">
+			</label>
+			<label>
+				Duration (seconds)
+				<input type="number" id="video-duration" min="0.1" step="0.1" value="5">
+			</label>
+			<label>
+				Brightness boost
+				<input type="range" id="video-brightness" min="0.5" max="3" step="0.1" value="1.3">
+				<output id="video-brightness-readout">1.3x</output>
+			</label>
+			<label>
+				<input type="checkbox" id="video-ambilight">
+				Ambilight mode
+			</label>
+			<p class="hint" id="video-normal-hint">
+				Off: each LED samples the video at its real position on the
+				board (cropped to the board's aspect ratio), so results follow
+				the starfish shape rather than a plain rectangle.
+			</p>
+			<p class="hint" id="video-ambilight-hint" hidden>
+				On: the video is scaled to fit the dense circular cluster in
+				the matrix's center (its corners, and depending on the video's
+				aspect ratio some of its left/right content, fall outside that
+				circle and won't show on any LED). Every other LED -- out along
+				the arms -- instead takes on the color of whichever edge of
+				that circle it points away from, like a Philips Ambilight TV.
+			</p>
+			<p class="hint">
+				A small, dim 384-LED display reads best with a brightness
+				boost and high-contrast source footage.
+			</p>
+			<div class="button-row">
+				<button id="video-convert-btn">Convert to pattern</button>
+				<button id="video-cancel-btn" hidden>Cancel</button>
+			</div>
+			<progress id="video-progress" value="0" max="1" hidden></progress>
+			<span id="video-status" class="hint"></span>
+		</fieldset>
+
+		<fieldset>
+			<legend>Pattern</legend>
+			<label>
+				Name
+				<input type="text" id="pattern-name" value="Untitled">
+			</label>
+			<label>
+				Playback speed (fps)
+				<input type="number" id="pattern-fps" min="1" max="20" value="4">
+			</label>
+
+			<div class="frame-editor">
+				<div id="frame-strip" class="frame-strip"></div>
+				<span id="frame-count-label"></span>
+				<div class="button-row">
+					<button id="add-frame-btn" title="Insert a new frame (copy of current) after this one">+ Frame</button>
+					<button id="delete-frame-btn" title="Delete current frame">Delete frame</button>
+					<button id="play-btn">▶ Play</button>
+				</div>
+			</div>
+
+			<div class="button-row">
+				<button id="new-pattern-btn">New</button>
+				<button id="save-pattern-btn">Save</button>
+				<button id="duplicate-pattern-btn">Duplicate</button>
+				<button id="delete-pattern-btn">Delete</button>
+			</div>
+			<div class="button-row">
+				<button id="export-pattern-btn">Export JSON</button>
+				<label class="file-button">
+					Import JSON
+					<input type="file" id="import-pattern-input" accept="application/json">
+				</label>
+			</div>
+
+			<ul id="pattern-list" class="pattern-list"></ul>
+		</fieldset>
+
+		<fieldset>
+			<legend>Flash storage</legend>
+			<label>
+				Brightness levels per LED
+				<select id="compression-quant">
+					<option value="8">256 (lossless)</option>
+					<option value="4" selected>16</option>
+					<option value="2">4</option>
+					<option value="1">2 (on/off)</option>
+				</select>
+			</label>
+			<label>
+				Flash budget (KB)
+				<input type="number" id="flash-budget" min="1" step="1" value="32">
+			</label>
+			<p id="compression-stats" class="hint"></p>
+			<div class="button-row">
+				<button id="upload-pattern-btn">Store on device &amp; play on boot</button>
+			</div>
+			<p class="hint" id="upload-pattern-status"></p>
+			<div class="button-row">
+				<button id="export-compressed-btn">Download .ledanim</button>
+				<label class="file-button">
+					Load .ledanim
+					<input type="file" id="import-compressed-input" accept=".ledanim">
+				</label>
+			</div>
+			<p class="hint">
+				"Store on device" writes the compressed pattern into the
+				device's own flash (16KB reserved for it) and starts it
+				playing immediately -- it then autoplays on every future
+				power-on too, with no host connected, until a new pattern is
+				stored. Format and rationale:
+				<code>docs/ANIMATION_FORMAT.md</code>.
+			</p>
+		</fieldset>
+
+	</aside>
+</main>
+
+<section class="regpanel-pane">
+	<h2>Manual LEDPWM register control</h2>
+	<p class="hint">
+		Bring-up/debugging tool: read and write the LEDPWM peripheral's
+		raw registers directly. Writes are raw pokes with no validation
+		-- the same kind of direct register access
+		<code>CMD_RAW_TEST</code>/<code>CMD_SET_PWM_PIN</code> already
+		allowed for column enables specifically, generalized to every
+		register. See <code>docs/LEDPWM_MATRIX.md</code> for the
+		hardware background (in particular: <code>PWM_PIN</code>'s
+		bit0-as-gate behavior, and why <code>SWITCH</code>/<code>COM_E</code>/
+		<code>PWM_PIN</code>/<code>CTRL</code> must each be written as
+		one atomic 32-bit group rather than as separate bytes).
+	</p>
+	<div id="regpanel-container"></div>
+</section>
+
+<footer>
+	<p>
+		Protocol reference: <code>docs/WEBUSB_PROTOCOL.md</code>. Patterns are
+		stored in this browser only (localStorage) -- use Export/Import to
+		move them between machines.
+	</p>
+</footer>
+
+<script src="board_data.js"></script>
+<script src="webusb.js"></script>
+<script src="board.js"></script>
+<script src="patterns.js"></script>
+<script src="compression.js"></script>
+<script src="video_import.js"></script>
+<script src="app.js"></script>
+<script src="regpanel.js"></script>
+</body>
+</html>

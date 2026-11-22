@@ -6,6 +6,7 @@
 #include "ch643_ledpwm.h"
 #include "infrared.h"
 #include "layout.h"
+#include "persist.h"
 #include "standby.h"
 
 static const hh_app_header_t* s_app;  // the running app's header, in app RAM
@@ -13,6 +14,7 @@ static bool s_exit;
 static uint8_t s_pressed, s_held;
 static uint32_t s_random;
 static uint32_t s_millis;  // since the app started, counted in ticks
+static const char* s_name;  // the app's name in the store (persist.h key)
 
 static void api_set(uint16_t slot, uint8_t value) {
     if (slot < HH_SLOTS) LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, value);
@@ -51,6 +53,10 @@ static void api_exit(void) { s_exit = true; }
 
 static void api_print(const char* text) { printf("%s", text); }
 
+static void api_set_name(const char* name) { Persist_SetName(name, strlen(name)); }
+static bool api_load(void* data, unsigned len) { return Persist_LoadApp(s_name, data, len); }
+static bool api_save(const void* data, unsigned len) { return Persist_SaveApp(s_name, data, len); }
+
 static const hh_api_t s_api = {
     .version = HH_API_VERSION,
     .size = sizeof(hh_api_t),
@@ -71,6 +77,10 @@ static const hh_api_t s_api = {
     .standby = api_standby,
     .exit = api_exit,
     .print = api_print,
+    .name = Persist_Name,
+    .set_name = api_set_name,
+    .load = api_load,
+    .save = api_save,
 };
 
 static bool in_image(uint32_t addr, uint32_t load_end) {
@@ -85,7 +95,7 @@ bool AppHost_Check(const hh_app_header_t* h, uint32_t length) {
            in_image((uint32_t)h->init, load_end) && in_image((uint32_t)h->tick, load_end);
 }
 
-bool AppHost_Start(const uint8_t* image, uint32_t length) {
+bool AppHost_Start(const uint8_t* image, uint32_t length, const char* name) {
     const hh_app_header_t* h = (const hh_app_header_t*)image;
     if (!AppHost_Check(h, length)) return false;
     char* load_end = h->load_end;
@@ -99,6 +109,7 @@ bool AppHost_Start(const uint8_t* image, uint32_t length) {
     s_exit = false;
     s_pressed = s_held = 0;
     s_millis = 0;
+    s_name = name;
     s_random = funSysTick32() ^ ESIG->UID0 ^ 0x9E3779B9u;
     if (!s_random) s_random = 1;
     LEDMatrix_Clear();

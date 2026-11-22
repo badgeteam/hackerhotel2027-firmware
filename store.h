@@ -6,12 +6,13 @@
 // Items lie one after the other, each one starting on a 256-byte page: a
 // 32-byte store_item_t header, then the payload (a .ledanim animation or
 // a .hhapp app). The first page with no item header ends the list. The
-// last page of the region holds the settings (which item starts at boot).
+// last 1 KB of the region is not for items: persist.c keeps the name, the
+// boot item and the apps' data there.
 //
 // A new item goes after the last one. Its first page, with the header, is
 // written last, on Store_Commit(), so an upload that breaks off leaves no
 // half item behind. Items cannot be deleted one by one: Store_EraseAll()
-// empties the store.
+// empties the store (the persistent record stays).
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -43,6 +44,7 @@ static inline const uint8_t* Store_Payload(const store_item_t* item) { return (c
 uint8_t Store_FreePages(void);  // 256-byte pages left for new items
 
 // The item the badge starts at power-on; STORE_NONE if there is none.
+// Kept by persist.c, which writes it to flash from the main loop.
 uint8_t Store_BootItem(void);
 void Store_SetBootItem(uint8_t index);
 

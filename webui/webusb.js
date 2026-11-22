@@ -22,6 +22,8 @@ const CMD = {
 	ITEM_INFO: 0x24,
 	ITEM_RUN: 0x25,
 	STOP: 0x26,
+	NAME_GET: 0x30,
+	NAME_SET: 0x31,
 	QUERY: 0xff,
 };
 
@@ -128,7 +130,11 @@ class LedMatrixDevice extends EventTarget {
 					api: d.getUint8(7),
 				});
 			}
-			if (d.byteLength >= 33 && status.result === 0) {
+			if (d.byteLength === 40) {
+				const name = new Uint8Array(d.buffer, d.byteOffset + 8, 32);
+				const end = name.indexOf(0);
+				status.name = new TextDecoder().decode(end < 0 ? name : name.subarray(0, end));
+			} else if (d.byteLength >= 33 && status.result === 0) {
 				const name = new Uint8Array(d.buffer, d.byteOffset + 13, 20);
 				const end = name.indexOf(0);
 				status.item = {
@@ -221,5 +227,15 @@ class LedMatrixDevice extends EventTarget {
 
 	eraseStore() {
 		return this._send([CMD.STORE_ERASE]);
+	}
+
+	// The owner's name, kept on the badge for apps (persist.h)
+	async getName() {
+		return (await this._checked([CMD.NAME_GET], 'Reading the name')).name ?? '';
+	}
+
+	async setName(name) {
+		const bytes = new TextEncoder().encode(name).subarray(0, 32);
+		return (await this._checked([CMD.NAME_SET, ...bytes], 'Saving the name')).name ?? '';
 	}
 }

@@ -9,6 +9,7 @@
 #include "infrared.h"
 #include "app_host.h"
 #include "pattern_player.h"
+#include "persist.h"
 #include "standby.h"
 #include "store.h"
 #include "webusb_protocol.h"
@@ -53,7 +54,7 @@ static void run_item(uint8_t index) {
     if (item->type == STORE_TYPE_ANIMATION) {
         PatternPlayer_Start(Store_Payload(item));
         g_app_mode = APP_MODE_FLASH_PATTERN;
-    } else if (item->type == STORE_TYPE_APP && AppHost_Start(Store_Payload(item), item->length)) {
+    } else if (item->type == STORE_TYPE_APP && AppHost_Start(Store_Payload(item), item->length, item->name)) {
         g_app_mode = APP_MODE_APP;
     }
 }
@@ -76,6 +77,8 @@ int main(void) {
         }
     }
 
+    Persist_Init();
+
     // Start the boot item from the store, unless a button is held: then
     // the badge starts without it (in case it is an app that hangs)
     if (buttons_raw()) {
@@ -97,6 +100,7 @@ int main(void) {
         // a command from the host (custom mode, STOP, erase) ends the app
         if (g_app_mode != APP_MODE_APP) AppHost_Stop();
         WebUSB_Poll();
+        Persist_Flush();  // what the host or the app changed
 
         uint32_t elapsed_ms = (funSysTick32() - last_tick) / DELAY_MS_TIME;
         last_tick += elapsed_ms * DELAY_MS_TIME;

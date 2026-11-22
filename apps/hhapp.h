@@ -40,6 +40,10 @@
 #define HH_EDGE_COUNT 71  // the outline, clockwise from the top
 #define HH_RGB_COUNT 35   // 7 RGB LEDs on each of the 5 arms
 
+// Persistent data (survives power-off)
+#define HH_NAME_MAX 32      // the owner's name, characters
+#define HH_APP_DATA_MAX 28  // what one app can save, bytes
+
 // Buttons, by their silkscreen letter
 #define HH_BTN_A (1u << 0)  // SW1, PB20
 #define HH_BTN_C (1u << 1)  // SW3, PC4
@@ -91,6 +95,14 @@ typedef struct {
     void (*standby)(void);  // sleep until a button wakes the badge; returns after
     void (*exit)(void);     // leave the app once this tick returns
     void (*print)(const char *text);  // debug output over SWIO (minichlink -T)
+
+    // Persistent data. It lives in flash, so save only when something
+    // changed (a new high score, not every tick): the firmware writes it
+    // after the tick, and each write wears the flash a little.
+    const char *(*name)(void);  // the owner's name, NUL-terminated; "" if not set
+    void (*set_name)(const char *name);
+    bool (*load)(void *data, unsigned len);        // false if this app saved nothing yet
+    bool (*save)(const void *data, unsigned len);  // len <= HH_APP_DATA_MAX; false if no room
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.

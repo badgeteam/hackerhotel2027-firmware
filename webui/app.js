@@ -905,14 +905,30 @@ document.getElementById('store-add-input').addEventListener('change', async (ev)
 document.getElementById('store-stop-btn').addEventListener('click', () => storeAction(() => device.stop()));
 
 document.getElementById('store-erase-btn').addEventListener('click', () => {
-	if (!confirm('Erase every app and animation on the badge?')) return;
+	if (!confirm('Erase every app and animation on the badge? (Your name and the apps\' saved data stay.)')) return;
 	storeAction(() => device.eraseStore());
 });
 
-device.addEventListener('connect', refreshStore);
+const badgeNameInput = document.getElementById('badge-name');
+
+document.getElementById('badge-name-btn').addEventListener('click', () =>
+	storeAction(async () => {
+		badgeNameInput.value = await device.setName(badgeNameInput.value.trim());
+	})
+);
+
+device.addEventListener('connect', async () => {
+	try {
+		badgeNameInput.value = await device.getName();
+	} catch (e) {
+		/* firmware without persistent settings */
+	}
+	refreshStore();
+});
 device.addEventListener('disconnect', () => {
 	storeStatus = null;
 	storeItems = [];
+	badgeNameInput.value = '';
 	renderStore();
 });
 

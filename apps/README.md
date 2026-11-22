@@ -51,13 +51,19 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 - **Leave the app.** Hold A and C for one second. The badge also leaves
   the app when the web interface sends a command (a frame, Stop, Run), or
   when the app calls `exit()`.
+- **Saving.** `name()` gives the owner's name, which is set in the web
+  interface or by an app with `set_name()`. An app can keep up to 28
+  bytes with `save()` and `load()`, for example its high scores. The data
+  stays when the badge powers off and when the store is erased. It is
+  kept by the app's name in the store, so the same app gets it back after
+  an upload. Save only when something changed: each save is a flash write.
 - **Safe start.** Hold any button while the badge powers on, and it does
   not start the boot item.
 
 ## Limits
 
 - **Size.** The image and its `.bss` together must fit in 12 KB of RAM
-  (`HH_APP_RAM_SIZE`). The store holds 31.75 KB for all items together.
+  (`HH_APP_RAM_SIZE`). The store holds 31 KB for all items together.
 - **No C library.** `sdk.c` supplies `memset` and `memcpy`. Do not use
   64-bit division: the toolchain's libgcc is 64-bit only.
 - **Stack.** The app runs on the firmware's stack, about 5 KB. Keep big

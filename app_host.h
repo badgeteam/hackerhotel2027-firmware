@@ -10,8 +10,10 @@
 // of `length` bytes.
 bool AppHost_Check(const hh_app_header_t* h, uint32_t length);
 
-// Loads and starts the app; false if the image is not a valid app.
-bool AppHost_Start(const uint8_t* image, uint32_t length);
+// Loads and starts the app; false if the image is not a valid app. name:
+// the app's name in the store (STORE_NAME_LEN bytes), the key for its
+// persistent data.
+bool AppHost_Start(const uint8_t* image, uint32_t length, const char* name);
 
 // One tick: the buttons that went down since the last tick (HH_BTN_*) and
 // the ones down now. Returns false once the app has asked to exit.

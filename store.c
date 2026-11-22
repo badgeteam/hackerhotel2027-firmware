@@ -2,15 +2,9 @@
 #include <string.h>
 #include "app_host.h"
 #include "flash_pages.h"
+#include "persist.h"
 
-#define ITEMS_SIZE (STORE_FLASH_SIZE - FLASH_PAGE_SIZE)  // everything but the settings page
-#define SETTINGS_ADDR (STORE_FLASH_BASE + ITEMS_SIZE)
-#define SETTINGS_MAGIC 0x31534848u  // "HHS1"
-
-typedef struct {
-    uint32_t magic;  // SETTINGS_MAGIC
-    uint8_t boot_item;
-} settings_t;
+#define ITEMS_SIZE STORE_ITEMS_SIZE
 
 static const store_item_t* item_at(uint32_t offset) { return (const store_item_t*)(STORE_FLASH_BASE + offset); }
 
@@ -57,21 +51,11 @@ static uint32_t end_offset(void) { return walk(STORE_NONE, NULL); }
 uint8_t Store_FreePages(void) { return (uint8_t)((ITEMS_SIZE - end_offset()) / FLASH_PAGE_SIZE); }
 
 uint8_t Store_BootItem(void) {
-    const settings_t* s = (const settings_t*)SETTINGS_ADDR;
-    if (s->magic != SETTINGS_MAGIC || !Store_Item(s->boot_item)) return STORE_NONE;
-    return s->boot_item;
+    uint8_t index = Persist_BootItem();
+    return Store_Item(index) ? index : STORE_NONE;
 }
 
-void Store_SetBootItem(uint8_t index) {
-    const settings_t* s = (const settings_t*)SETTINGS_ADDR;
-    if (s->magic == SETTINGS_MAGIC && s->boot_item == index) return;
-    static uint8_t page[FLASH_PAGE_SIZE];
-    memset(page, 0xFF, sizeof page);
-    settings_t n = {SETTINGS_MAGIC, index};
-    memcpy(page, &n, sizeof n);
-    FlashPages_Erase(SETTINGS_ADDR);
-    FlashPages_Program(SETTINGS_ADDR, page);
-}
+void Store_SetBootItem(uint8_t index) { Persist_SetBootItem(index); }
 
 const uint8_t* Store_LegacyPattern(void) {
     const uint8_t* d = (const uint8_t*)STORE_FLASH_BASE;
@@ -91,7 +75,8 @@ static bool s_overflow;
 
 void Store_EraseAll(void) {
     s_writing = false;
-    for (uint32_t off = 0; off < STORE_FLASH_SIZE; off += FLASH_PAGE_SIZE) FlashPages_Erase(STORE_FLASH_BASE + off);
+    for (uint32_t off = 0; off < ITEMS_SIZE; off += FLASH_PAGE_SIZE) FlashPages_Erase(STORE_FLASH_BASE + off);
+    Persist_SetBootItem(STORE_NONE);
 }
 
 int Store_Begin(uint8_t type, const char* name, unsigned name_len) {

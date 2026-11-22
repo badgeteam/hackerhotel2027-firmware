@@ -13,6 +13,12 @@
 #define STORE_FLASH_SIZE 0x8000u      // 32KB
 #define FLASH_PAGE_SIZE 256u
 
+// The region is split: items (store.c) first, the persistent record
+// (persist.c, two copies of two pages) in the last 1 KB
+#define STORE_ITEMS_SIZE (STORE_FLASH_SIZE - PERSIST_FLASH_SIZE)
+#define PERSIST_FLASH_SIZE 0x400u
+#define PERSIST_FLASH_BASE (STORE_FLASH_BASE + STORE_ITEMS_SIZE)
+
 // Erases the page at addr (page-aligned), unless it is erased (all 0xFF)
 // already.
 void FlashPages_Erase(uint32_t addr);

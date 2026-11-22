@@ -19,7 +19,8 @@ typedef struct {
     uint32_t seq;    // the higher one of the two copies is the newest
     uint32_t crc;    // CRC-32 of everything after this field
     uint8_t boot_item;
-    uint8_t reserved[3];
+    uint8_t brightness;  // 0: never saved (records before it had 0 here)
+    uint8_t reserved[2];
     char name[PERSIST_NAME_LEN];  // NUL-padded
     uint8_t reserved2[16];
     app_slot_t apps[PERSIST_APP_SLOTS];
@@ -32,6 +33,7 @@ static record_t s_rec;                        // the current state
 static char s_name[PERSIST_NAME_LEN + 1];     // s_rec.name, NUL-terminated
 static uint8_t s_newest;                      // copy that holds s_rec's last flushed state
 static volatile bool s_dirty;
+static volatile uint32_t s_quiet_ms;  // since the last change
 
 static uint32_t crc32(const uint8_t* p, unsigned n) {
     uint32_t c = 0xFFFFFFFFu;
@@ -76,10 +78,23 @@ void Persist_Init(void) {
 
 uint8_t Persist_BootItem(void) { return s_rec.boot_item; }
 
+static void changed(void) {
+    s_dirty = true;
+    s_quiet_ms = 0;
+}
+
 void Persist_SetBootItem(uint8_t index) {
     if (s_rec.boot_item == index) return;
     s_rec.boot_item = index;
-    s_dirty = true;
+    changed();
+}
+
+uint8_t Persist_Brightness(void) { return s_rec.brightness; }
+
+void Persist_SetBrightness(uint8_t brightness) {
+    if (s_rec.brightness == brightness) return;
+    s_rec.brightness = brightness;
+    changed();
 }
 
 const char* Persist_Name(void) { return s_name; }
@@ -90,7 +105,7 @@ void Persist_SetName(const char* name, unsigned len) {
     if (memcmp(n, s_rec.name, PERSIST_NAME_LEN) == 0) return;
     memcpy(s_rec.name, n, PERSIST_NAME_LEN);
     name_changed();
-    s_dirty = true;
+    changed();
 }
 
 static uint32_t app_key(const char* app_name) {
@@ -132,12 +147,14 @@ bool Persist_SaveApp(const char* app_name, const void* data, unsigned len) {
     if (slot->key == key && memcmp(slot->data, d, sizeof d) == 0) return true;  // nothing new
     slot->key = key;
     memcpy(slot->data, d, sizeof d);
-    s_dirty = true;
+    changed();
     return true;
 }
 
-void Persist_Flush(void) {
+void Persist_Flush(uint32_t elapsed_ms) {
     if (!s_dirty) return;
+    s_quiet_ms += elapsed_ms;
+    if (s_quiet_ms < PERSIST_SETTLE_MS) return;
     static record_t copy;  // a snapshot: an interrupt may change s_rec meanwhile
     __disable_irq();
     s_dirty = false;

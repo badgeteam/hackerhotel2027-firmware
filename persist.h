@@ -1,6 +1,6 @@
 #pragma once
-// Persistent settings: the owner's name, the boot item, and a little data
-// for each app (high scores and the like). It survives power-off,
+// Persistent settings: the owner's name, the boot item, the global
+// brightness, and a little data for each app (high scores and the like). It survives power-off,
 // Store_EraseAll() and new apps; the record lives in flash next to the
 // item store (flash_pages.h).
 //
@@ -8,18 +8,24 @@
 // copy that is not the newest, with a higher sequence number and a CRC,
 // so losing power halfway leaves the previous copy in place. Changes are
 // made in RAM and written by Persist_Flush() from the main loop, never
-// from an interrupt: flash writes stall the CPU for milliseconds.
+// from an interrupt: flash writes stall the CPU for milliseconds. It
+// waits until nothing has changed for PERSIST_SETTLE_MS, so stepping the
+// brightness five times is one write, not five.
 #include <stdbool.h>
 #include <stdint.h>
 #include "apps/hhapp.h"
 
 #define PERSIST_NAME_LEN HH_NAME_MAX
 #define PERSIST_APP_SLOTS 14
+#define PERSIST_SETTLE_MS 1000
 
 void Persist_Init(void);  // reads the newest valid copy
 
 uint8_t Persist_BootItem(void);  // STORE_NONE if unset
 void Persist_SetBootItem(uint8_t index);
+
+uint8_t Persist_Brightness(void);  // the global brightness; 0 if never saved
+void Persist_SetBrightness(uint8_t brightness);
 
 // The name, NUL-terminated (up to PERSIST_NAME_LEN characters)
 const char* Persist_Name(void);
@@ -34,5 +40,7 @@ void Persist_SetName(const char* name, unsigned len);
 bool Persist_LoadApp(const char* app_name, void* data, unsigned len);
 bool Persist_SaveApp(const char* app_name, const void* data, unsigned len);
 
-// Writes the record to flash if anything changed. Call from the main loop.
-void Persist_Flush(void);
+// Writes the record to flash once something changed and then nothing
+// changed for PERSIST_SETTLE_MS. Call from the main loop with the time
+// since the previous call.
+void Persist_Flush(uint32_t elapsed_ms);

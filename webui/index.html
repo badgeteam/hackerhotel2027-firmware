@@ -109,7 +109,7 @@
 						<button role="tab" id="tab-test" aria-controls="panel-test" aria-selected="true">Test
 							animations</button>
 						<button role="tab" id="tab-video" aria-controls="panel-video" aria-selected="false">From
-							video</button>
+							video or GIF</button>
 						<button role="tab" id="tab-text" aria-controls="panel-text" aria-selected="false">From
 							text</button>
 					</div>
@@ -127,8 +127,8 @@
 					</div>
 					<div class="tab-panel" role="tabpanel" id="panel-video" aria-labelledby="tab-video" hidden>
 						<label>
-							Video file
-							<input type="file" id="video-file-input" accept="video/*">
+							Video or animated image (GIF, WebP, PNG)
+							<input type="file" id="video-file-input" accept="video/*,image/gif,image/webp,image/apng,image/png">
 						</label>
 						<label>
 							Frame rate (fps)

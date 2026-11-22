@@ -8,7 +8,7 @@ You control the badge from a web interface over WebUSB (`webui/`). From
 the web interface you can:
 
 - draw on the LEDs,
-- make animations from video or text,
+- make animations from video, animated GIF (or WebP, PNG) or text,
 - store animations and apps on the badge,
 - set your name.
 

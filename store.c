@@ -133,7 +133,7 @@ int Store_Write(const uint8_t* data, unsigned len) {
 }
 
 static bool payload_valid(uint8_t type, const uint8_t* payload, uint32_t length) {
-    if (type == STORE_TYPE_ANIMATION) return length >= 8 && memcmp(payload, "LA02", 4) == 0;
+    if (type == STORE_TYPE_ANIMATION) return length >= 8 && (memcmp(payload, "LA03", 4) == 0 || memcmp(payload, "LA02", 4) == 0);
     return length >= sizeof(hh_app_header_t) && AppHost_Check((const hh_app_header_t*)payload, length);
 }
 

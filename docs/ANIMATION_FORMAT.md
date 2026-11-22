@@ -12,7 +12,9 @@ There are two versions:
   still read it.
 
 Both formats were made for this badge. There is no external standard.
-LA03 uses well-known techniques: run-length coding, delta frames, an
+LA03 uses well-known techniques (see [References](#references)):
+[run-length coding](https://en.wikipedia.org/wiki/Run-length_encoding),
+[delta frames](https://en.wikipedia.org/wiki/Delta_encoding), an
 [Elias gamma code](https://en.wikipedia.org/wiki/Elias_gamma_coding) and a
 very simple form of
 [motion compensation](https://en.wikipedia.org/wiki/Motion_compensation).
@@ -192,3 +194,17 @@ LA02 codes the slots in matrix order (slot 0..383), with fixed widths:
 | 3 | raw | 384 values (`quant_bits` each), in slot order |
 
 The encoder picked the smallest of these types for each frame.
+
+## References
+
+- [Run-length encoding](https://en.wikipedia.org/wiki/Run-length_encoding):
+  the key frames of LA02 and LA03.
+- [Delta encoding](https://en.wikipedia.org/wiki/Delta_encoding): the delta
+  frames, which store only what changed since the previous frame.
+- [Elias gamma coding](https://en.wikipedia.org/wiki/Elias_gamma_coding):
+  LA03's run lengths and gaps.
+- [Motion compensation](https://en.wikipedia.org/wiki/Motion_compensation):
+  what LA03's shift frame does in its simplest form, with one shift of one
+  LED for the whole grid.
+- [Gamma correction](https://en.wikipedia.org/wiki/Gamma_correction): the
+  firmware applies gamma 2.2 to the decoded values (`docs/LEDPWM_MATRIX.md`).

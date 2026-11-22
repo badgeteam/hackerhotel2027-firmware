@@ -75,7 +75,7 @@ typedef struct {
     void (*set)(uint16_t slot, uint8_t value);  // ignores HH_NONE and slots out of range
     uint8_t (*get)(uint16_t slot);
     void (*clear)(void);
-    void (*set_brightness)(uint8_t brightness);  // the global brightness, 255 = unscaled
+    void (*set_brightness)(uint8_t brightness);  // the global brightness, 255 = unscaled; kept over power-off
     uint8_t (*brightness)(void);
     const uint16_t (*grid)[HH_GRID_W];  // grid[y][x], y = 0 at the top
     const uint16_t *edge;

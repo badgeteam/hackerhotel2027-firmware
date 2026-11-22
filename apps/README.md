@@ -57,6 +57,11 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   stays when the badge powers off and when the store is erased. It is
   kept by the app's name in the store, so the same app gets it back after
   an upload. Save only when something changed: each save is a flash write.
+- **Brightness.** `set_brightness()` sets the global brightness, the same
+  one that B and D set outside an app. The badge keeps it when it is
+  powered off.
+- **Gamma.** LED values are brightness as a screen shows it. The firmware
+  applies gamma 2.2, so 128 looks half as bright.
 - **Safe start.** Hold any button while the badge powers on, and it does
   not start the boot item.
 

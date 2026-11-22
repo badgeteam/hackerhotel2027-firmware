@@ -65,6 +65,22 @@ uint8_t buttons_poll(void) {
     return pressed_edges;
 }
 
+uint8_t buttons_down(void) {
+    uint8_t down = 0;
+    for (int i = 0; i < 4; i++) {
+        if (s_buttons[i].pressed) down |= (1u << i);
+    }
+    return down;
+}
+
+uint8_t buttons_raw(void) {
+    uint8_t down = 0;
+    for (int i = 0; i < 4; i++) {
+        if (s_buttons[i].read_raw()) down |= (1u << i);
+    }
+    return down;
+}
+
 // Treat every button as already pressed, so a press that is still held (e.g.
 // the one that woke us from standby) doesn't register until it's released
 void buttons_ignore_held(void) {

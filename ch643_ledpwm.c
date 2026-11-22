@@ -110,6 +110,10 @@ void LEDMatrix_SetPixel(uint8_t row, uint8_t col, uint8_t brightness) {
     if (row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS) s_brightness[row][col] = brightness;
 }
 
+uint8_t LEDMatrix_GetPixel(uint8_t row, uint8_t col) {
+    return row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS ? s_brightness[row][col] : 0;
+}
+
 void LEDMatrix_Clear(void) {
     for (uint8_t row = 0; row < LED_MATRIX_ROWS; row++) {
         for (uint8_t col = 0; col < LED_MATRIX_COLS; col++) {

@@ -477,3 +477,36 @@ footer code {
 		overflow-y: auto;
 	}
 }
+
+.store-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	max-height: 14rem;
+	overflow-y: auto;
+}
+
+.store-item {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.8rem;
+}
+
+.store-item > span:first-child {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.store-item.running > span:first-child {
+	color: var(--accent);
+}
+
+.store-kind {
+	color: var(--text-dim);
+}

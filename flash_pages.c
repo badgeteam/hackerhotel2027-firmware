@@ -1,6 +1,6 @@
 #include <string.h>
 #include "ch32fun.h"
-#include "pattern_flash.h"
+#include "flash_pages.h"
 
 // --- Low-level FPEC sequences (CH643RM.PDF 20.4) ---------------------------
 // Register names/bit positions confirmed against ch32x03xhw.h's
@@ -60,7 +60,7 @@ static void flash_program_page( uint32_t addr, const uint8_t *data )
 	FLASH->CTLR |= FLASH_CTLR_FTPG;
 	FLASH->CTLR |= FLASH_CTLR_BUFRST;
 	flash_wait_busy();
-	for( unsigned i = 0; i < PATTERN_FLASH_PAGE / 4; i++ )
+	for( unsigned i = 0; i < FLASH_PAGE_SIZE / 4; i++ )
 	{
 		uint32_t word;
 		memcpy( &word, data + i * 4, 4 );
@@ -77,60 +77,18 @@ static void flash_program_page( uint32_t addr, const uint8_t *data )
 
 // --- Public API --------------------------------------------------------
 
-int PatternFlash_IsValid( void )
-{
-	const uint8_t *d = PatternFlash_Data();
-	return d[0] == 'L' && d[1] == 'A' && d[2] == '0' && d[3] == '2';
+void FlashPages_Erase(uint32_t addr) {
+    const uint32_t* p = (const uint32_t*)addr;
+    unsigned i = 0;
+    while (i < FLASH_PAGE_SIZE / 4 && p[i] == 0xFFFFFFFFu) i++;
+    if (i == FLASH_PAGE_SIZE / 4) return;  // erased already
+    flash_unlock();
+    flash_erase_page(addr);
+    flash_lock();
 }
 
-void PatternFlash_EraseAll( void )
-{
-	flash_unlock();
-	for( uint32_t off = 0; off < PATTERN_FLASH_SIZE; off += PATTERN_FLASH_PAGE )
-		flash_erase_page( PATTERN_FLASH_BASE + off );
-	flash_lock();
-}
-
-// Streaming-write state: how many bytes of the current page are filled,
-// and the absolute flash address the next completed page goes to.
-static uint8_t s_page_buf[PATTERN_FLASH_PAGE];
-static unsigned s_page_fill;
-static uint32_t s_write_addr;
-
-void PatternFlash_BeginWrite( void )
-{
-	s_page_fill = 0;
-	s_write_addr = PATTERN_FLASH_BASE;
-}
-
-static void flush_page( void )
-{
-	if( s_page_fill == 0 )
-		return;
-	if( s_page_fill < PATTERN_FLASH_PAGE )
-		memset( s_page_buf + s_page_fill, 0xFF, PATTERN_FLASH_PAGE - s_page_fill );
-	flash_unlock();
-	flash_program_page( s_write_addr, s_page_buf );
-	flash_lock();
-	s_write_addr += PATTERN_FLASH_PAGE;
-	s_page_fill = 0;
-}
-
-void PatternFlash_WriteBytes( const uint8_t *data, uint8_t len )
-{
-	// Bounds check: silently drop anything past the reserved region
-	// rather than writing outside it.
-	if( s_write_addr + s_page_fill + len > PATTERN_FLASH_BASE + PATTERN_FLASH_SIZE )
-		return;
-	for( uint8_t i = 0; i < len; i++ )
-	{
-		s_page_buf[s_page_fill++] = data[i];
-		if( s_page_fill == PATTERN_FLASH_PAGE )
-			flush_page();
-	}
-}
-
-void PatternFlash_FinishWrite( void )
-{
-	flush_page();
+void FlashPages_Program(uint32_t addr, const uint8_t* data) {
+    flash_unlock();
+    flash_program_page(addr, data);
+    flash_lock();
 }

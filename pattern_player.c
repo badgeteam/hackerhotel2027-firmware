@@ -1,6 +1,5 @@
 #include <string.h>
 #include "ch32fun.h"
-#include "pattern_flash.h"
 #include "ch643_ledpwm.h"
 #include "pattern_player.h"
 
@@ -21,6 +20,7 @@
 // (it keeps `quant` separate from the dequantized values it pushes into
 // `frames`).
 static uint8_t s_quant[FRAME_PIXELS];
+static const uint8_t *s_data; // the .ledanim being played, in flash
 static uint32_t s_bitpos;      // bit offset into the flash blob of the next frame to decode
 static uint16_t s_frame_index;
 static uint16_t s_frame_count;
@@ -76,13 +76,14 @@ static void apply_quant_to_display( void )
 	}
 }
 
-void PatternPlayer_Reset( void )
+void PatternPlayer_Start( const uint8_t *data )
 {
 	s_active = 0;
 	s_paused = 0;
-	if( !PatternFlash_IsValid() )
+	if( memcmp( data, "LA02", 4 ) != 0 )
 		return;
-	const uint8_t *d = PatternFlash_Data();
+	const uint8_t *d = data;
+	s_data = data;
 	s_frame_count = rd_u16( d + 4 );
 	s_fps = d[6];
 	if( s_fps < 1 )
@@ -105,7 +106,7 @@ void PatternPlayer_Reset( void )
 // docs/ANIMATION_FORMAT.md.
 static void decode_one_frame( void )
 {
-	const uint8_t *d = PatternFlash_Data();
+	const uint8_t *d = s_data;
 	uint32_t bp = s_bitpos;
 	unsigned type = read_bits( d, &bp, 2 );
 

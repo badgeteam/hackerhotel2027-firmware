@@ -15,8 +15,30 @@ const CMD = {
 	PATTERN_BEGIN: 0x10,
 	PATTERN_CHUNK: 0x11,
 	PATTERN_COMMIT: 0x12,
+	STORE_ERASE: 0x20,
+	ITEM_BEGIN: 0x21,
+	ITEM_CHUNK: 0x22,
+	ITEM_COMMIT: 0x23,
+	ITEM_INFO: 0x24,
+	ITEM_RUN: 0x25,
+	STOP: 0x26,
 	QUERY: 0xff,
 };
+
+// Item types in the store (STORE_TYPE_* in store.h)
+const ITEM_TYPE = { ANIMATION: 1, APP: 2 };
+const ITEM_TYPE_NAMES = { 1: 'Animation', 2: 'App' };
+const NO_ITEM = 0xff;
+
+// The status reply's result byte (STORE_ERR_* in store.h)
+const STORE_ERRORS = {
+	1: 'bad command or index',
+	2: 'not enough room left on the badge -- erase the store first',
+	3: 'no such item',
+	4: 'not a valid animation or app',
+};
+
+class StoreError extends Error {}
 
 class LedMatrixDevice extends EventTarget {
 	constructor() {
@@ -78,8 +100,9 @@ class LedMatrixDevice extends EventTarget {
 		this.dispatchEvent(new CustomEvent('disconnect'));
 	}
 
-	// Sends one command packet and returns the 2-byte status reply as
-	// {mode, brightness}, or null if nothing is connected.
+	// Sends one command packet and returns the status reply (see
+	// webusb_protocol.h) as {mode, brightness, result, count, running,
+	// boot, freeBytes, api, item}, or null if nothing is connected.
 	_send(bytes) {
 		this._queue = this._queue.then(() => this._sendNow(bytes)).catch((e) => {
 			console.error('LED matrix USB error', e);
@@ -93,7 +116,27 @@ class LedMatrixDevice extends EventTarget {
 		await this.device.transferOut(EP_OUT, new Uint8Array(bytes));
 		const result = await this.device.transferIn(EP_IN, 64);
 		if (result.data && result.data.byteLength >= 2) {
-			const status = { mode: result.data.getUint8(0), brightness: result.data.getUint8(1) };
+			const d = result.data;
+			const status = { mode: d.getUint8(0), brightness: d.getUint8(1) };
+			if (d.byteLength >= 8) {
+				Object.assign(status, {
+					result: d.getUint8(2),
+					count: d.getUint8(3),
+					running: d.getUint8(4),
+					boot: d.getUint8(5),
+					freeBytes: d.getUint8(6) * 256,
+					api: d.getUint8(7),
+				});
+			}
+			if (d.byteLength >= 33 && status.result === 0) {
+				const name = new Uint8Array(d.buffer, d.byteOffset + 13, 20);
+				const end = name.indexOf(0);
+				status.item = {
+					type: d.getUint8(8),
+					length: d.getUint32(9, true),
+					name: new TextDecoder().decode(end < 0 ? name : name.subarray(0, end)),
+				};
+			}
 			this.dispatchEvent(new CustomEvent('status', { detail: status }));
 			return status;
 		}
@@ -127,21 +170,56 @@ class LedMatrixDevice extends EventTarget {
 		return this._send([CMD.QUERY]);
 	}
 
-	// Stores a compressed .ledanim blob (webui/compression.js,
-	// docs/ANIMATION_FORMAT.md) into the device's flash (pattern_flash.h)
-	// and starts it playing on repeat immediately -- see
-	// CMD_PATTERN_BEGIN/CHUNK/COMMIT in webusb_protocol.h. It then
-	// autoplays on every future boot too, with no host connected.
-	// PATTERN_BEGIN erases the whole reserved region (128 page erases)
-	// before replying, so this can take a couple hundred ms before the
-	// first chunk should go out.
-	async uploadPattern( bytes ) {
-		await this._send([CMD.PATTERN_BEGIN]);
+	// Throws a StoreError if the reply reports one.
+	async _checked(bytes, what) {
+		const status = await this._send(bytes);
+		if (!status) throw new StoreError(`${what}: no reply from the badge`);
+		if (status.result) throw new StoreError(`${what}: ${STORE_ERRORS[status.result] ?? status.result}`);
+		return status;
+	}
+
+	// Adds an item to the badge's store (store.h): type ITEM_TYPE.*, bytes
+	// a .ledanim or .hhapp. The badge starts it at once, and from then on
+	// at every boot. ITEM_BEGIN erases the free space before it replies,
+	// which takes a moment. onProgress(sent, total) follows the upload.
+	async storeItem(type, name, bytes, onProgress) {
+		const nameBytes = new TextEncoder().encode(name).subarray(0, 20);
+		await this._checked([CMD.ITEM_BEGIN, type, ...nameBytes], 'Starting the upload');
 		const CHUNK = 60;
 		for (let offset = 0; offset < bytes.length; offset += CHUNK) {
 			const slice = bytes.subarray(offset, Math.min(offset + CHUNK, bytes.length));
-			await this._send([CMD.PATTERN_CHUNK, ...slice]);
+			await this._checked([CMD.ITEM_CHUNK, ...slice], 'Uploading');
+			if (onProgress) onProgress(offset + slice.length, bytes.length);
 		}
-		return this._send([CMD.PATTERN_COMMIT]);
+		return this._checked([CMD.ITEM_COMMIT], 'Finishing the upload');
+	}
+
+	// Stores a compressed .ledanim blob (webui/compression.js) as a new
+	// animation in the store, and plays it -- see storeItem().
+	uploadPattern(bytes, name = 'PATTERN') {
+		return this.storeItem(ITEM_TYPE.ANIMATION, name, bytes);
+	}
+
+	// [{index, type, length, name}] for every item, plus the status.
+	async listItems() {
+		const status = await this._checked([CMD.QUERY], 'Reading the store');
+		const items = [];
+		for (let i = 0; i < status.count; i++) {
+			const s = await this._checked([CMD.ITEM_INFO, i], 'Reading the store');
+			items.push({ index: i, ...s.item });
+		}
+		return { status, items };
+	}
+
+	runItem(index, boot = false) {
+		return this._checked([CMD.ITEM_RUN, index, boot ? 1 : 0], 'Starting it');
+	}
+
+	stop() {
+		return this._send([CMD.STOP]);
+	}
+
+	eraseStore() {
+		return this._send([CMD.STORE_ERASE]);
 	}
 }

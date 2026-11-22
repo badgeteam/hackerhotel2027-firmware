@@ -28,6 +28,9 @@ class BoardView {
 		this._rgbRefsByCell = new Map();
 		this.onPaintAt = null; // (xMillimeters, yMillimeters) => void, called while the user draws
 		this.onSelectRgb = null; // (rgbLedInfo) => void, called on clicking an RGB LED
+		// When true, the RGB LEDs are paint targets (dragging over them calls
+		// onPaintAt like anywhere else) instead of opening onSelectRgb.
+		this.rgbBrush = false;
 		this._painting = false;
 		this._build();
 	}
@@ -49,19 +52,6 @@ class BoardView {
 		svg.setAttribute('viewBox', `${minX} ${minY} ${w} ${h}`);
 		svg.classList.add('board-svg');
 
-		// Soft glow filter shared by every lit LED, so brighter pixels visibly
-		// bloom instead of just changing a flat fill color.
-		const defs = document.createElementNS(SVG_NS, 'defs');
-		defs.innerHTML = `
-			<filter id="led-glow" x="-200%" y="-200%" width="500%" height="500%">
-				<feGaussianBlur stdDeviation="0.6" result="blur"/>
-				<feMerge>
-					<feMergeNode in="blur"/>
-					<feMergeNode in="SourceGraphic"/>
-				</feMerge>
-			</filter>`;
-		svg.appendChild(defs);
-
 		const outline = document.createElementNS(SVG_NS, 'polygon');
 		outline.setAttribute(
 			'points',
@@ -70,29 +60,34 @@ class BoardView {
 		outline.classList.add('board-outline');
 		svg.appendChild(outline);
 
-		for (const btn of BOARD_DATA.buttons) {
-			const g = document.createElementNS(SVG_NS, 'g');
-			g.classList.add('btn-marker');
-			const r = document.createElementNS(SVG_NS, 'rect');
-			const s = 3.2;
-			r.setAttribute('x', btn.x - s / 2);
-			r.setAttribute('y', btn.y - s / 2);
-			r.setAttribute('width', s);
-			r.setAttribute('height', s);
-			r.setAttribute('rx', 0.6);
-			r.setAttribute('transform', `rotate(${btn.rot} ${btn.x} ${btn.y})`);
-			g.appendChild(r);
-			const label = document.createElementNS(SVG_NS, 'text');
-			label.setAttribute('x', btn.x);
-			label.setAttribute('y', btn.y + s + 2.4);
-			label.setAttribute('text-anchor', 'middle');
-			label.textContent = btn.label;
-			g.appendChild(label);
-			svg.appendChild(g);
-		}
+		// Silkscreen artwork, between the PCB and the LEDs. starfish_silkscreen.svg
+		// is a 210x297mm Inkscape page at real scale, sharing its page
+		// coordinates with the hardware repo's design/starfish_outline.svg --
+		// so placing it is a pure translation: that outline's page-space
+		// bounding box top-left (0.050189, 0.064966) onto BOARD_DATA.outline's.
+		const outlineMinX = Math.min(...xs);
+		const outlineMinY = Math.min(...ys);
+		const clip = document.createElementNS(SVG_NS, 'clipPath');
+		clip.id = 'board-clip';
+		clip.appendChild(outline.cloneNode());
+		const defs = document.createElementNS(SVG_NS, 'defs');
+		defs.appendChild(clip);
+		svg.appendChild(defs);
+		const silkscreen = document.createElementNS(SVG_NS, 'image');
+		silkscreen.setAttribute('href', 'starfish_silkscreen.svg');
+		silkscreen.setAttribute('x', outlineMinX - 0.050189);
+		silkscreen.setAttribute('y', outlineMinY - 0.064966);
+		silkscreen.setAttribute('width', 210);
+		silkscreen.setAttribute('height', 297);
+		silkscreen.setAttribute('preserveAspectRatio', 'none');
+		silkscreen.setAttribute('clip-path', 'url(#board-clip)');
+		silkscreen.classList.add('board-silkscreen');
+		svg.appendChild(silkscreen);
 
+		// Lit LEDs glow through a per-LED CSS drop-shadow scaled by their
+		// level (see .led/.led-rgb in styles.css) -- a plain blur of a white
+		// LED would vanish against the white PCB.
 		const ledLayer = document.createElementNS(SVG_NS, 'g');
-		ledLayer.setAttribute('filter', 'url(#led-glow)');
 		for (const led of BOARD_DATA.leds) {
 			const c = document.createElementNS(SVG_NS, 'circle');
 			c.setAttribute('cx', led.x);
@@ -126,7 +121,7 @@ class BoardView {
 			c.appendChild(title);
 			c.addEventListener('click', (ev) => {
 				ev.stopPropagation();
-				if (this.onSelectRgb) this.onSelectRgb(led);
+				if (!this.rgbBrush && this.onSelectRgb) this.onSelectRgb(led);
 			});
 			ledLayer.appendChild(c);
 			this.rgbDotByRef.set(led.ref, c);
@@ -164,7 +159,7 @@ class BoardView {
 			// the svg element instead of whatever was actually clicked --
 			// which would silently break the RGB LEDs' own click listeners.
 			// Let clicks on those fire normally instead.
-			if (ev.target.closest('.led-rgb')) return;
+			if (ev.target.closest('.led-rgb') && !this.rgbBrush) return;
 			this._painting = true;
 			svg.setPointerCapture(ev.pointerId);
 			paintAt(ev);
@@ -210,7 +205,10 @@ class BoardView {
 		const dot = this.rgbDotByRef.get(led.ref);
 		if (!dot) return;
 		const [r, g, b] = this.getRgb(led);
-		dot.style.fill = `rgb(${r}, ${g}, ${b})`;
+		const lit = r || g || b;
+		// Unlit: fall back to the CSS package color rather than black
+		dot.style.fill = lit ? `rgb(${r}, ${g}, ${b})` : '';
+		dot.style.setProperty('--glow', lit ? `rgb(${r}, ${g}, ${b})` : 'transparent');
 	}
 
 	// Each RGB LED's three channels are three ordinary cells in `frame`

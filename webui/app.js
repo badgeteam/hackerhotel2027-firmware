@@ -10,25 +10,55 @@ const brushValueReadout = document.getElementById('brush-value-readout');
 const brushRadiusInput = document.getElementById('brush-radius');
 const liveSendInput = document.getElementById('live-send');
 const eraseToggle = document.getElementById('erase-mode');
+const brushTargetInput = document.getElementById('brush-target');
+const brushColorInput = document.getElementById('brush-color');
 
 function currentBrushLevel() {
 	return eraseToggle.checked ? 0 : Number(brushValueInput.value);
+}
+
+function currentBrushColor() {
+	return eraseToggle.checked ? [0, 0, 0] : hexToRgbChannels(brushColorInput.value);
+}
+
+function hexToRgbChannels(hex) {
+	return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
 }
 
 brushValueInput.addEventListener('input', () => {
 	brushValueReadout.textContent = brushValueInput.value;
 });
 
+// "White LEDs" paints a brightness onto the mono LEDs, "RGB LEDs" paints a
+// color onto the RGB accent LEDs -- each mode only touches its own LEDs.
+brushTargetInput.addEventListener('change', () => {
+	const rgb = brushTargetInput.value === 'rgb';
+	board.rgbBrush = rgb;
+	board.container.classList.toggle('rgb-brush', rgb);
+	document.getElementById('brush-brightness-control').hidden = rgb;
+	document.getElementById('brush-color-control').hidden = !rgb;
+});
+
 board.onPaintAt = (xmm, ymm) => {
 	const radius = Number(brushRadiusInput.value);
-	const level = currentBrushLevel();
 	const pickRadius = Math.max(radius, 1.6); // always usable even at radius 0
 	let touched = false;
-	for (const led of BOARD_DATA.leds) {
-		const d = Math.hypot(led.x - xmm, led.y - ymm);
-		if (d <= pickRadius) {
-			paintPixel(led.row, led.col, level);
+	if (board.rgbBrush) {
+		const [r, g, b] = currentBrushColor();
+		for (const led of BOARD_DATA.rgb_leds) {
+			if (Math.hypot(led.x - xmm, led.y - ymm) > pickRadius) continue;
+			const [cr, cg, cb] = board.getRgb(led);
+			if (cr === r && cg === g && cb === b) continue; // don't resend while dragging over it
+			setRgbChannels(led, r, g, b);
 			touched = true;
+		}
+	} else {
+		const level = currentBrushLevel();
+		for (const led of BOARD_DATA.leds) {
+			if (Math.hypot(led.x - xmm, led.y - ymm) <= pickRadius) {
+				paintPixel(led.row, led.col, level);
+				touched = true;
+			}
 		}
 	}
 	if (touched) markFrameDirty();
@@ -58,6 +88,13 @@ function rgbToHex(r, g, b) {
 }
 
 function paintRgb(led, r, g, b) {
+	setRgbChannels(led, r, g, b);
+	markFrameDirty();
+}
+
+// Like paintRgb() but without refreshing the frame strip, for painting many
+// LEDs at once (the caller calls markFrameDirty() once afterwards)
+function setRgbChannels(led, r, g, b) {
 	board.setRgb(led, r, g, b);
 	const frame = currentFrame();
 	frame[led.row * MATRIX_COLS + led.col] = r;
@@ -68,7 +105,6 @@ function paintRgb(led, r, g, b) {
 		device.setPixel(led.green_row, led.col, g);
 		device.setPixel(led.blue_row, led.col, b);
 	}
-	markFrameDirty();
 }
 
 board.onSelectRgb = (led) => {
@@ -80,11 +116,7 @@ board.onSelectRgb = (led) => {
 
 rgbColorInput.addEventListener('input', () => {
 	if (!selectedRgbLed) return;
-	const hex = rgbColorInput.value;
-	const r = parseInt(hex.slice(1, 3), 16);
-	const g = parseInt(hex.slice(3, 5), 16);
-	const b = parseInt(hex.slice(5, 7), 16);
-	paintRgb(selectedRgbLed, r, g, b);
+	paintRgb(selectedRgbLed, ...hexToRgbChannels(rgbColorInput.value));
 });
 
 document.getElementById('rgb-editor-off-btn').addEventListener('click', () => {
@@ -126,10 +158,13 @@ connectBtn.addEventListener('click', async () => {
 disconnectBtn.addEventListener('click', () => device.disconnect());
 device.addEventListener('connect', refreshConnButtons);
 device.addEventListener('disconnect', refreshConnButtons);
+// Must match APP_MODE_* in the firmware's webusb_protocol.h
+const DEVICE_MODE_NAMES = { 1: 'Custom frame', 2: 'Stored pattern' };
+
 device.addEventListener('status', (ev) => {
-	const { mode, pattern } = ev.detail;
-	deviceModeEl.textContent =
-		mode === 0 ? `Built-in pattern ${pattern}` : 'Custom frame (from this page)';
+	const { mode, brightness } = ev.detail;
+	const name = DEVICE_MODE_NAMES[mode] ?? `Mode ${mode}`;
+	deviceModeEl.textContent = `${name}, brightness ${brightness}`;
 });
 
 if (!webUsbAvailable()) {
@@ -143,11 +178,7 @@ if (!webUsbAvailable()) {
 }
 refreshConnButtons();
 
-// --- Built-in patterns / clear / send ---------------------------------------------------
-
-document.querySelectorAll('.builtin-btn').forEach((btn) => {
-	btn.addEventListener('click', () => device.selectBuiltin(Number(btn.dataset.pattern)));
-});
+// --- Clear / send ---------------------------------------------------
 
 document.getElementById('clear-btn').addEventListener('click', () => {
 	board.clear();
@@ -163,102 +194,139 @@ document.getElementById('send-frame-btn').addEventListener('click', () => {
 	device.uploadFrame(Uint8Array.from(currentFrame()));
 });
 
-// --- Row/column test (bring-up debugging) ------------------------------
+// --- Create animation tabs ---------------------------------------------------
 
-const testRowInput = document.getElementById('test-row-input');
-const testRowReadout = document.getElementById('test-row-readout');
-const testColInput = document.getElementById('test-col-input');
-const testColReadout = document.getElementById('test-col-readout');
+const animationTabs = document.querySelectorAll('.tab-bar [role="tab"]');
 
-testRowInput.addEventListener('input', () => {
-	testRowReadout.textContent = testRowInput.value;
-});
-testColInput.addEventListener('input', () => {
-	testColReadout.textContent = testColInput.value;
-});
-
-// Mirrors what TEST_ROW/TEST_COL do on the device (see
-// docs/WEBUSB_PROTOCOL.md) onto the local board preview + frame buffer, so
-// the picture on screen matches what the matrix is actually showing.
-function showTestRow(row) {
-	board.clear();
-	currentFrame().fill(0);
-	for (let col = 0; col < MATRIX_COLS; col++) {
-		board.setPixel(row, col, 255);
-		currentFrame()[row * MATRIX_COLS + col] = 255;
+function selectAnimationTab(selected) {
+	for (const tab of animationTabs) {
+		const isSelected = tab === selected;
+		tab.setAttribute('aria-selected', String(isSelected));
+		document.getElementById(tab.getAttribute('aria-controls')).hidden = !isSelected;
 	}
 }
 
-function showTestCol(col) {
-	board.clear();
-	currentFrame().fill(0);
-	for (let row = 0; row < MATRIX_ROWS; row++) {
-		board.setPixel(row, col, 255);
-		currentFrame()[row * MATRIX_COLS + col] = 255;
-	}
+for (const tab of animationTabs) {
+	tab.addEventListener('click', () => selectAnimationTab(tab));
 }
 
-function requireDevice() {
-	if (!device.connected) {
-		alert('Connect to a device first.');
-		return false;
+// --- Built-in test animation: techno pharmacy sign ---------------------------------------------------
+// A pharmacy sign as reimagined for a rave: a neon-tube flicker-on, a hard
+// strobe cutting between the green cross and the white body, a chase
+// sweeping around the starfish's arms, a complementary green/white breathe,
+// a sparkling second chase over just the RGB accents, and a strobe finale --
+// then it loops. The board's RGB accent LEDs stand in for the green cross,
+// its mono LEDs for the white body; everything below is just brightness
+// values written into those two groups of cells across many frames.
+
+function buildPharmacySignPattern() {
+	const monoLeds = BOARD_DATA.leds;
+	const rgbLeds = BOARD_DATA.rgb_leds;
+	// Angle around the board center gives a stable sweep order for the
+	// chase effects -- walking the list in this order visits LEDs roughly
+	// in a ring around the starfish rather than in wiring (row/col) order.
+	const byAngle = (a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x);
+	const monoByAngle = [...monoLeds].sort(byAngle);
+	const rgbByAngle = [...rgbLeds].sort(byAngle);
+
+	const blank = () => emptyFrame();
+	const withWhite = (frame, level) => {
+		for (const led of monoLeds) frame[led.row * MATRIX_COLS + led.col] = level;
+		return frame;
+	};
+	const withGreen = (frame, level) => {
+		for (const led of rgbLeds) frame[led.green_row * MATRIX_COLS + led.col] = level;
+		return frame;
+	};
+	// One step of a comet-style chase: `cellOf` maps a ring entry to its
+	// frame index, `headPos` is the (fractional) ring position of the
+	// brightest point, and the brightness tapers linearly to 0 over
+	// `tailLength` ring steps on either side of it.
+	const chaseFrame = (ring, cellOf, headPos, tailLength, maxLevel) => {
+		const frame = blank();
+		const n = ring.length;
+		for (let i = 0; i < n; i++) {
+			let dist = Math.abs(i - headPos);
+			dist = Math.min(dist, n - dist);
+			if (dist <= tailLength) {
+				frame[cellOf(ring[i])] = Math.round(maxLevel * (1 - dist / tailLength));
+			}
+		}
+		return frame;
+	};
+	const monoCell = (led) => led.row * MATRIX_COLS + led.col;
+	const greenCell = (led) => led.green_row * MATRIX_COLS + led.col;
+
+	const frames = [];
+
+	// 1. Neon tube flicker-on: the green cross stutters to life.
+	for (const level of [50, 0, 130, 0, 90, 200, 0, 255, 180, 255, 255]) {
+		frames.push(withGreen(blank(), level));
 	}
-	return true;
+	for (let i = 0; i < 4; i++) frames.push(withGreen(blank(), 255));
+
+	// 2. Hard strobe: green cross <-> white body, full snap each beat.
+	for (let i = 0; i < 4; i++) {
+		frames.push(withGreen(blank(), 255));
+		frames.push(blank());
+		frames.push(withWhite(blank(), 255));
+		frames.push(blank());
+	}
+	for (let i = 0; i < 4; i++) frames.push(withWhite(blank(), 255));
+
+	// 3. White chase sweeping once around the starfish's arms, with a dim
+	// green base glow so the cross stays visible through the sweep.
+	const whiteChaseSteps = 36;
+	for (let s = 0; s < whiteChaseSteps; s++) {
+		const headPos = (s / whiteChaseSteps) * monoByAngle.length;
+		const frame = chaseFrame(monoByAngle, monoCell, headPos, 9, 255);
+		withGreen(frame, 60);
+		frames.push(frame);
+	}
+
+	// 4. Complementary breathe: green and white crossfade against each
+	// other through a full cycle.
+	const breatheSteps = 24;
+	for (let s = 0; s < breatheSteps; s++) {
+		const level = Math.round(127.5 + 127.5 * Math.sin((s / breatheSteps) * Math.PI * 2));
+		const frame = withWhite(blank(), level);
+		withGreen(frame, 255 - level);
+		frames.push(frame);
+	}
+
+	// 5. Green chase around just the RGB accents, reverse direction, with
+	// white sparkle/twinkle scattered across the body for a "techno" glint.
+	const greenChaseSteps = 28;
+	for (let s = 0; s < greenChaseSteps; s++) {
+		const headPos = ((greenChaseSteps - s) / greenChaseSteps) * rgbByAngle.length;
+		const frame = chaseFrame(rgbByAngle, greenCell, headPos, 6, 255);
+		for (let k = 0; k < 14; k++) {
+			const led = monoLeds[Math.floor(Math.random() * monoLeds.length)];
+			frame[monoCell(led)] = Math.random() < 0.5 ? 150 : 255;
+		}
+		frames.push(frame);
+	}
+
+	// 6. Strobe finale: both colors slammed on together against total
+	// blackout, before looping back to the flicker-on.
+	for (let i = 0; i < 6; i++) {
+		const frame = withWhite(blank(), 255);
+		withGreen(frame, 255);
+		frames.push(frame);
+		frames.push(blank());
+	}
+
+	const pattern = newPattern('Techno pharmacy sign (test)');
+	pattern.fps = 12;
+	pattern.frames = frames;
+	return pattern;
 }
 
-document.getElementById('test-row-btn').addEventListener('click', () => {
-	if (!requireDevice()) return;
-	const row = Number(testRowInput.value);
-	showTestRow(row);
-	device.testRow(row);
-});
-
-document.getElementById('test-row-prev-btn').addEventListener('click', () => {
-	testRowInput.value = Math.max(0, Number(testRowInput.value) - 1);
-	testRowInput.dispatchEvent(new Event('input'));
-	document.getElementById('test-row-btn').click();
-});
-
-document.getElementById('test-row-next-btn').addEventListener('click', () => {
-	testRowInput.value = Math.min(MATRIX_ROWS - 1, Number(testRowInput.value) + 1);
-	testRowInput.dispatchEvent(new Event('input'));
-	document.getElementById('test-row-btn').click();
-});
-
-document.getElementById('test-col-btn').addEventListener('click', () => {
-	if (!requireDevice()) return;
-	const col = Number(testColInput.value);
-	showTestCol(col);
-	device.testCol(col);
-});
-
-document.getElementById('test-col-prev-btn').addEventListener('click', () => {
-	testColInput.value = Math.max(0, Number(testColInput.value) - 1);
-	testColInput.dispatchEvent(new Event('input'));
-	document.getElementById('test-col-btn').click();
-});
-
-document.getElementById('test-col-next-btn').addEventListener('click', () => {
-	testColInput.value = Math.min(MATRIX_COLS - 1, Number(testColInput.value) + 1);
-	testColInput.dispatchEvent(new Event('input'));
-	document.getElementById('test-col-btn').click();
-});
-
-document.getElementById('test-stop-btn').addEventListener('click', () => {
-	board.clear();
-	currentFrame().fill(0);
-	if (device.connected) device.clear();
-});
-
-document.getElementById('test-pixel-btn').addEventListener('click', () => {
-	if (!requireDevice()) return;
-	const row = Number(document.getElementById('test-pixel-row-input').value);
-	const col = Number(document.getElementById('test-pixel-col-input').value);
-	board.clear();
-	currentFrame().fill(0);
-	board.setPixel(row, col, 255);
-	currentFrame()[row * MATRIX_COLS + col] = 255;
-	device.testPixel(row, col);
+document.getElementById('pharmacy-sign-btn').addEventListener('click', () => {
+	const pattern = buildPharmacySignPattern();
+	savePattern(pattern);
+	renderPatternList();
+	setActivePattern(pattern);
 });
 
 // --- Import from video ---------------------------------------------------
@@ -347,6 +415,81 @@ videoConvertBtn.addEventListener('click', async () => {
 
 videoCancelBtn.addEventListener('click', () => {
 	videoConversionAborted = true;
+});
+
+// --- Text to animation ---------------------------------------------------
+// Logic lives in text_import.js (extractFramesFromText); this just wires it
+// to the panel and, on success, installs the result as a new pattern
+// through the same path the pattern-list/import-JSON/video flows already
+// use.
+
+const textInput = document.getElementById('text-input');
+const textFontSizeInput = document.getElementById('text-font-size');
+const textFontSizeReadout = document.getElementById('text-font-size-readout');
+const textBoldInput = document.getElementById('text-bold');
+const textColorInput = document.getElementById('text-color-input');
+const textFpsInput = document.getElementById('text-fps');
+const textScrollSpeedInput = document.getElementById('text-scroll-speed');
+const textBrightnessInput = document.getElementById('text-brightness');
+const textBrightnessReadout = document.getElementById('text-brightness-readout');
+const textScrollInput = document.getElementById('text-scroll');
+const textWhiteEdgeEffectInput = document.getElementById('text-white-edge-effect');
+const textWhiteEdgeSpeedInput = document.getElementById('text-white-edge-speed');
+const textWhiteEdgeSpeedReadout = document.getElementById('text-white-edge-speed-readout');
+const textRgbEdgeEffectInput = document.getElementById('text-rgb-edge-effect');
+const textRgbEdgeSpeedInput = document.getElementById('text-rgb-edge-speed');
+const textRgbEdgeSpeedReadout = document.getElementById('text-rgb-edge-speed-readout');
+const textRgbEdgeColorInput = document.getElementById('text-rgb-edge-color');
+const textConvertBtn = document.getElementById('text-convert-btn');
+const textStatus = document.getElementById('text-status');
+
+textFontSizeInput.addEventListener('input', () => {
+	textFontSizeReadout.textContent = textFontSizeInput.value;
+});
+
+textBrightnessInput.addEventListener('input', () => {
+	textBrightnessReadout.textContent = `${Number(textBrightnessInput.value).toFixed(1)}x`;
+});
+
+textWhiteEdgeSpeedInput.addEventListener('input', () => {
+	textWhiteEdgeSpeedReadout.textContent = textWhiteEdgeSpeedInput.value;
+});
+
+textRgbEdgeSpeedInput.addEventListener('input', () => {
+	textRgbEdgeSpeedReadout.textContent = textRgbEdgeSpeedInput.value;
+});
+
+textConvertBtn.addEventListener('click', () => {
+	const text = textInput.value;
+	if (!text.trim()) {
+		alert('Type some text first.');
+		return;
+	}
+
+	const { frames } = extractFramesFromText({
+		text,
+		fontSize: Math.max(8, Math.min(64, Number(textFontSizeInput.value) || 30)),
+		bold: textBoldInput.checked,
+		color: textColorInput.value,
+		scrollSpeed: Math.max(0.5, Math.min(20, Number(textScrollSpeedInput.value) || 3)),
+		bounds: board.bounds,
+		brightnessBoost: Number(textBrightnessInput.value) || 1,
+		scroll: textScrollInput.checked,
+		whiteEdgeEffect: textWhiteEdgeEffectInput.value,
+		whiteEdgeSpeed: Number(textWhiteEdgeSpeedInput.value) || 0.05,
+		rgbEdgeEffect: textRgbEdgeEffectInput.value,
+		rgbEdgeSpeed: Number(textRgbEdgeSpeedInput.value) || 0.08,
+		rgbEdgeColor: textRgbEdgeColorInput.value,
+	});
+
+	const pattern = newPattern(text.trim().slice(0, 40));
+	pattern.fps = Math.max(1, Math.min(20, Number(textFpsInput.value) || 10));
+	pattern.frames = frames;
+	savePattern(pattern);
+	renderPatternList();
+	setActivePattern(pattern);
+
+	textStatus.textContent = `Done -- ${frames.length} frame${frames.length === 1 ? '' : 's'}.`;
 });
 
 // --- Pattern / frame editor ---------------------------------------------------
@@ -534,8 +677,11 @@ playBtn.addEventListener('click', () => {
 // a known format ready once that firmware feature exists.
 
 const compressionQuantSelect = document.getElementById('compression-quant');
-const flashBudgetInput = document.getElementById('flash-budget');
 const compressionStatsEl = document.getElementById('compression-stats');
+
+// Size of the flash region the firmware reserves for the pattern
+// (PATTERN_FLASH_SIZE in pattern_flash.h)
+const PATTERN_FLASH_BYTES = 32 * 1024;
 
 function formatBytes(n) {
 	return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`;
@@ -544,7 +690,7 @@ function formatBytes(n) {
 function refreshCompressionStats() {
 	if (!activePattern) return;
 	const quantBits = Number(compressionQuantSelect.value);
-	const budgetBytes = Math.max(1, Number(flashBudgetInput.value) || 0) * 1024;
+	const budgetBytes = PATTERN_FLASH_BYTES;
 	const rawBytes = activePattern.frames.length * MATRIX_ROWS * MATRIX_COLS;
 	let compressedBytes;
 	try {
@@ -566,7 +712,6 @@ function refreshCompressionStats() {
 }
 
 compressionQuantSelect.addEventListener('change', refreshCompressionStats);
-flashBudgetInput.addEventListener('input', refreshCompressionStats);
 
 document.getElementById('export-compressed-btn').addEventListener('click', () => {
 	const quantBits = Number(compressionQuantSelect.value);
@@ -593,7 +738,7 @@ document.getElementById('upload-pattern-btn').addEventListener('click', async ()
 		return;
 	}
 	const quantBits = Number(compressionQuantSelect.value);
-	const budgetBytes = Math.max(1, Number(flashBudgetInput.value) || 0) * 1024;
+	const budgetBytes = PATTERN_FLASH_BYTES;
 	let bytes;
 	try {
 		bytes = compressPattern(activePattern, { quantBits });

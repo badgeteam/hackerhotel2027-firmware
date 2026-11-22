@@ -22,4 +22,10 @@ void PatternPlayer_Reset( void );
 // per call.
 void PatternPlayer_Tick( uint32_t elapsed_ms );
 
+// Freezes playback on the current frame (PatternPlayer_Tick() does nothing
+// until resumed). Returns whether playback was active and is now paused,
+// i.e. whether PatternPlayer_Resume() should be called later.
+int PatternPlayer_Pause( void );
+void PatternPlayer_Resume( void );
+
 #endif

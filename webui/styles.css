@@ -1,4 +1,8 @@
+/* Themes: theme.js sets data-theme="light"/"dark" on <html> (following the
+   system preference unless the user picked one). Dark is also the fallback.
+   The board render itself (PCB green, white LEDs) looks the same in both. */
 :root {
+	color-scheme: dark;
 	--bg: #0d1117;
 	--panel: #161b22;
 	--panel-border: #30363d;
@@ -7,6 +11,9 @@
 	--accent: #39d2c0;
 	--accent-dim: #1f6f65;
 	--danger: #f85149;
+	--control-bg: #0d1117;
+	--button-bg: #21262d;
+	--board-bg: #0b0d10;
 	font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -37,12 +44,34 @@ header h1 {
 	letter-spacing: 0.02em;
 }
 
+:root[data-theme="light"] {
+	color-scheme: light;
+	--bg: #f6f8fa;
+	--panel: #ffffff;
+	--panel-border: #d0d7de;
+	--text: #1f2328;
+	--text-dim: #59636e;
+	--accent: #0b7a6e;
+	--accent-dim: #b4e5de;
+	--danger: #cf222e;
+	--control-bg: #ffffff;
+	--button-bg: #f0f2f4;
+	--board-bg: #c3c7cc;
+}
+
 .conn-controls {
 	display: flex;
 	align-items: center;
 	gap: 0.75rem;
 	font-size: 0.9rem;
 	color: var(--text-dim);
+}
+
+label.theme-control {
+	flex-direction: row;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.9rem;
 }
 
 #conn-status.connected {
@@ -66,7 +95,7 @@ main {
 }
 
 #board-container {
-	background: #05100b;
+	background: var(--board-bg);
 	border: 1px solid var(--panel-border);
 	border-radius: 12px;
 	overflow: hidden;
@@ -82,25 +111,38 @@ main {
 	touch-action: none;
 }
 
+/* The board render is the same in both themes: white solder mask, LED
+   packages in light grey when off. Lit LEDs brighten to white and glow
+   (white LEDs a cool white, RGB LEDs their own color); the glow carries
+   most of the brightness contrast against the white board. */
 .board-outline {
-	fill: #123524;
-	stroke: #1f6f4a;
+	fill: #ece9e1;
+	stroke: #c9c4b6;
 	stroke-width: 0.3;
 }
 
+.board-silkscreen {
+	pointer-events: none;
+}
+
 .led {
-	fill: #fff;
-	fill-opacity: calc(0.12 + var(--level, 0) * 0.88);
-	stroke: rgba(255, 255, 255, 0.25);
+	fill: color-mix(in srgb, #ffffff calc(var(--level, 0) * 100%), #bdbab2);
+	stroke: rgba(0, 0, 0, calc(0.3 - var(--level, 0) * 0.2));
 	stroke-width: 0.12;
+	filter: drop-shadow(0 0 calc(var(--level, 0) * 0.9px) rgba(70, 160, 255, var(--level, 0)));
 	cursor: crosshair;
 }
 
 .led-rgb {
-	fill: #000;
-	stroke: #aaa;
+	fill: #bdbab2;
+	stroke: rgba(0, 0, 0, 0.35);
 	stroke-width: 0.18;
+	filter: drop-shadow(0 0 0.9px var(--glow, transparent));
 	cursor: pointer;
+}
+
+.rgb-brush .led-rgb {
+	cursor: crosshair;
 }
 
 .led-rgb:hover {
@@ -108,16 +150,6 @@ main {
 	stroke-width: 0.3;
 }
 
-.btn-marker rect {
-	fill: #21262d;
-	stroke: #484f58;
-	stroke-width: 0.25;
-}
-
-.btn-marker text {
-	fill: var(--text-dim);
-	font-size: 2.6px;
-}
 
 .hint {
 	color: var(--text-dim);
@@ -138,18 +170,72 @@ progress {
 	accent-color: var(--accent);
 }
 
-.board-photo {
-	margin-top: 0.75rem;
-	color: var(--text-dim);
-	font-size: 0.85rem;
+.board-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	margin-bottom: 0.5rem;
+	flex: 0 0 auto;
 }
 
-.board-photo img {
-	display: block;
-	margin-top: 0.5rem;
-	max-width: 100%;
-	border-radius: 8px;
+.toolbar-group {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem 0.9rem;
+	background: var(--panel);
 	border: 1px solid var(--panel-border);
+	border-radius: 10px;
+	padding: 0.4rem 0.75rem;
+}
+
+.toolbar-group button {
+	font-size: 0.8rem;
+}
+
+.toolbar-title {
+	color: var(--accent);
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+label.inline {
+	flex-direction: row;
+	align-items: center;
+	gap: 0.4rem;
+}
+
+label.inline input[type="range"] {
+	width: 7rem;
+}
+
+.tab-bar {
+	display: flex;
+	gap: 0.25rem;
+	border-bottom: 1px solid var(--panel-border);
+}
+
+.tab-bar [role="tab"] {
+	flex: 1 1 auto;
+	font-size: 0.8rem;
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+	border-bottom: none;
+	background: transparent;
+	color: var(--text-dim);
+}
+
+.tab-bar [role="tab"][aria-selected="true"] {
+	background: var(--button-bg);
+	color: var(--accent);
+	border-color: var(--accent-dim);
+}
+
+.tab-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
 }
 
 .side-panel {
@@ -198,7 +284,7 @@ label:has(input[type="checkbox"]) {
 input, select, button {
 	font: inherit;
 	color: var(--text);
-	background: #0d1117;
+	background: var(--control-bg);
 	border: 1px solid var(--panel-border);
 	border-radius: 6px;
 	padding: 0.35rem 0.5rem;
@@ -210,7 +296,7 @@ input[type="range"] {
 
 button {
 	cursor: pointer;
-	background: #21262d;
+	background: var(--button-bg);
 }
 
 button:hover {
@@ -221,13 +307,13 @@ button:active {
 	background: var(--accent-dim);
 }
 
-.builtin-row, .button-row {
+.button-row {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0.4rem;
 }
 
-.builtin-row button, .button-row button {
+.button-row button {
 	flex: 1 1 auto;
 	font-size: 0.8rem;
 }
@@ -239,7 +325,7 @@ button:active {
 	justify-content: center;
 	flex: 1 1 auto;
 	cursor: pointer;
-	background: #21262d;
+	background: var(--button-bg);
 	border: 1px solid var(--panel-border);
 	border-radius: 6px;
 	padding: 0.35rem 0.5rem;
@@ -321,72 +407,18 @@ footer code {
 	color: var(--text);
 }
 
-/* Desktop layout: fit everything in the viewport with no page-level
-   scrollbar. The side panel has grown to a lot of content (brush, RGB
-   editor, device controls, video import, pattern/frame editor, flash
-   storage) -- rather than letting that push the whole page taller than
-   the screen, the board and side panel each become their own
-   independently scrollable region, and the board preview scales to fit
-   whichever of width/height is tighter instead of always going full
-   width. Mobile (the stacked layout below) keeps normal page scrolling --
-   forcing a whole desktop-width UI into one phone-sized viewport with no
-   scroll at all isn't practical. */
-@media (min-width: 861px) {
-	html {
-		height: 100%;
-	}
+/* Layout. Small screens (default): normal page scrolling, the board at
+   full width (but never narrower than .board-pane's min-width) with the
+   side panel sections stacked below it. Wider screens: the page fills the
+   viewport exactly, the board scales to the available height, and the
+   side panel scrolls on its own -- as one column, or as two columns next
+   to each other once there's room, so nothing needs scrolling at all. */
 
-	body {
-		/* The two-pane board/side-panel layout below deliberately fills
-		   close to the viewport height, each pane scrolling internally
-		   (see .board-pane/.side-panel below) -- but .regpanel-pane is a
-		   third, full-width section after them that needs its own extra
-		   vertical space, and can be tall (it wraps to several stacked
-		   rows on narrower windows). Giving body only a min-height (not a
-		   fixed height) lets it grow to fit that extra content instead of
-		   squeezing main down to fit a fixed box -- main keeps a sane
-		   height via its own min-height below instead of fighting
-		   regpanel-pane for a fixed share of the viewport. */
-		min-height: 100%;
-		overflow-x: hidden;
-	}
-
-	main {
-		overflow: hidden;
-		align-items: stretch;
-		/* Without this, a tall .regpanel-pane sibling (flex-shrink: 0)
-		   could claim almost all of body's space, leaving main's
-		   flex-basis: 0 nothing to grow into -- min-height guarantees
-		   the board/side-panel UI stays usable regardless of how much
-		   content is in the register panel below it. */
-		min-height: 70vh;
-	}
-
-	.board-pane {
-		height: 100%;
-		display: flex;
-		flex-direction: column;
-		min-height: 0;
-		overflow-y: auto;
-	}
-
-	#board-container {
-		flex: 1 1 auto;
-		min-height: 0;
-	}
-
-	.board-svg {
-		width: auto;
-		height: 100%;
-		max-width: 100%;
-		max-height: 100%;
-	}
-
-	.side-panel {
-		height: 100%;
-		min-height: 0;
-		overflow-y: auto;
-	}
+.side-column {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	min-width: 0;
 }
 
 @media (max-width: 860px) {
@@ -395,140 +427,53 @@ footer code {
 	}
 }
 
-/* --- Manual register control panel --------------------------------- */
+@media (min-width: 861px) {
+	body {
+		height: 100vh;
+		min-height: 0;
+		overflow: hidden;
+	}
 
-.regpanel-pane {
-	/* Sibling of <main>, both children of body's column flex layout --
-	   flex-shrink:0 keeps it from being squashed by main's flex:1 when
-	   body's height is capped to the viewport (see the overflow-y fix on
-	   body above); it simply adds its own height below main, which the
-	   page then scrolls to reach. */
-	flex-shrink: 0;
-	border-top: 1px solid var(--panel-border);
-	padding: 1rem 1.25rem;
-	margin-top: 0.5rem;
+	main {
+		flex: 1 1 0;
+		flex-wrap: nowrap;
+		align-items: stretch;
+		overflow: hidden;
+	}
+
+	.board-pane {
+		flex: 1 1 0;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
+	#board-container {
+		flex: 1 1 0;
+		min-height: 0;
+	}
+
+	.board-svg {
+		width: auto;
+		height: 100%;
+		max-width: 100%;
+	}
+
+	.side-panel {
+		min-height: 0;
+		overflow-y: auto;
+	}
 }
 
-.regpanel-pane h2 {
-	font-size: 1rem;
-	margin: 0 0 0.4rem;
-	color: var(--accent);
-}
+@media (min-width: 1280px) {
+	.side-panel {
+		flex: 0 0 auto;
+		flex-direction: row;
+		overflow: visible;
+	}
 
-.regpanel-pane h3 {
-	font-size: 0.9rem;
-	margin: 1rem 0 0.2rem;
-	color: var(--text-dim);
-	text-transform: uppercase;
-	letter-spacing: 0.06em;
-}
-
-.reg-groups-row {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.75rem;
-}
-
-.reg-group {
-	background: var(--panel);
-	border: 1px solid var(--panel-border);
-	border-radius: 10px;
-	padding: 0.6rem 0.8rem;
-	flex: 1 1 320px;
-	min-width: 280px;
-	display: flex;
-	flex-direction: column;
-	gap: 0.5rem;
-}
-
-.reg-group-head {
-	display: flex;
-	align-items: baseline;
-	gap: 0.5rem;
-}
-
-.reg-group-addr {
-	font-size: 0.75rem;
-	color: var(--text-dim);
-}
-
-.reg-byte {
-	border: 1px solid var(--panel-border);
-	border-radius: 8px;
-	padding: 0.4rem 0.6rem;
-	display: flex;
-	flex-direction: column;
-	gap: 0.3rem;
-}
-
-.reg-byte-head {
-	display: flex;
-	align-items: center;
-	gap: 0.25rem;
-}
-
-.reg-byte-label {
-	font-weight: 600;
-	font-size: 0.85rem;
-	flex: 1;
-}
-
-.reg-hex-input {
-	width: 3.2em;
-	font-family: ui-monospace, "SF Mono", Consolas, monospace;
-	text-transform: uppercase;
-}
-
-.reg-byte-desc {
-	margin: 0;
-	font-size: 0.78rem;
-}
-
-.reg-bits-row {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.3rem 0.8rem;
-}
-
-.reg-bit-label {
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	gap: 0.3rem;
-	font-size: 0.78rem;
-	color: var(--text-dim);
-}
-
-.reg-bit-number {
-	width: 3.5em;
-}
-
-.reg-write-status {
-	font-size: 0.78rem;
-	color: var(--text-dim);
-	align-self: center;
-}
-
-.reg-readonly-table {
-	border-collapse: collapse;
-	font-size: 0.8rem;
-	width: 100%;
-	max-width: 480px;
-}
-
-.reg-readonly-table td {
-	padding: 0.15rem 0.6rem 0.15rem 0;
-	border-bottom: 1px solid var(--panel-border);
-}
-
-.reg-readonly-table td:first-child {
-	color: var(--text-dim);
-}
-
-.reg-dma-words {
-	font-family: ui-monospace, "SF Mono", Consolas, monospace;
-	font-size: 0.75rem;
-	color: var(--text-dim);
-	margin: 0;
-	padding-left: 1.2rem;
+	.side-column {
+		width: 340px;
+		overflow-y: auto;
+	}
 }

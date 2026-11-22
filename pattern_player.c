@@ -1,7 +1,7 @@
 #include <string.h>
 #include "ch32fun.h"
 #include "pattern_flash.h"
-#include "led_matrix.h"
+#include "ch643_ledpwm.h"
 #include "pattern_player.h"
 
 #define FRAME_PIXELS ( LED_MATRIX_ROWS * LED_MATRIX_COLS )
@@ -28,6 +28,7 @@ static uint8_t s_fps;
 static uint8_t s_quant_bits;
 static uint32_t s_ms_accum;
 static int s_active;
+static int s_paused;
 
 static uint8_t dequantize( uint8_t level, uint8_t bits )
 {
@@ -71,13 +72,14 @@ static void apply_quant_to_display( void )
 	{
 		unsigned row = i / LED_MATRIX_COLS;
 		unsigned col = i % LED_MATRIX_COLS;
-		LEDMatrix_PokeBrightness( row, col, dequantize( s_quant[i], s_quant_bits ) );
+		LEDMatrix_SetPixel( row, col, dequantize( s_quant[i], s_quant_bits ) );
 	}
 }
 
 void PatternPlayer_Reset( void )
 {
 	s_active = 0;
+	s_paused = 0;
 	if( !PatternFlash_IsValid() )
 		return;
 	const uint8_t *d = PatternFlash_Data();
@@ -158,9 +160,23 @@ static void decode_one_frame( void )
 	apply_quant_to_display();
 }
 
+int PatternPlayer_Pause( void )
+{
+	if( !s_active || s_paused )
+		return 0;
+	s_paused = 1;
+	return 1;
+}
+
+void PatternPlayer_Resume( void )
+{
+	s_paused = 0;
+	s_ms_accum = 0; // continue from the current frame, no catching up on the paused time
+}
+
 void PatternPlayer_Tick( uint32_t elapsed_ms )
 {
-	if( !s_active )
+	if( !s_active || s_paused )
 		return;
 	s_ms_accum += elapsed_ms;
 	uint32_t frame_ms = 1000u / s_fps;

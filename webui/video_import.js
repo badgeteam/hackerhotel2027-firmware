@@ -195,7 +195,11 @@ function sampleFrameAmbilight(canvas, ctx, coreGeom, brightnessBoost) {
 	return frame;
 }
 
-function sampleFrame(canvas, ctx, bounds, brightnessBoost) {
+// monoLeds/rgbLeds default to the whole board -- video import wants every
+// LED sampled, but webui/text_import.js passes a core-only subset (and no
+// rgb_leds) so typed text only lights the dense center cluster, leaving
+// the arms free for its own chase/blink effects.
+function sampleFrame(canvas, ctx, bounds, brightnessBoost, monoLeds = BOARD_DATA.leds, rgbLeds = BOARD_DATA.rgb_leds) {
 	const img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 	const sampleAt = (xmm, ymm) => {
 		const px = Math.round(((xmm - bounds.minX) / bounds.width) * (canvas.width - 1));
@@ -207,12 +211,12 @@ function sampleFrame(canvas, ctx, bounds, brightnessBoost) {
 	};
 
 	const frame = new Array(MATRIX_ROWS * MATRIX_COLS).fill(0);
-	for (const led of BOARD_DATA.leds) {
+	for (const led of monoLeds) {
 		const [r, g, b] = sampleAt(led.x, led.y);
 		const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
 		frame[led.row * MATRIX_COLS + led.col] = clamp255(luminance * brightnessBoost);
 	}
-	for (const led of BOARD_DATA.rgb_leds) {
+	for (const led of rgbLeds) {
 		const [r, g, b] = sampleAt(led.x, led.y);
 		frame[led.row * MATRIX_COLS + led.col] = clamp255(r * brightnessBoost);
 		frame[led.green_row * MATRIX_COLS + led.col] = clamp255(g * brightnessBoost);

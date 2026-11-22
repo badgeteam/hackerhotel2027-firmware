@@ -1,44 +1,35 @@
-#ifndef _WEBUSB_PROTOCOL_H
-#define _WEBUSB_PROTOCOL_H
-
-// WebUSB control protocol for the LED matrix. See docs/WEBUSB_PROTOCOL.md
-// for the on-the-wire format this implements.
-
+#pragma once
 #include <stdint.h>
 
-#define APP_MODE_BUILTIN      0 // one of the four button-selectable test patterns is running
-#define APP_MODE_CUSTOM       1 // the matrix shows whatever the host last uploaded
-#define APP_MODE_FLASH_PATTERN 2 // playing the pattern stored in flash on repeat (see pattern_player.h)
+// WebUSB control protocol for the LED matrix: vendor interface, bulk OUT
+// endpoint 2 (commands), bulk IN endpoint 1 (one status reply per command).
+//
+// OUT, byte 0 = command:
+//   0x01 SET_PIXEL      row, col, brightness   set one LED, switch to custom mode
+//   0x02 FRAME_CHUNK    offset_lo, offset_hi, data...  write into the staging frame
+//                       (pixel index = row * LED_MATRIX_COLS + col)
+//   0x03 FRAME_COMMIT                          show the staging frame, switch to custom mode
+//   0x05 CLEAR                                 all LEDs off, switch to custom mode
+//   0x10 PATTERN_BEGIN                         erase the pattern flash region (slow, wait for the reply)
+//   0x11 PATTERN_CHUNK  .ledanim bytes...      append to the pattern flash region, in order
+//   0x12 PATTERN_COMMIT                        finish the upload and play it on repeat
+//                                              (it also autoplays on every boot from then on)
+//   0xFF QUERY                                 no effect, just the status reply
+// Anything else is ignored (but still gets a status reply).
+//
+// IN, 2 bytes: [mode (APP_MODE_*), global brightness]
 
-// Owned by led_matrix_test.c (the main loop reads g_app_mode/g_app_pattern
-// every tick to decide whether to keep animating a built-in pattern; the
-// buttons write them directly). webusb_protocol.c also writes them, since
-// host commands are just another way to pick what's on screen.
+#define APP_MODE_CUSTOM 1         // showing whatever the host (or the firmware) last wrote
+#define APP_MODE_FLASH_PATTERN 2  // playing the pattern stored in flash on repeat
+
 extern volatile uint8_t g_app_mode;
-extern volatile uint8_t g_app_pattern;
 
-// Bring-up debugging (docs/POWER_MANAGEMENT.md): set by CMD_DEBUG_ENTER_STANDBY,
-// checked once per main-loop tick in led_matrix_test.c to trigger
-// enter_standby() without needing a physical BTN1 press.
-extern volatile int g_debug_force_standby;
-extern volatile uint32_t g_debug_exti_count;
-extern volatile uint32_t g_debug_boot_rstsckr;
-extern volatile int g_debug_boot_woke;
-extern volatile int g_debug_boot_armed;
+void WebUSB_Init(void);
 
-// Bring-up debugging: writes a live power_poll() state snapshot to out
-// (led_matrix_test.c), returns the number of bytes written. See
-// CMD_DEBUG_POWER_STATE.
-int Power_DebugState( uint8_t *out );
+// Detaches from the bus and powers the USB peripheral down (for standby);
+// WebUSB_Init() brings it back.
+void WebUSB_Deinit(void);
 
-// Thin wrapper around FSUSBSetup(). Callers outside this file should not
-// #include "fsusb.h" directly -- it #includes fsusb.c itself (see
-// docs/WEBUSB_PROTOCOL.md), so it must only ever appear in one translation
-// unit, and this one already claims that spot.
-void WebUSB_Init( void );
-
-// Call once per main loop tick to flush any reply queued by the last
-// WebUSBBulkDataOut() call.
-void WebUSB_SendPendingReply( void );
-
-#endif
+// Call once per main loop tick: sends the pending reply and starts playback
+// of a freshly uploaded pattern.
+void WebUSB_Poll(void);

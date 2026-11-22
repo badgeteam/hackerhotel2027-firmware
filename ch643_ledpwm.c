@@ -1,6 +1,7 @@
 #include "ch643_ledpwm.h"
 #include "ch32fun.h"
 #include "ch643_ledpwm_registers.h"
+#include "layout.h"
 
 static const uint8_t s_com_sel_for_row[LED_MATRIX_ROWS] = {
     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
@@ -13,8 +14,10 @@ static volatile uint8_t s_last_loaded_row;
 static volatile uint8_t s_global_brightness = 255;
 
 // Applies the global brightness: 255 leaves the value unchanged
+// A pixel value to PWM duty: gamma first (the values are brightness as a
+// screen shows it, the LEDs are linear), then the global brightness
 static inline uint8_t scale(uint8_t value) {
-    return (uint8_t)(((unsigned)value * (s_global_brightness + 1u)) >> 8);
+    return (uint8_t)(((unsigned)layout_gamma[value] * (s_global_brightness + 1u)) >> 8);
 }
 
 static void gpio_set_mode(GPIO_TypeDef* port, unsigned pin, GPIO_CFGLR_PIN_MODE_Typedef mode) {

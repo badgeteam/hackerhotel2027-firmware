@@ -68,7 +68,10 @@ typedef struct {
     uint16_t version;  // HH_API_VERSION of the firmware
     uint16_t size;     // sizeof(hh_api_t) in the firmware
 
-    // LEDs, 0 = off .. 255 = full (before the global brightness)
+    // LEDs, 0 = off .. 255 = full, as a screen shows brightness: the
+    // firmware applies gamma 2.2 (and then the global brightness), so 128
+    // looks half as bright, not nearly full
+
     void (*set)(uint16_t slot, uint8_t value);  // ignores HH_NONE and slots out of range
     uint8_t (*get)(uint16_t slot);
     void (*clear)(void);

@@ -16,6 +16,10 @@ A slot is the LED's place in the matrix: row (COM, PB0..PB15) * 24 + col
   (webui/compression.js) code their pixels in this order, so neighbours
   on the badge are neighbours in the stream.
 
+- GAMMA: brightness 0..255 as the web interface shows it (like a screen,
+  sRGB) to PWM duty: gamma 2.2. LEDs are linear, so without it every
+  mid-level value comes out far too bright.
+
 It writes layout.c (for the firmware) and webui/layout_data.js (for the
 web interface's LA03 codec): tools/gen_layout.py
 """
@@ -115,6 +119,10 @@ def main():
     out.write("};\n\nconst uint16_t layout_order[HH_SLOTS] = {\n")
     for i in range(0, len(order), 16):
         out.write("    " + ", ".join("%3d" % v for v in order[i:i + 16]) + ",\n")
+    out.write("};\n\nconst uint8_t layout_gamma[256] = {\n")
+    gamma = [round(255 * (i / 255) ** 2.2) for i in range(256)]
+    for i in range(0, 256, 16):
+        out.write("    " + ", ".join("%3d" % v for v in gamma[i:i + 16]) + ",\n")
     out.write("};\n")
     out.close()
 

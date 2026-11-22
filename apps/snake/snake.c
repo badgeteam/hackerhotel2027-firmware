@@ -90,10 +90,10 @@ static void draw(void) {
     hh->clear();
     for (uint16_t i = 0; i < len; i++) {
         uint16_t k = (uint16_t)((head + MAX_LEN - i) % MAX_LEN);
-        hh->set(hh->grid[body_y[k]][body_x[k]], i == 0 ? 255 : 70);
+        hh->set(hh->grid[body_y[k]][body_x[k]], i == 0 ? 255 : 150);
     }
     if (!crashed && (t / 150) % 2) hh->set(hh->grid[food_y][food_x], 255);
-    for (uint16_t i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < score ? 60 : i < best ? 8 : 0);
+    for (uint16_t i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < score ? 140 : i < best ? 50 : 0);
     // the arms: green while playing, a red pulse after a crash
     uint8_t pulse = (uint8_t)((t / 4) % 256 < 128 ? (t / 4) % 128 * 2 : 255 - (t / 4) % 128 * 2);
     for (int i = 0; i < HH_RGB_COUNT; i++) {
@@ -101,7 +101,7 @@ static void draw(void) {
         if (crashed) {
             hh->set(led->r, pulse);
         } else if (led->rank == 6) {
-            hh->set(led->g, 80);
+            hh->set(led->g, 140);
         }
     }
 }

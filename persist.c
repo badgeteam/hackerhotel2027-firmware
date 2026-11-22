@@ -57,8 +57,8 @@ static void name_changed(void) {
 }
 
 void Persist_Init(void) {
-    const record_t* a = (const record_t*)COPY_ADDR(0);
-    const record_t* b = (const record_t*)COPY_ADDR(1);
+    const record_t* a = (const record_t*)(uintptr_t)COPY_ADDR(0);
+    const record_t* b = (const record_t*)(uintptr_t)COPY_ADDR(1);
     bool va = valid(a), vb = valid(b);
     if (va && (!vb || (int32_t)(a->seq - b->seq) >= 0)) {
         s_rec = *a;

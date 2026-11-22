@@ -6,7 +6,7 @@
 
 #define ITEMS_SIZE STORE_ITEMS_SIZE
 
-static const store_item_t* item_at(uint32_t offset) { return (const store_item_t*)(STORE_FLASH_BASE + offset); }
+static const store_item_t* item_at(uint32_t offset) { return (const store_item_t*)(uintptr_t)(STORE_FLASH_BASE + offset); }
 
 static uint32_t page_align(uint32_t n) { return (n + FLASH_PAGE_SIZE - 1) & ~(FLASH_PAGE_SIZE - 1); }
 
@@ -58,7 +58,7 @@ uint8_t Store_BootItem(void) {
 void Store_SetBootItem(uint8_t index) { Persist_SetBootItem(index); }
 
 const uint8_t* Store_LegacyPattern(void) {
-    const uint8_t* d = (const uint8_t*)STORE_FLASH_BASE;
+    const uint8_t* d = (const uint8_t*)(uintptr_t)STORE_FLASH_BASE;
     return memcmp(d, "LA02", 4) == 0 ? d : NULL;
 }
 

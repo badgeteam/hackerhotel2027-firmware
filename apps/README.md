@@ -16,7 +16,11 @@ make                  # every apps/<name>/ into build/<name>.hhapp
 ../tools/badge.py add build/snake.hhapp
 ```
 
-You need the same `riscv64-elf-gcc` as the firmware. For `tools/badge.py`
+You need the same `riscv64-elf-gcc` as the firmware. Without a badge, try
+your app in the emulator: `python3 tools/emu/emu.py --web`, then add the
+`.hhapp` in the web interface. A fault (a bad pointer, a jump outside the
+app) or a `tick()` that does not return stops the app there, with a
+message in the terminal. For `tools/badge.py`
 you also need pyusb (`pip install pyusb`).
 
 ## Write one

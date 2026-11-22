@@ -109,6 +109,7 @@ typedef struct {
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.
+#ifndef HH_EMU
 typedef struct {
     uint32_t magic;  // HH_APP_MAGIC
     uint16_t api;    // the HH_API_VERSION the app was built against
@@ -118,6 +119,19 @@ typedef struct {
     void (*init)(const hh_api_t *api);
     void (*tick)(uint32_t elapsed_ms);
 } hh_app_header_t;
+#else
+// The emulator (tools/emu) reads the same 32-bit image on a 64-bit PC:
+// the pointers are 32-bit numbers there.
+typedef struct {
+    uint32_t magic;
+    uint16_t api;
+    uint16_t flags;
+    uint32_t load_end;
+    uint32_t bss_end;
+    uint32_t init;
+    uint32_t tick;
+} hh_app_header_t;
+#endif
 
 // Declares the app: HH_APP(my_init, my_tick); once, in one of its files.
 #define HH_APP(init_fn, tick_fn)                                                     \

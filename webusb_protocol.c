@@ -3,7 +3,11 @@
 #include <string.h>
 #include "ch32fun.h"
 #include "ch643_ledpwm.h"
+#ifdef HH_EMU
+#include "emu_usb.h"  // tools/emu: the emulator stands in for the USB stack
+#else
 #include "fsusb.h"  // includes fsusb.c itself, so only include it in this file
+#endif
 #include "persist.h"
 #include "store.h"
 #include "apps/hhapp.h"

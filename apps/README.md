@@ -58,10 +58,10 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   - `rgb[]`: the RGB LEDs on the arms, by arm and rank.
 - **Text.** `draw_text(x, y, text, value)` writes text on the centre
   grid, with its top left corner at column `x`, row `y`, in the
-  firmware's 5 × 7 font. `x` and `y` may be off the grid, which makes
+  firmware's 5 × 8 font (7 rows, plus one for descenders), which has all
+  of printable ASCII. `x` and `y` may be off the grid, which makes
   scrolling easy. It returns the width; `text_width(text)` gives the same
-  without drawing. Each character takes 6 columns (`HH_FONT_ADVANCE`), and
-  lower case shows as upper case. The grid is 17 wide, so about 3
+  without drawing. Each character takes 6 columns (`HH_FONT_ADVANCE`). The grid is 17 wide, so about 3
   characters fit at a time. Snake uses it to show the score.
 - **Buttons.** `pressed()` gives the buttons that went down since the last
   tick, and `held()` gives the buttons that are down now. The bits are

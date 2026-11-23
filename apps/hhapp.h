@@ -40,9 +40,10 @@
 #define HH_EDGE_COUNT 71  // the outline, clockwise from the top
 #define HH_RGB_COUNT 35   // 7 RGB LEDs on each of the 5 arms
 
-// Text (draw_text): a 5 x 7 pixel font, HH_FONT_ADVANCE columns per character
+// Text (draw_text): a 5 x 8 pixel font (7 rows, and 1 for the descenders of
+// g j p q y), HH_FONT_ADVANCE columns per character
 #define HH_FONT_W 5
-#define HH_FONT_H 7
+#define HH_FONT_H 8
 #define HH_FONT_ADVANCE 6
 
 // Persistent data (survives power-off)
@@ -117,9 +118,9 @@ typedef struct {
     // its top left corner at column x, row y of grid[][]; x and y may be
     // negative or past the edge, for scrolling: what falls outside, or on a
     // corner without an LED, is skipped. Lit pixels get value, the rest is
-    // left alone (clear() first for a clean line). Lower case shows as
-    // upper case. Returns text_width(text): HH_FONT_ADVANCE columns per
-    // character, without the blank column after the last one.
+    // left alone (clear() first for a clean line). All of printable ASCII;
+    // other bytes show as a blank. Returns text_width(text): HH_FONT_ADVANCE
+    // columns per character, without the blank column after the last one.
     int (*draw_text)(int x, int y, const char *text, uint8_t value);
     int (*text_width)(const char *text);
 } hh_api_t;

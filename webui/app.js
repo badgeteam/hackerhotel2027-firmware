@@ -879,6 +879,7 @@ function storeItemBytes(item) {
 }
 
 function renderStore() {
+	renderAppLibrary(); // its Add / Update buttons follow what is stored
 	storeListEl.innerHTML = '';
 	if (!device.connected) {
 		storeStatusEl.textContent = 'Connect to see what is stored.';
@@ -989,20 +990,89 @@ document.getElementById('store-add-input').addEventListener('change', async (ev)
 		alert(`${file.name} is not an app (.hhapp) or an animation (.ledanim).`);
 		return;
 	}
-	const name = file.name.replace(/\.[^.]+$/, '').toUpperCase();
+	await addToBadge(type, file.name.replace(/\.[^.]+$/, '').toUpperCase(), bytes);
+});
+
+// Stores an item on the badge (it starts at once). If `replace` is the
+// index of an older copy, that one is deleted afterwards: the new item
+// went in after it, so its index is still right.
+async function addToBadge(type, name, bytes, replace = null) {
 	handOverBadge();
 	storeBusy = true;
 	try {
 		await device.storeItem(type, name, bytes, (sent, total) => {
 			storeStatusEl.textContent = `Uploading ${name}: ${Math.round((100 * sent) / total)}%`;
 		});
+		if (replace !== null) await device.deleteItem(replace);
 	} catch (e) {
 		alert(e.message);
 	} finally {
 		storeBusy = false;
 	}
-	refreshStore();
-});
+	await refreshStore();
+}
+
+// --- App library: the apps that come with the firmware (webui/apps/, made
+// by `make -C apps webui`) ---------------------------------------------------
+
+// var, not let: renderStore() may run before this part of the file has
+var appLibrary = []; // [{name, file, bytes, api, description}]
+
+function renderAppLibrary() {
+	const appLibraryEl = document.getElementById('app-library');
+	appLibraryEl.innerHTML = '';
+	for (const app of appLibrary) {
+		const li = document.createElement('li');
+		li.className = 'store-item';
+		const label = document.createElement('span');
+		label.className = 'store-label';
+		const name = document.createElement('span');
+		name.className = 'store-name';
+		name.textContent = app.name;
+		name.title = app.description;
+		const meta = document.createElement('span');
+		meta.className = 'store-meta';
+		meta.textContent = `App \u00b7 ${formatBytes(storeItemBytes({ length: app.bytes }))}`;
+		meta.title = app.description;
+		label.append(name, meta);
+
+		const old = storeItems.find((item) => item.type === ITEM_TYPE.APP && item.name === app.name);
+		const btn = document.createElement('button');
+		btn.textContent = old ? 'Update' : 'Add';
+		const api = storeStatus && storeStatus.api;
+		if (!device.connected) {
+			btn.disabled = true;
+			btn.title = 'Connect to the badge first';
+		} else if (api !== undefined && api < app.api) {
+			btn.disabled = true;
+			btn.title = `Needs firmware with app API ${app.api}; the badge has ${api}. Update the firmware first.`;
+		} else {
+			btn.title = old ? `Replace the ${app.name} on the badge` : `Store ${app.name} on the badge and start it`;
+		}
+		btn.addEventListener('click', async () => {
+			try {
+				const r = await fetch(`apps/${app.file}`, { cache: 'no-store' });
+				if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+				const bytes = new Uint8Array(await r.arrayBuffer());
+				if (new TextDecoder().decode(bytes.subarray(0, 4)) !== 'HHAP') throw new Error('not an app');
+				await addToBadge(ITEM_TYPE.APP, app.name, bytes, old ? old.index : null);
+			} catch (e) {
+				alert(`Couldn't add ${app.name}: ${e.message}`);
+			}
+		});
+		li.append(label, btn);
+		appLibraryEl.appendChild(li);
+	}
+	if (!appLibrary.length) appLibraryEl.innerHTML = '<li class="hint">No apps found (make -C apps webui).</li>';
+}
+
+fetch('apps/index.json', { cache: 'no-store' })
+	.then((r) => (r.ok ? r.json() : { apps: [] }))
+	.then((index) => {
+		appLibrary = index.apps || [];
+		renderAppLibrary();
+	})
+	.catch(() => renderAppLibrary());
 
 document.getElementById('store-stop-btn').addEventListener('click', () => storeAction(() => device.stop()));
 

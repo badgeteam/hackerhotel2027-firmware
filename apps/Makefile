@@ -1,5 +1,6 @@
 # Builds every app in apps/<name>/ (all its .c files) into build/<name>.hhapp,
 # the file the web interface uploads. See apps/README.md.
+# `make webui` also copies them into the web interface's app library.
 PREFIX ?= riscv64-elf
 CC := $(PREFIX)-gcc
 OBJCOPY := $(PREFIX)-objcopy
@@ -23,8 +24,12 @@ build/%.hhapp: build/%.elf
 	$(OBJCOPY) -O binary -j .image $< $@
 	@echo "$@: $$(stat -c %s $@) bytes"
 
+# The web interface's app library (webui/apps/): the built apps and an index
+webui: all
+	python3 ../tools/publish_apps.py
+
 clean:
 	rm -rf build
 
 .PRECIOUS: build/%.elf
-.PHONY: all clean
+.PHONY: all clean webui

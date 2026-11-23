@@ -1,0 +1,18 @@
+{
+ "apps": [
+  {
+   "name": "SNAKE",
+   "file": "snake.hhapp",
+   "bytes": 1428,
+   "api": 2,
+   "description": "Snake on the centre grid. C turns left, D turns right; eat the blinking dot. The outline counts the score, dimly up to the best score so far (kept on the badge). After a crash the score shows as a number; A or B starts again."
+  },
+  {
+   "name": "SPARKLE",
+   "file": "sparkle.hhapp",
+   "bytes": 620,
+   "api": 2,
+   "description": "Sparkles on the grid and the outline, a rainbow turning round the arms. B: more sparkles, D: fewer."
+  }
+ ]
+}

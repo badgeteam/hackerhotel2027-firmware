@@ -236,6 +236,9 @@ device.addEventListener('status', (ev) => {
 	badgeMode = mode;
 	const name = DEVICE_MODE_NAMES[mode] ?? `Mode ${mode}`;
 	deviceModeEl.textContent = `${name}, brightness ${brightness}`;
+	const old = ev.detail.api !== undefined && ev.detail.api < FIRMWARE_API;
+	deviceModeEl.classList.toggle('stats-over-budget', old);
+	if (old) deviceModeEl.textContent += ` -- the badge's firmware is older than this page (API ${ev.detail.api}, needs ${FIRMWARE_API}): update it`;
 	storeStatusChanged(ev.detail);
 });
 
@@ -1105,6 +1108,14 @@ device.addEventListener('disconnect', () => {
 });
 
 // --- Init ---------------------------------------------------
+
+// version.json is written by tools/deploy_webui.sh: which commit this page is
+fetch('version.json', { cache: 'no-store' })
+	.then((r) => (r.ok ? r.json() : null))
+	.then((v) => {
+		if (v) document.getElementById('webui-version').textContent = `-- web interface ${v.commit} (${v.date})`;
+	})
+	.catch(() => {});
 
 renderPatternList();
 renderFrameStrip();

@@ -72,7 +72,7 @@ void WebUSBBulkDataOut(uint8_t* data, int len) {
 // Runs in the main loop (handle_command), so what plays can be changed
 // here before its flash moves.
 static void delete_item(uint8_t index) {
-    bool on = g_app_mode != APP_MODE_CUSTOM;
+    bool on = g_app_mode == APP_MODE_FLASH_PATTERN || g_app_mode == APP_MODE_APP;
     bool animation = g_app_mode == APP_MODE_FLASH_PATTERN;
     uint8_t running = g_running_item;
     // The deleted item stops. An animation after it plays from flash that
@@ -80,6 +80,7 @@ static void delete_item(uint8_t index) {
     // from RAM, so it keeps running.
     if (on && Store_Item(index) && (running == index || (animation && running > index))) g_app_mode = APP_MODE_CUSTOM;
     s_result = (uint8_t)Store_Delete(index);
+    if (s_result == STORE_OK && on && running == index) g_app_mode = APP_MODE_NAMETAG;
     if (s_result != STORE_OK || !on || running == index || running < index) return;
     if (animation)
         s_run_request = running - 1;
@@ -128,7 +129,7 @@ static void handle_command(const uint8_t* data, int len) {
             break;
 
         case CMD_STORE_ERASE:
-            g_app_mode = APP_MODE_CUSTOM;
+            g_app_mode = APP_MODE_NAMETAG;
             Store_EraseAll();
             break;
 
@@ -169,7 +170,7 @@ static void handle_command(const uint8_t* data, int len) {
             break;
 
         case CMD_STOP:
-            g_app_mode = APP_MODE_CUSTOM;
+            g_app_mode = APP_MODE_NAMETAG;
             break;
 
         case CMD_ITEM_DELETE:
@@ -257,7 +258,7 @@ void WebUSB_Poll(void) {
     buffer[1] = LEDMatrix_GetBrightness();
     buffer[2] = s_result;
     buffer[3] = Store_Count();
-    buffer[4] = g_app_mode == APP_MODE_CUSTOM ? STORE_NONE : g_running_item;
+    buffer[4] = g_app_mode == APP_MODE_FLASH_PATTERN || g_app_mode == APP_MODE_APP ? g_running_item : STORE_NONE;
     buffer[5] = Store_BootItem();
     buffer[6] = Store_FreePages();
     buffer[7] = HH_API_VERSION;

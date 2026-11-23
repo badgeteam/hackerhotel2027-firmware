@@ -22,7 +22,7 @@
 #include <stdint.h>
 
 #define HH_APP_MAGIC 0x50414848u  // "HHAP"
-#define HH_API_VERSION 1
+#define HH_API_VERSION 2  // 2: draw_text, text_width
 
 #define HH_APP_RAM_BASE 0x20002000u
 #define HH_APP_RAM_SIZE 0x3000u  // 12 KB: the image and its .bss
@@ -39,6 +39,11 @@
 #define HH_GRID_H 16
 #define HH_EDGE_COUNT 71  // the outline, clockwise from the top
 #define HH_RGB_COUNT 35   // 7 RGB LEDs on each of the 5 arms
+
+// Text (draw_text): a 5 x 7 pixel font, HH_FONT_ADVANCE columns per character
+#define HH_FONT_W 5
+#define HH_FONT_H 7
+#define HH_FONT_ADVANCE 6
 
 // Persistent data (survives power-off)
 #define HH_NAME_MAX 32      // the owner's name, characters
@@ -63,7 +68,8 @@ typedef struct {
 } hh_ir_t;
 
 // What the firmware offers an app. New members only ever go at the end:
-// check `size` before using one that came after HH_API_VERSION 1.
+// check `version` (or `size`) before using one that came after version 1.
+// Firmware older than the app's HH_API_VERSION does not start the app.
 typedef struct {
     uint16_t version;  // HH_API_VERSION of the firmware
     uint16_t size;     // sizeof(hh_api_t) in the firmware
@@ -106,6 +112,16 @@ typedef struct {
     void (*set_name)(const char *name);
     bool (*load)(void *data, unsigned len);        // false if this app saved nothing yet
     bool (*save)(const void *data, unsigned len);  // len <= HH_APP_DATA_MAX; false if no room
+
+    // Text on the centre grid (HH_API_VERSION 2). draw_text puts text with
+    // its top left corner at column x, row y of grid[][]; x and y may be
+    // negative or past the edge, for scrolling: what falls outside, or on a
+    // corner without an LED, is skipped. Lit pixels get value, the rest is
+    // left alone (clear() first for a clean line). Lower case shows as
+    // upper case. Returns text_width(text): HH_FONT_ADVANCE columns per
+    // character, without the blank column after the last one.
+    int (*draw_text)(int x, int y, const char *text, uint8_t value);
+    int (*text_width)(const char *text);
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.

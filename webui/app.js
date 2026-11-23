@@ -228,7 +228,7 @@ LedMatrixDevice.emulatorPresent().then((here) => {
 device.addEventListener('connect', refreshConnButtons);
 device.addEventListener('disconnect', refreshConnButtons);
 // Must match APP_MODE_* in the firmware's webusb_protocol.h
-const DEVICE_MODE_NAMES = { 1: 'Custom frame', 2: 'Stored pattern', 3: 'App' };
+const DEVICE_MODE_NAMES = { 1: 'Custom frame', 2: 'Stored pattern', 3: 'App', 4: 'Name tag' };
 const MODE_CUSTOM = 1;
 
 device.addEventListener('status', (ev) => {

@@ -28,6 +28,10 @@ uint8_t Persist_Brightness(void);  // the global brightness; 0 if never saved
 void Persist_SetBrightness(uint8_t brightness);
 
 // The name, NUL-terminated (up to PERSIST_NAME_LEN characters)
+// How the menu uses the buttons: MENU_KEYS_* (menu.h)
+uint8_t Persist_Keys(void);
+void Persist_SetKeys(uint8_t keys);
+
 const char* Persist_Name(void);
 void Persist_SetName(const char* name, unsigned len);
 

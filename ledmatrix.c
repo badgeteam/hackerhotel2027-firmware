@@ -8,6 +8,7 @@
 #include "debug_output.h"
 #include "infrared.h"
 #include "app_host.h"
+#include "menu.h"
 #include "nametag.h"
 #include "pattern_player.h"
 #include "persist.h"
@@ -29,22 +30,6 @@ int _write(int fd, const char* buf, int size) {
 #define IR_COMMAND_TOP_ON    0x01  // first half of the rows 255, second half 0
 #define IR_COMMAND_BOTTOM_ON 0x02  // first half of the rows 0, second half 255
 
-static const uint8_t s_brightness_levels[] = {8, 16, 32, 64, 128, 255};
-#define BRIGHTNESS_LEVEL_COUNT (sizeof(s_brightness_levels) / sizeof(s_brightness_levels[0]))
-
-// The next brightness level up (dir 1) or down (dir -1) from the current
-// brightness, which an app may have set to anything in between
-static void step_brightness(int dir) {
-    uint8_t now = LEDMatrix_GetBrightness();
-    for (unsigned k = 0; k < BRIGHTNESS_LEVEL_COUNT; k++) {
-        unsigned i = dir > 0 ? k : BRIGHTNESS_LEVEL_COUNT - 1 - k;
-        if (dir > 0 ? s_brightness_levels[i] > now : s_brightness_levels[i] < now) {
-            LEDMatrix_SetBrightness(s_brightness_levels[i]);
-            return;
-        }
-    }
-}
-
 static void fill_halves(uint8_t top, uint8_t bottom) {
     for (uint8_t row = 0; row < LED_MATRIX_ROWS; row++) {
         for (uint8_t col = 0; col < LED_MATRIX_COLS; col++) {
@@ -53,9 +38,30 @@ static void fill_halves(uint8_t top, uint8_t bottom) {
     }
 }
 
-// Leaving an app on the badge: hold A and C together this long
-#define APP_EXIT_CHORD (HH_BTN_A | HH_BTN_C)
-#define APP_EXIT_MS 1000
+// Hold A this long for the menu; in an app longer, since the app has A too
+#define MENU_HOLD_MS 700
+#define MENU_HOLD_APP_MS 1000
+
+// What the LEDs showed when the menu opened, to put back when it closes
+static uint8_t s_saved_leds[LED_MATRIX_ROWS * LED_MATRIX_COLS];
+
+static void save_leds(void) {
+    for (unsigned i = 0; i < sizeof s_saved_leds; i++) s_saved_leds[i] = LEDMatrix_GetPixel(i / LED_MATRIX_COLS, i % LED_MATRIX_COLS);
+}
+
+static void restore_leds(void) {
+    for (unsigned i = 0; i < sizeof s_saved_leds; i++) LEDMatrix_SetPixel(i / LED_MATRIX_COLS, i % LED_MATRIX_COLS, s_saved_leds[i]);
+}
+
+static bool item_runs(void) { return g_app_mode == APP_MODE_FLASH_PATTERN || g_app_mode == APP_MODE_APP; }
+
+// Into the USB boot ROM (UPDATE in the menu),
+// writing a pending change to the persistent record first
+static void enter_boot_rom(void) {
+    AppHost_Stop();
+    Persist_Flush(PERSIST_SETTLE_MS);
+    jump_to_bootloader();
+}
 
 // Starts store item `index`: an animation plays, an app runs. Whatever ran
 // before stops; if the item cannot start, the badge shows the name tag.
@@ -99,10 +105,11 @@ int main(void) {
         g_app_mode = APP_MODE_FLASH_PATTERN;
     }
 
-    bool states[4] = {0};
     uint32_t last_tick = funSysTick32();
-    uint32_t chord_ms = 0;
+    uint32_t hold_ms = 0;   // how long A has been down
     uint8_t last_mode = 0;  // to start the name tag when it comes on
+    bool menu_open = false;
+    uint8_t menu_mode = 0, menu_item = STORE_NONE;  // what ran when it opened
 
     while (1) {
         WebUSB_HandleCommand();
@@ -120,43 +127,64 @@ int main(void) {
         Persist_Flush(elapsed_ms);
 
         uint8_t buttons = buttons_poll();
-        if (g_app_mode == APP_MODE_APP) {
-            // The app has the buttons and the infrared; only A + C held is ours
-            uint8_t held = buttons_down();
-            chord_ms = (held & APP_EXIT_CHORD) == APP_EXIT_CHORD ? chord_ms + elapsed_ms : 0;
-            if (chord_ms >= APP_EXIT_MS || !AppHost_Tick(elapsed_ms, buttons, held)) {
-                AppHost_Stop();
-                g_app_mode = APP_MODE_NAMETAG;
-                buttons_ignore_held();
-                chord_ms = 0;
+        uint8_t held = buttons_down();
+
+        // The menu (menu.h). While it is open, what ran before waits; a
+        // command from the host that changes what runs closes it.
+        if (menu_open && (g_app_mode != menu_mode || (item_runs() && g_running_item != menu_item))) menu_open = false;
+        if (menu_open) {
+            uint8_t item = STORE_NONE;
+            menu_result_t r = Menu_Tick(elapsed_ms, buttons, held, &item);
+            if (r != MENU_OPEN) {
+                menu_open = false;
+                hold_ms = 0;
+                buttons_ignore_held();  // the press that closed it is not for what runs next
+                if (r == MENU_RUN) {
+                    run_item(item);
+                } else if (r == MENU_NAMETAG) {
+                    AppHost_Stop();
+                    g_app_mode = APP_MODE_NAMETAG;
+                } else if (r == MENU_UPDATE) {
+                    enter_boot_rom();
+                } else {  // KEEP or SLEEP: what ran goes on, as it was
+                    restore_leds();
+                    if (r == MENU_SLEEP) {
+                        standby();
+                        buttons_ignore_held();  // the press that woke the badge
+                    }
+                }
             }
             Delay_Ms(TICK_MS);
             continue;
         }
 
-        for (uint8_t i = 0; i < 4; i++) {
-            if ((buttons >> i) & 1) {
-                states[i] = !states[i];
+        // Hold A: the menu, also from an app (which gets the press of A too)
+        hold_ms = held & HH_BTN_A ? hold_ms + elapsed_ms : 0;
+        if (hold_ms >= (g_app_mode == APP_MODE_APP ? MENU_HOLD_APP_MS : MENU_HOLD_MS)) {
+            save_leds();
+            menu_mode = g_app_mode;
+            menu_item = g_running_item;
+            Menu_Open(item_runs() ? g_running_item : STORE_NONE);
+            menu_open = true;
+            hold_ms = 0;
+            Delay_Ms(TICK_MS);
+            continue;
+        }
+
+        if (g_app_mode == APP_MODE_APP) {
+            // The app has the buttons and the infrared
+            if (!AppHost_Tick(elapsed_ms, buttons, held)) {
+                AppHost_Stop();
+                g_app_mode = APP_MODE_NAMETAG;
+                buttons_ignore_held();
             }
-        }
-        if (states[0]) {
-            standby();
-            states[0] = false;      // otherwise we go straight back to sleep
-            buttons_ignore_held();  // don't act on the press that woke us
+            Delay_Ms(TICK_MS);
+            continue;
         }
 
-        if (states[1]) {
-            jump_to_bootloader();
-        }
-
-        if (states[2]) {
-            states[2] = false;
-            step_brightness(1);
-        }
-        if (states[3]) {
-            states[3] = false;
-            step_brightness(-1);
-        }
+        // Outside apps, B and D are the brightness
+        if (buttons & HH_BTN_B) Menu_StepBrightness(1);
+        if (buttons & HH_BTN_D) Menu_StepBrightness(-1);
 
         infrared_nec_message_t message;
         while (infrared_receive(&message)) {

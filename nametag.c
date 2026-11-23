@@ -5,7 +5,6 @@
 #include "persist.h"
 
 #define FRAME_MS 33   // about 30 frames per second
-#define SCROLL_CPS 10 // columns per second when the name scrolls
 #define TEXT_Y 4      // the text's top row: centred on the 16-row grid
 #define FALLBACK "HACKER HOTEL 2027"
 
@@ -39,18 +38,8 @@ static void hue(uint8_t h, uint8_t v, uint8_t rgb[3]) {
 static void draw(uint32_t t_ms) {
     LEDMatrix_Clear();
 
-    // The name: still if it fits, else copies follow each other every
-    // width + 8 columns, coming in on the right
-    const char* text = Persist_Name()[0] ? Persist_Name() : FALLBACK;
-    int w = Text_Width(text);
-    if (w <= HH_GRID_W) {
-        Text_Draw((HH_GRID_W - w) / 2, TEXT_Y, text, 170);
-    } else {
-        int period = w + 8;
-        int x = HH_GRID_W - (int)(t_ms * SCROLL_CPS / 1000 % (uint32_t)period);
-        Text_Draw(x, TEXT_Y, text, 170);
-        Text_Draw(x - period, TEXT_Y, text, 170);
-    }
+    // The name: still if it fits, else scrolling
+    Text_DrawLabel(Persist_Name()[0] ? Persist_Name() : FALLBACK, TEXT_Y, t_ms, 170);
 
     // A sheen: a diagonal band of full brightness moves over the letters
     int band = (int)(t_ms * 60 / 1000 % 256);

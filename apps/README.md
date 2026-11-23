@@ -66,7 +66,10 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 - **Buttons.** `pressed()` gives the buttons that went down since the last
   tick, and `held()` gives the buttons that are down now. The bits are
   `HH_BTN_A`..`HH_BTN_D`, by the silkscreen letters.
-- **Leave the app.** Hold A and C for one second. The badge also leaves
+- **Leave the app.** Hold A for one second: the badge's menu opens, and
+  the app waits (no ticks) until the menu closes again; choosing another
+  entry in the menu stops the app. The app gets that press of A too, so
+  do not make a long press of A do something. The badge also leaves
   the app when the web interface sends a command (a frame, Stop, Run), or
   when the app calls `exit()`. After an app, the badge shows the name tag.
 - **Saving.** `name()` gives the owner's name, which is set in the web

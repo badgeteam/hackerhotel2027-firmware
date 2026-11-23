@@ -26,6 +26,7 @@
 #define CMD_ITEM_INFO 0x24
 #define CMD_ITEM_RUN 0x25
 #define CMD_STOP 0x26
+#define CMD_ITEM_DELETE 0x27
 #define CMD_NAME_GET 0x30
 #define CMD_NAME_SET 0x31
 #define CMD_QUERY 0xFF
@@ -66,6 +67,24 @@ void WebUSBBulkDataOut(uint8_t* data, int len) {
     if (len > CMD_MAX) len = CMD_MAX;
     memcpy(s_cmd, data, (unsigned)len);
     s_cmd_len = len;
+}
+
+// Runs in the main loop (handle_command), so what plays can be changed
+// here before its flash moves.
+static void delete_item(uint8_t index) {
+    bool on = g_app_mode != APP_MODE_CUSTOM;
+    bool animation = g_app_mode == APP_MODE_FLASH_PATTERN;
+    uint8_t running = g_running_item;
+    // The deleted item stops. An animation after it plays from flash that
+    // moves: it stops, and starts again at its new index. An app runs
+    // from RAM, so it keeps running.
+    if (on && Store_Item(index) && (running == index || (animation && running > index))) g_app_mode = APP_MODE_CUSTOM;
+    s_result = (uint8_t)Store_Delete(index);
+    if (s_result != STORE_OK || !on || running == index || running < index) return;
+    if (animation)
+        s_run_request = running - 1;
+    else
+        g_running_item = running - 1;
 }
 
 static void handle_command(const uint8_t* data, int len) {
@@ -151,6 +170,14 @@ static void handle_command(const uint8_t* data, int len) {
 
         case CMD_STOP:
             g_app_mode = APP_MODE_CUSTOM;
+            break;
+
+        case CMD_ITEM_DELETE:
+            if (len < 2) {
+                s_result = STORE_ERR_ARGS;
+            } else {
+                delete_item(data[1]);
+            }
             break;
 
         case CMD_NAME_GET:

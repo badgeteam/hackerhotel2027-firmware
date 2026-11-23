@@ -23,6 +23,9 @@
 //   0x25 ITEM_RUN       index, boot            start item `index`; boot = 1 also makes it
 //                                              the item that starts at power-on
 //   0x26 STOP                                  stop the running animation or app (custom mode)
+//   0x27 ITEM_DELETE    index                  remove item `index`; the items after it move
+//                                              down one index (slow, wait for the reply).
+//                                              If it runs, it stops.
 //
 //   Persistent settings (persist.h)
 //   0x30 NAME_GET                              the reply carries the owner's name

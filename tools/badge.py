@@ -6,6 +6,7 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
   tools/badge.py add FILE [NAME]           store a .hhapp or .ledanim; it starts at once
   tools/badge.py run INDEX [--boot]        start an item (--boot: also at power-on)
   tools/badge.py stop                      stop the running animation or app
+  tools/badge.py delete INDEX              remove one item; the items after it move down one
   tools/badge.py erase                     erase every item (the name and app data stay)
   tools/badge.py name [TEXT]               show or set the owner's name
 """
@@ -76,6 +77,8 @@ def main():
     r.add_argument("index", type=int)
     r.add_argument("--boot", action="store_true")
     sub.add_parser("stop")
+    d = sub.add_parser("delete")
+    d.add_argument("index", type=int)
     sub.add_parser("erase")
     n = sub.add_parser("name")
     n.add_argument("text", nargs="?")
@@ -94,6 +97,8 @@ def main():
         badge.check(badge.send(0x25, args.index, 1 if args.boot else 0), "run")
     elif args.cmd == "stop":
         badge.send(0x26)
+    elif args.cmd == "delete":
+        badge.check(badge.send(0x27, args.index, timeout=10000), "delete")
     elif args.cmd == "erase":
         badge.send(0x20, timeout=10000)
     elif args.cmd == "name":

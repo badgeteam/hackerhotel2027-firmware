@@ -888,17 +888,18 @@ function renderStore() {
 		const li = document.createElement('li');
 		li.className = 'store-item';
 		if (storeStatus && item.index === storeStatus.running) li.classList.add('running');
+		// name, and under it the type and the flash it takes
 		const label = document.createElement('span');
+		label.className = 'store-label';
 		const boot = storeStatus && item.index === storeStatus.boot ? '\u2605 ' : '';
-		label.textContent = `${boot}${item.name || '(no name)'}`;
-		label.title = `${ITEM_TYPE_NAMES[item.type] ?? 'Type ' + item.type}, ${formatBytes(item.length)}`;
-		const kind = document.createElement('span');
-		kind.className = 'store-kind';
-		kind.textContent = ITEM_TYPE_NAMES[item.type] ?? item.type;
-		const size = document.createElement('span');
-		size.className = 'store-size';
-		size.textContent = formatBytes(storeItemBytes(item));
-		size.title = `${formatBytes(item.length)} file; on the badge it takes whole 256-byte pages, with a 32-byte header`;
+		const name = document.createElement('span');
+		name.className = 'store-name';
+		name.textContent = `${boot}${item.name || '(no name)'}`;
+		const meta = document.createElement('span');
+		meta.className = 'store-meta';
+		meta.textContent = `${ITEM_TYPE_NAMES[item.type] ?? 'Type ' + item.type} \u00b7 ${formatBytes(storeItemBytes(item))}`;
+		meta.title = `${formatBytes(item.length)} file; on the badge it takes whole 256-byte pages, with a 32-byte header`;
+		label.append(name, meta);
 		const run = document.createElement('button');
 		run.textContent = 'Run';
 		run.addEventListener('click', () => storeAction(() => device.runItem(item.index)));
@@ -913,7 +914,7 @@ function renderStore() {
 			if (!confirm(`Delete ${item.name || 'this item'} from the badge?`)) return;
 			storeAction(() => device.deleteItem(item.index));
 		});
-		li.append(label, kind, size, run, bootBtn, del);
+		li.append(label, run, bootBtn, del);
 		storeListEl.appendChild(li);
 	}
 	if (storeStatus && storeStatus.freeBytes !== undefined) {

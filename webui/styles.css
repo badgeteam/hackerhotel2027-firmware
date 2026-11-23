@@ -478,6 +478,13 @@ footer code {
 	}
 }
 
+/* A fieldset is at least as wide as its content's min-content width by
+   default; in the fixed-width side column, long content must shrink
+   (store item names end in an ellipsis) instead of adding a scroll bar */
+.side-column fieldset {
+	min-width: 0;
+}
+
 .store-list {
 	list-style: none;
 	margin: 0;
@@ -496,25 +503,26 @@ footer code {
 	font-size: 0.8rem;
 }
 
-.store-item > span:first-child {
+.store-label {
 	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.store-name,
+.store-meta {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.store-item.running > span:first-child {
+.store-item.running .store-name {
 	color: var(--accent);
 }
 
-.store-kind {
+.store-meta {
 	color: var(--text-dim);
-	min-width: 4.6rem;
-}
-
-.store-size {
-	color: var(--text-dim);
+	font-size: 0.7rem;
 	font-variant-numeric: tabular-nums;
-	min-width: 3.8rem;
-	text-align: right;
 }

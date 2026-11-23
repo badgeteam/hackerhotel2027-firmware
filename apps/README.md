@@ -14,7 +14,14 @@ first.
 cd apps
 make                  # every apps/<name>/ into build/<name>.hhapp
 ../tools/badge.py add build/snake.hhapp
+make webui            # also into the web interface's app library (webui/apps/)
 ```
+
+The web interface's **App library** offers every app in `webui/apps/`
+with one click. `make webui` copies the built apps there and writes
+`webui/apps/index.json`, with each app's description taken from the
+comment at the top of its first `.c` file. Commit `webui/apps/` after a
+change to an app, so the site serves the new build.
 
 You need the same `riscv64-elf-gcc` as the firmware. Without a badge, try
 your app in the emulator: `python3 tools/emu/emu.py --web`, then add the

@@ -139,6 +139,8 @@ you can:
 - choose the boot item (★),
 - delete an item (🗑),
 - add a `.hhapp` or `.ledanim`,
+- add or update an app from the **App library**: the apps in `apps/`,
+  built into `webui/apps/` by `make -C apps webui`,
 - stop what runs,
 - erase the store,
 - set your name.

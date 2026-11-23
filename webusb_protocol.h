@@ -12,7 +12,8 @@
 //   0x05 CLEAR                                 all LEDs off, switch to custom mode
 //
 //   The item store (store.h): animations (.ledanim) and apps (.hhapp)
-//   0x20 STORE_ERASE                           erase every item (slow, wait for the reply)
+//   0x20 STORE_ERASE                           erase every item (slow, wait for the reply);
+//                                              the badge shows the name tag
 //   0x21 ITEM_BEGIN     type, name...          start a new item after the last one; type 1 =
 //                                              animation, 2 = app; name up to 20 bytes
 //                                              (erases the free space: slow, wait for the reply)
@@ -22,10 +23,11 @@
 //   0x24 ITEM_INFO      index                  the reply describes item `index`
 //   0x25 ITEM_RUN       index, boot            start item `index`; boot = 1 also makes it
 //                                              the item that starts at power-on
-//   0x26 STOP                                  stop the running animation or app (custom mode)
+//   0x26 STOP                                  stop the running animation or app; the badge
+//                                              shows the name tag
 //   0x27 ITEM_DELETE    index                  remove item `index`; the items after it move
 //                                              down one index (slow, wait for the reply).
-//                                              If it runs, it stops.
+//                                              If it runs, it stops (the name tag shows).
 //
 //   Persistent settings (persist.h)
 //   0x30 NAME_GET                              the reply carries the owner's name
@@ -53,9 +55,10 @@
 #define APP_MODE_CUSTOM 1         // showing whatever the host (or the firmware) last wrote
 #define APP_MODE_FLASH_PATTERN 2  // playing an animation from the store on repeat
 #define APP_MODE_APP 3            // running an app from the store
+#define APP_MODE_NAMETAG 4        // the name tag (nametag.h): nothing else runs
 
 extern volatile uint8_t g_app_mode;
-extern volatile uint8_t g_running_item;  // the store item that plays or runs (when not custom)
+extern volatile uint8_t g_running_item;  // the store item that plays or runs (FLASH_PATTERN, APP)
 
 void WebUSB_Init(void);
 

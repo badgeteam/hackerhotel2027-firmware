@@ -1,6 +1,7 @@
 // Snake on the centre grid. C turns left, D turns right; eat the blinking
 // dot. The outline counts the score, dimly up to the best score so far
-// (kept on the badge). After a crash, A or B starts again.
+// (kept on the badge). After a crash the score shows as a number; A or B
+// starts again.
 #include "hhapp.h"
 
 #define W HH_GRID_W
@@ -85,13 +86,24 @@ static void step(void) {
     }
 }
 
+// The score as text, centred on the grid, over a dimmed snake
+static void draw_score(void) {
+    char text[6], *p = text + sizeof text - 1;
+    uint16_t n = score;
+    *p = 0;
+    do *--p = (char)('0' + n % 10);
+    while ((n /= 10) && p > text);
+    hh->draw_text((W - hh->text_width(p)) / 2, (H - HH_FONT_H) / 2, p, 255);
+}
+
 static void draw(void) {
     uint32_t t = hh->millis();
     hh->clear();
     for (uint16_t i = 0; i < len; i++) {
         uint16_t k = (uint16_t)((head + MAX_LEN - i) % MAX_LEN);
-        hh->set(hh->grid[body_y[k]][body_x[k]], i == 0 ? 255 : 150);
+        hh->set(hh->grid[body_y[k]][body_x[k]], crashed ? 40 : i == 0 ? 255 : 150);
     }
+    if (crashed) draw_score();
     if (!crashed && (t / 150) % 2) hh->set(hh->grid[food_y][food_x], 255);
     for (uint16_t i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < score ? 140 : i < best ? 50 : 0);
     // the arms: green while playing, a red pulse after a crash

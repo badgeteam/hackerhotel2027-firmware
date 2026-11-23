@@ -15,7 +15,7 @@
 enum {
     M_SET, M_GET, M_CLEAR, M_SET_BRIGHTNESS, M_BRIGHTNESS, M_GRID, M_EDGE, M_RGB, M_PRESSED, M_HELD,
     M_MILLIS, M_RANDOM, M_IR_SEND, M_IR_RECEIVE, M_STANDBY, M_EXIT, M_PRINT, M_NAME, M_SET_NAME, M_LOAD,
-    M_SAVE, M_COUNT
+    M_SAVE, M_DRAW_TEXT, M_TEXT_WIDTH, M_COUNT
 };
 _Static_assert(sizeof(hh_api_t) == 8 + 8 * M_COUNT, "app.c lists every member of hh_api_t");
 
@@ -91,6 +91,16 @@ static void trap(rv_cpu* cpu, unsigned m) {
         }
         case M_LOAD: r = in_ram(a0, a1) && s_api->load((void*)(uintptr_t)a0, a1); break;
         case M_SAVE: r = in_ram(a0, a1) && s_api->save((const void*)(uintptr_t)a0, a1); break;
+        case M_DRAW_TEXT: {
+            const char* s = app_string(x[12]);
+            r = s ? (uint32_t)s_api->draw_text((int32_t)a0, (int32_t)a1, s, (uint8_t)x[13]) : 0;
+            break;
+        }
+        case M_TEXT_WIDTH: {
+            const char* s = app_string(a0);
+            r = s ? (uint32_t)s_api->text_width(s) : 0;
+            break;
+        }
         default: emu_log("the app called hh_api_t member %u, which is not a function", m); break;
     }
     x[10] = r;

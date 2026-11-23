@@ -4,6 +4,7 @@
 #include "buttons.h"
 #include "ch32fun.h"
 #include "ch643_ledpwm.h"
+#include "font.h"
 #include "infrared.h"
 #include "layout.h"
 #include "persist.h"
@@ -87,6 +88,8 @@ static const hh_api_t s_api = {
     .set_name = api_set_name,
     .load = api_load,
     .save = api_save,
+    .draw_text = Text_Draw,
+    .text_width = Text_Width,
 };
 
 static bool in_image(uint32_t addr, uint32_t load_end) {

@@ -8,6 +8,7 @@
 #include "debug_output.h"
 #include "infrared.h"
 #include "app_host.h"
+#include "nametag.h"
 #include "pattern_player.h"
 #include "persist.h"
 #include "standby.h"
@@ -57,10 +58,10 @@ static void fill_halves(uint8_t top, uint8_t bottom) {
 #define APP_EXIT_MS 1000
 
 // Starts store item `index`: an animation plays, an app runs. Whatever ran
-// before stops; if the item cannot start, the badge stays in custom mode.
+// before stops; if the item cannot start, the badge shows the name tag.
 static void run_item(uint8_t index) {
     AppHost_Stop();
-    g_app_mode = APP_MODE_CUSTOM;
+    g_app_mode = APP_MODE_NAMETAG;
     const store_item_t* item = Store_Item(index);
     if (!item) return;
     g_running_item = index;
@@ -85,14 +86,10 @@ int main(void) {
     // the brightness from last time (B / D or an app set it); full the first time
     LEDMatrix_SetBrightness(Persist_Brightness() ? Persist_Brightness() : 255);
 
-    for (uint8_t row = 0; row < LED_MATRIX_ROWS; row++) {
-        for (uint8_t col = 0; col < LED_MATRIX_COLS; col++) {
-            LEDMatrix_SetPixel(row, col, 255);
-        }
-    }
-
     // Start the boot item from the store, unless a button is held: then
-    // the badge starts without it (in case it is an app that hangs)
+    // the badge starts without it (in case it is an app that hangs).
+    // Without a boot item, the name tag.
+    g_app_mode = APP_MODE_NAMETAG;
     if (buttons_raw()) {
         buttons_ignore_held();  // that press is not a command
     } else if (Store_BootItem() != STORE_NONE) {
@@ -105,6 +102,7 @@ int main(void) {
     bool states[4] = {0};
     uint32_t last_tick = funSysTick32();
     uint32_t chord_ms = 0;
+    uint8_t last_mode = 0;  // to start the name tag when it comes on
 
     while (1) {
         WebUSB_HandleCommand();
@@ -128,7 +126,7 @@ int main(void) {
             chord_ms = (held & APP_EXIT_CHORD) == APP_EXIT_CHORD ? chord_ms + elapsed_ms : 0;
             if (chord_ms >= APP_EXIT_MS || !AppHost_Tick(elapsed_ms, buttons, held)) {
                 AppHost_Stop();
-                g_app_mode = APP_MODE_CUSTOM;
+                g_app_mode = APP_MODE_NAMETAG;
                 buttons_ignore_held();
                 chord_ms = 0;
             }
@@ -176,6 +174,11 @@ int main(void) {
         if (g_app_mode == APP_MODE_FLASH_PATTERN) {
             PatternPlayer_Tick(elapsed_ms);
         }
+        if (g_app_mode == APP_MODE_NAMETAG) {
+            if (last_mode != APP_MODE_NAMETAG) Nametag_Start();
+            Nametag_Tick(elapsed_ms);
+        }
+        last_mode = g_app_mode;
 
         Delay_Ms(TICK_MS);
     }

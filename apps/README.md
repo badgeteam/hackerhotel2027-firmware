@@ -49,12 +49,19 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   - `grid[y][x]`: the centre grid, 17 × 16, with `HH_NONE` in the corners.
   - `edge[]`: the outline, clockwise from the top.
   - `rgb[]`: the RGB LEDs on the arms, by arm and rank.
+- **Text.** `draw_text(x, y, text, value)` writes text on the centre
+  grid, with its top left corner at column `x`, row `y`, in the
+  firmware's 5 × 7 font. `x` and `y` may be off the grid, which makes
+  scrolling easy. It returns the width; `text_width(text)` gives the same
+  without drawing. Each character takes 6 columns (`HH_FONT_ADVANCE`), and
+  lower case shows as upper case. The grid is 17 wide, so about 3
+  characters fit at a time. Snake uses it to show the score.
 - **Buttons.** `pressed()` gives the buttons that went down since the last
   tick, and `held()` gives the buttons that are down now. The bits are
   `HH_BTN_A`..`HH_BTN_D`, by the silkscreen letters.
 - **Leave the app.** Hold A and C for one second. The badge also leaves
   the app when the web interface sends a command (a frame, Stop, Run), or
-  when the app calls `exit()`.
+  when the app calls `exit()`. After an app, the badge shows the name tag.
 - **Saving.** `name()` gives the owner's name, which is set in the web
   interface or by an app with `set_name()`. An app can keep up to 28
   bytes with `save()` and `load()`, for example its high scores. The data
@@ -70,6 +77,10 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   not start the boot item.
 
 ## Limits
+
+- **API version.** An app built against `HH_API_VERSION` 2 (the text
+  calls) does not start on firmware with version 1; update the badge
+  first. `tools/badge.py list` prints the firmware's version ("app API").
 
 - **Size.** The image and its `.bss` together must fit in 12 KB of RAM
   (`HH_APP_RAM_SIZE`). The store holds 31 KB for all items together.

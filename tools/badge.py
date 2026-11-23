@@ -21,7 +21,7 @@ import usb.util
 VID, PID = 0x1209, 0xD643
 EP_OUT, EP_IN = 0x02, 0x81
 TYPES = {1: "animation", 2: "app"}
-MODES = {1: "custom", 2: "animation", 3: "app"}
+MODES = {1: "custom", 2: "animation", 3: "app", 4: "name tag"}
 ERRORS = {1: "bad command or index", 2: "the store is full", 3: "no such item", 4: "not a valid animation or app"}
 NONE = 0xFF
 

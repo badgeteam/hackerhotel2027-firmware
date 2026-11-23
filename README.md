@@ -92,6 +92,11 @@ you can:
 
 **Add to the badge & play on boot** stores the animation you made.
 
+With **Live send** on, the badge shows what you draw and the frames of
+**▶ Play**. If the badge cannot keep up with the fps, it skips frames.
+**Run**, **Stop** and an upload in the **On the badge** panel stop
+**▶ Play**. The badge then runs that item until you draw again.
+
 Only one program at a time can have the badge open. Click
 **Disconnect** before you use `tools/badge.py`.
 

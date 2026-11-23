@@ -3,7 +3,12 @@
 #include <string.h>
 #include "ch32fun.h"
 #include "ch643_ledpwm.h"
+#ifdef HH_EMU
+#include "emu_usb.h"  // tools/emu: the emulator stands in for the USB stack
+#else
 #include "fsusb.h"  // includes fsusb.c itself, so only include it in this file
+#endif
+#include "persist.h"
 #include "store.h"
 #include "apps/hhapp.h"
 
@@ -21,6 +26,8 @@
 #define CMD_ITEM_INFO 0x24
 #define CMD_ITEM_RUN 0x25
 #define CMD_STOP 0x26
+#define CMD_NAME_GET 0x30
+#define CMD_NAME_SET 0x31
 #define CMD_QUERY 0xFF
 
 #define FRAME_PIXELS (LED_MATRIX_ROWS * LED_MATRIX_COLS)
@@ -32,6 +39,7 @@ static uint8_t s_stage_frame[FRAME_PIXELS];
 static volatile bool s_reply_pending;
 static volatile uint8_t s_result;      // of the last command, for the reply
 static volatile uint8_t s_info_item;   // ITEM_INFO asked about this item
+static volatile bool s_name_reply;     // NAME_GET: the reply carries the name
 static volatile uint8_t s_run_request = STORE_NONE;
 
 static void commit(void) {
@@ -48,6 +56,7 @@ void WebUSBBulkDataOut(uint8_t* data, int len) {
     if (len < 1) return;
     s_result = STORE_OK;
     s_info_item = STORE_NONE;
+    s_name_reply = false;
 
     switch (data[0]) {
         case CMD_SET_PIXEL:
@@ -129,6 +138,15 @@ void WebUSBBulkDataOut(uint8_t* data, int len) {
             g_app_mode = APP_MODE_CUSTOM;
             break;
 
+        case CMD_NAME_GET:
+            s_name_reply = true;
+            break;
+
+        case CMD_NAME_SET:
+            Persist_SetName((const char*)&data[1], (unsigned)(len - 1));
+            s_name_reply = true;
+            break;
+
         case CMD_QUERY:
         default:
             break;
@@ -182,6 +200,10 @@ void WebUSB_Poll(void) {
         for (int i = 0; i < 4; i++) buffer[9 + i] = (uint8_t)(item->length >> (8 * i));
         memcpy(&buffer[13], item->name, STORE_NAME_LEN);
         len = 13 + STORE_NAME_LEN;
+    } else if (s_name_reply) {
+        memset(&buffer[8], 0, PERSIST_NAME_LEN);
+        memcpy(&buffer[8], Persist_Name(), strlen(Persist_Name()));
+        len = 8 + PERSIST_NAME_LEN;
     }
     USBFS_SendEndpoint(USB_EP_TX, len);
     s_reply_pending = false;

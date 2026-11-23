@@ -16,7 +16,11 @@ make                  # every apps/<name>/ into build/<name>.hhapp
 ../tools/badge.py add build/snake.hhapp
 ```
 
-You need the same `riscv64-elf-gcc` as the firmware. For `tools/badge.py`
+You need the same `riscv64-elf-gcc` as the firmware. Without a badge, try
+your app in the emulator: `python3 tools/emu/emu.py --web`, then add the
+`.hhapp` in the web interface. A fault (a bad pointer, a jump outside the
+app) or a `tick()` that does not return stops the app there, with a
+message in the terminal. For `tools/badge.py`
 you also need pyusb (`pip install pyusb`).
 
 ## Write one
@@ -51,13 +55,24 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 - **Leave the app.** Hold A and C for one second. The badge also leaves
   the app when the web interface sends a command (a frame, Stop, Run), or
   when the app calls `exit()`.
+- **Saving.** `name()` gives the owner's name, which is set in the web
+  interface or by an app with `set_name()`. An app can keep up to 28
+  bytes with `save()` and `load()`, for example its high scores. The data
+  stays when the badge powers off and when the store is erased. It is
+  kept by the app's name in the store, so the same app gets it back after
+  an upload. Save only when something changed: each save is a flash write.
+- **Brightness.** `set_brightness()` sets the global brightness, the same
+  one that B and D set outside an app. The badge keeps it when it is
+  powered off.
+- **Gamma.** LED values are brightness as a screen shows it. The firmware
+  applies gamma 2.2, so 128 looks half as bright.
 - **Safe start.** Hold any button while the badge powers on, and it does
   not start the boot item.
 
 ## Limits
 
 - **Size.** The image and its `.bss` together must fit in 12 KB of RAM
-  (`HH_APP_RAM_SIZE`). The store holds 31.75 KB for all items together.
+  (`HH_APP_RAM_SIZE`). The store holds 31 KB for all items together.
 - **No C library.** `sdk.c` supplies `memset` and `memcpy`. Do not use
   64-bit division: the toolchain's libgcc is 64-bit only.
 - **Stack.** The app runs on the firmware's stack, about 5 KB. Keep big

@@ -6,7 +6,8 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
   tools/badge.py add FILE [NAME]           store a .hhapp or .ledanim; it starts at once
   tools/badge.py run INDEX [--boot]        start an item (--boot: also at power-on)
   tools/badge.py stop                      stop the running animation or app
-  tools/badge.py erase                     erase every item
+  tools/badge.py erase                     erase every item (the name and app data stay)
+  tools/badge.py name [TEXT]               show or set the owner's name
 """
 import argparse
 import os
@@ -14,6 +15,7 @@ import struct
 import sys
 
 import usb.core
+import usb.util
 
 VID, PID = 0x1209, 0xD643
 EP_OUT, EP_IN = 0x02, 0x81
@@ -30,13 +32,21 @@ class Badge:
             sys.exit("no badge found (USB %04x:%04x)" % (VID, PID))
         if self.dev.is_kernel_driver_active(0):
             self.dev.detach_kernel_driver(0)
+        try:
+            usb.util.claim_interface(self.dev, 0)
+        except usb.core.USBError as e:
+            if e.errno == 16:
+                sys.exit("the badge is in use: close or disconnect the web interface first")
+            raise
 
     def send(self, *data, timeout=5000):
         self.dev.write(EP_OUT, bytes(data), timeout=timeout)
         r = bytes(self.dev.read(EP_IN, 64, timeout=timeout))
         status = dict(mode=r[0], brightness=r[1], result=r[2], count=r[3], running=r[4], boot=r[5],
                       free=r[6] * 256, api=r[7])
-        if len(r) >= 33 and r[2] == 0:
+        if len(r) == 40:
+            status["name"] = r[8:40].rstrip(b"\0").decode(errors="replace")
+        elif len(r) >= 33 and r[2] == 0:
             status["item"] = dict(type=r[8], length=struct.unpack("<I", r[9:13])[0],
                                   name=r[13:33].rstrip(b"\0").decode(errors="replace"))
         return status
@@ -50,7 +60,7 @@ class Badge:
 def type_of(path, data):
     if data[:4] == b"HHAP":
         return 2
-    if data[:4] == b"LA02":
+    if data[:4] in (b"LA03", b"LA02"):
         return 1
     sys.exit("%s: not a .hhapp or .ledanim" % path)
 
@@ -67,6 +77,8 @@ def main():
     r.add_argument("--boot", action="store_true")
     sub.add_parser("stop")
     sub.add_parser("erase")
+    n = sub.add_parser("name")
+    n.add_argument("text", nargs="?")
     args = p.parse_args()
 
     badge = Badge()
@@ -84,6 +96,9 @@ def main():
         badge.send(0x26)
     elif args.cmd == "erase":
         badge.send(0x20, timeout=10000)
+    elif args.cmd == "name":
+        s = badge.send(0x31, *args.text.encode()[:32]) if args.text is not None else badge.send(0x30)
+        print("name: %r" % s["name"])
 
     s = badge.send(0xFF)
     print("mode %s, %d items, %d bytes free, app API %d" % (MODES.get(s["mode"], s["mode"]), s["count"], s["free"], s["api"]))

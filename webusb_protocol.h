@@ -24,6 +24,11 @@
 //                                              the item that starts at power-on
 //   0x26 STOP                                  stop the running animation or app (custom mode)
 //
+//   Persistent settings (persist.h)
+//   0x30 NAME_GET                              the reply carries the owner's name
+//   0x31 NAME_SET       name...                set it (up to 32 bytes; written to flash
+//                                              from the main loop)
+//
 //   The protocol before the item store, still accepted: one animation only
 //   0x10 PATTERN_BEGIN                         erase every item, then ITEM_BEGIN an animation
 //   0x11 PATTERN_CHUNK  .ledanim bytes...      = ITEM_CHUNK
@@ -40,6 +45,7 @@
 //   [7] HH_API_VERSION, the app interface this firmware offers
 //   after ITEM_INFO, if [2] is 0:
 //   [8] type  [9..12] length (little-endian)  [13..32] name (NUL-padded)
+//   after NAME_GET: [8..39] the owner's name (NUL-padded) -- 40 bytes
 
 #define APP_MODE_CUSTOM 1         // showing whatever the host (or the firmware) last wrote
 #define APP_MODE_FLASH_PATTERN 2  // playing an animation from the store on repeat

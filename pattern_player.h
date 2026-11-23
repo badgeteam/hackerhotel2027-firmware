@@ -1,7 +1,7 @@
 #ifndef _PATTERN_PLAYER_H
 #define _PATTERN_PLAYER_H
 
-// Plays a .ledanim pattern stored in flash (see store.h) on
+// Plays a .ledanim pattern (LA03, or the older LA02) stored in flash (see store.h) on
 // repeat. A from-scratch C port of webui/compression.js's
 // decompressPattern(), decoding one frame at a time into the live
 // matrix instead of expanding the whole animation into a frame array
@@ -11,7 +11,7 @@
 
 // Starts playing the .ledanim at data (in flash) from frame 0. Call once
 // when switching into APP_MODE_FLASH_PATTERN. If data is not a .ledanim
-// ("LA02"), playback stays inactive and PatternPlayer_Tick() does nothing.
+// ("LA03" or "LA02"), playback stays inactive and PatternPlayer_Tick() does nothing.
 void PatternPlayer_Start( const uint8_t *data );
 
 // Call every main-loop tick with the elapsed time since the last call

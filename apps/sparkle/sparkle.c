@@ -43,9 +43,9 @@ static void tick(uint32_t elapsed_ms) {
         const hh_rgb_t* led = &hh->rgb[i];
         uint8_t r, g, b;
         hsv((uint8_t)(hue_t / 8 + led->arm * 51 + led->rank * 12), &r, &g, &b);
-        hh->set(led->r, r / 3);
-        hh->set(led->g, g / 3);
-        hh->set(led->b, b / 3);
+        hh->set(led->r, r * 2 / 3);
+        hh->set(led->g, g * 2 / 3);
+        hh->set(led->b, b * 2 / 3);
     }
 }
 

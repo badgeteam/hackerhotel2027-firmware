@@ -40,6 +40,10 @@
 #define HH_EDGE_COUNT 71  // the outline, clockwise from the top
 #define HH_RGB_COUNT 35   // 7 RGB LEDs on each of the 5 arms
 
+// Persistent data (survives power-off)
+#define HH_NAME_MAX 32      // the owner's name, characters
+#define HH_APP_DATA_MAX 28  // what one app can save, bytes
+
 // Buttons, by their silkscreen letter
 #define HH_BTN_A (1u << 0)  // SW1, PB20
 #define HH_BTN_C (1u << 1)  // SW3, PC4
@@ -64,11 +68,14 @@ typedef struct {
     uint16_t version;  // HH_API_VERSION of the firmware
     uint16_t size;     // sizeof(hh_api_t) in the firmware
 
-    // LEDs, 0 = off .. 255 = full (before the global brightness)
+    // LEDs, 0 = off .. 255 = full, as a screen shows brightness: the
+    // firmware applies gamma 2.2 (and then the global brightness), so 128
+    // looks half as bright, not nearly full
+
     void (*set)(uint16_t slot, uint8_t value);  // ignores HH_NONE and slots out of range
     uint8_t (*get)(uint16_t slot);
     void (*clear)(void);
-    void (*set_brightness)(uint8_t brightness);  // the global brightness, 255 = unscaled
+    void (*set_brightness)(uint8_t brightness);  // the global brightness, 255 = unscaled; kept over power-off
     uint8_t (*brightness)(void);
     const uint16_t (*grid)[HH_GRID_W];  // grid[y][x], y = 0 at the top
     const uint16_t *edge;
@@ -91,9 +98,18 @@ typedef struct {
     void (*standby)(void);  // sleep until a button wakes the badge; returns after
     void (*exit)(void);     // leave the app once this tick returns
     void (*print)(const char *text);  // debug output over SWIO (minichlink -T)
+
+    // Persistent data. It lives in flash, so save only when something
+    // changed (a new high score, not every tick): the firmware writes it
+    // after the tick, and each write wears the flash a little.
+    const char *(*name)(void);  // the owner's name, NUL-terminated; "" if not set
+    void (*set_name)(const char *name);
+    bool (*load)(void *data, unsigned len);        // false if this app saved nothing yet
+    bool (*save)(const void *data, unsigned len);  // len <= HH_APP_DATA_MAX; false if no room
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.
+#ifndef HH_EMU
 typedef struct {
     uint32_t magic;  // HH_APP_MAGIC
     uint16_t api;    // the HH_API_VERSION the app was built against
@@ -103,6 +119,19 @@ typedef struct {
     void (*init)(const hh_api_t *api);
     void (*tick)(uint32_t elapsed_ms);
 } hh_app_header_t;
+#else
+// The emulator (tools/emu) reads the same 32-bit image on a 64-bit PC:
+// the pointers are 32-bit numbers there.
+typedef struct {
+    uint32_t magic;
+    uint16_t api;
+    uint16_t flags;
+    uint32_t load_end;
+    uint32_t bss_end;
+    uint32_t init;
+    uint32_t tick;
+} hh_app_header_t;
+#endif
 
 // Declares the app: HH_APP(my_init, my_tick); once, in one of its files.
 #define HH_APP(init_fn, tick_fn)                                                     \

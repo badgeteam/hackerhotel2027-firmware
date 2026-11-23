@@ -22,6 +22,8 @@ const CMD = {
 	ITEM_INFO: 0x24,
 	ITEM_RUN: 0x25,
 	STOP: 0x26,
+	NAME_GET: 0x30,
+	NAME_SET: 0x31,
 	QUERY: 0xff,
 };
 
@@ -51,6 +53,26 @@ class LedMatrixDevice extends EventTarget {
 
 	get connected() {
 		return !!this.device;
+	}
+
+	get emulator() {
+		return !!this.device?.emulator;
+	}
+
+	// The emulator (tools/emu/emu.py --web) serves this page and takes the
+	// packets on POST /usb instead of over WebUSB. True if it is there.
+	static async emulatorPresent() {
+		try {
+			return (await fetch('emu', { cache: 'no-store' })).ok;
+		} catch (e) {
+			return false;
+		}
+	}
+
+	async connectEmulator() {
+		if (!(await LedMatrixDevice.emulatorPresent())) throw new Error('no emulator serves this page');
+		this.device = { emulator: true };
+		this.dispatchEvent(new CustomEvent('connect'));
 	}
 
 	async requestAndOpen() {
@@ -91,6 +113,11 @@ class LedMatrixDevice extends EventTarget {
 
 	async disconnect() {
 		if (!this.device) return;
+		if (this.emulator) {
+			this.device = null;
+			this.dispatchEvent(new CustomEvent('disconnect'));
+			return;
+		}
 		try {
 			await this.device.close();
 		} catch (e) {
@@ -113,10 +140,16 @@ class LedMatrixDevice extends EventTarget {
 
 	async _sendNow(bytes) {
 		if (!this.device) return null;
-		await this.device.transferOut(EP_OUT, new Uint8Array(bytes));
-		const result = await this.device.transferIn(EP_IN, 64);
-		if (result.data && result.data.byteLength >= 2) {
-			const d = result.data;
+		let d;
+		if (this.emulator) {
+			const r = await fetch('usb', { method: 'POST', body: new Uint8Array(bytes) });
+			if (!r.ok) throw new Error(`emulator: ${r.status} ${r.statusText}`);
+			d = new DataView(await r.arrayBuffer());
+		} else {
+			await this.device.transferOut(EP_OUT, new Uint8Array(bytes));
+			d = (await this.device.transferIn(EP_IN, 64)).data;
+		}
+		if (d && d.byteLength >= 2) {
 			const status = { mode: d.getUint8(0), brightness: d.getUint8(1) };
 			if (d.byteLength >= 8) {
 				Object.assign(status, {
@@ -128,7 +161,11 @@ class LedMatrixDevice extends EventTarget {
 					api: d.getUint8(7),
 				});
 			}
-			if (d.byteLength >= 33 && status.result === 0) {
+			if (d.byteLength === 40) {
+				const name = new Uint8Array(d.buffer, d.byteOffset + 8, 32);
+				const end = name.indexOf(0);
+				status.name = new TextDecoder().decode(end < 0 ? name : name.subarray(0, end));
+			} else if (d.byteLength >= 33 && status.result === 0) {
 				const name = new Uint8Array(d.buffer, d.byteOffset + 13, 20);
 				const end = name.indexOf(0);
 				status.item = {
@@ -221,5 +258,15 @@ class LedMatrixDevice extends EventTarget {
 
 	eraseStore() {
 		return this._send([CMD.STORE_ERASE]);
+	}
+
+	// The owner's name, kept on the badge for apps (persist.h)
+	async getName() {
+		return (await this._checked([CMD.NAME_GET], 'Reading the name')).name ?? '';
+	}
+
+	async setName(name) {
+		const bytes = new TextEncoder().encode(name).subarray(0, 32);
+		return (await this._checked([CMD.NAME_SET, ...bytes], 'Saving the name')).name ?? '';
 	}
 }

@@ -1,5 +1,6 @@
 // Snake on the centre grid. C turns left, D turns right; eat the blinking
-// dot. The outline counts the score. After a crash, A or B starts again.
+// dot. The outline counts the score, dimly up to the best score so far
+// (kept on the badge). After a crash, A or B starts again.
 #include "hhapp.h"
 
 #define W HH_GRID_W
@@ -14,6 +15,7 @@ static int8_t turn;  // -1 left, 1 right, 0 straight: at the next step
 static uint8_t food_x, food_y;
 static uint32_t step_ms, wait_ms;
 static uint16_t score;
+static uint16_t best;  // saved with hh->save()
 static bool crashed;
 
 static bool on_grid(int x, int y) { return x >= 0 && x < W && y >= 0 && y < H && hh->grid[y][x] != HH_NONE; }
@@ -66,6 +68,10 @@ static void step(void) {
     // the tail moves on in the same step, unless the snake grows
     if (!on_grid(x, y) || on_snake(x, y, eats ? 0 : 1)) {
         crashed = true;
+        if (score > best) {
+            best = score;
+            hh->save(&best, sizeof best);
+        }
         return;
     }
     head = (uint16_t)((head + 1) % MAX_LEN);
@@ -84,10 +90,10 @@ static void draw(void) {
     hh->clear();
     for (uint16_t i = 0; i < len; i++) {
         uint16_t k = (uint16_t)((head + MAX_LEN - i) % MAX_LEN);
-        hh->set(hh->grid[body_y[k]][body_x[k]], i == 0 ? 255 : 70);
+        hh->set(hh->grid[body_y[k]][body_x[k]], i == 0 ? 255 : 150);
     }
     if (!crashed && (t / 150) % 2) hh->set(hh->grid[food_y][food_x], 255);
-    for (uint16_t i = 0; i < score && i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], 60);
+    for (uint16_t i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < score ? 140 : i < best ? 50 : 0);
     // the arms: green while playing, a red pulse after a crash
     uint8_t pulse = (uint8_t)((t / 4) % 256 < 128 ? (t / 4) % 128 * 2 : 255 - (t / 4) % 128 * 2);
     for (int i = 0; i < HH_RGB_COUNT; i++) {
@@ -95,13 +101,14 @@ static void draw(void) {
         if (crashed) {
             hh->set(led->r, pulse);
         } else if (led->rank == 6) {
-            hh->set(led->g, 80);
+            hh->set(led->g, 140);
         }
     }
 }
 
 static void init(const hh_api_t* api) {
     hh = api;
+    if (!hh->load(&best, sizeof best)) best = 0;
     start();
 }
 

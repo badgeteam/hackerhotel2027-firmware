@@ -9,6 +9,7 @@
 #include "infrared.h"
 #include "app_host.h"
 #include "pattern_player.h"
+#include "persist.h"
 #include "standby.h"
 #include "store.h"
 #include "webusb_protocol.h"
@@ -29,6 +30,19 @@ int _write(int fd, const char* buf, int size) {
 
 static const uint8_t s_brightness_levels[] = {8, 16, 32, 64, 128, 255};
 #define BRIGHTNESS_LEVEL_COUNT (sizeof(s_brightness_levels) / sizeof(s_brightness_levels[0]))
+
+// The next brightness level up (dir 1) or down (dir -1) from the current
+// brightness, which an app may have set to anything in between
+static void step_brightness(int dir) {
+    uint8_t now = LEDMatrix_GetBrightness();
+    for (unsigned k = 0; k < BRIGHTNESS_LEVEL_COUNT; k++) {
+        unsigned i = dir > 0 ? k : BRIGHTNESS_LEVEL_COUNT - 1 - k;
+        if (dir > 0 ? s_brightness_levels[i] > now : s_brightness_levels[i] < now) {
+            LEDMatrix_SetBrightness(s_brightness_levels[i]);
+            return;
+        }
+    }
+}
 
 static void fill_halves(uint8_t top, uint8_t bottom) {
     for (uint8_t row = 0; row < LED_MATRIX_ROWS; row++) {
@@ -53,7 +67,7 @@ static void run_item(uint8_t index) {
     if (item->type == STORE_TYPE_ANIMATION) {
         PatternPlayer_Start(Store_Payload(item));
         g_app_mode = APP_MODE_FLASH_PATTERN;
-    } else if (item->type == STORE_TYPE_APP && AppHost_Start(Store_Payload(item), item->length)) {
+    } else if (item->type == STORE_TYPE_APP && AppHost_Start(Store_Payload(item), item->length, item->name)) {
         g_app_mode = APP_MODE_APP;
     }
 }
@@ -67,8 +81,9 @@ int main(void) {
     WebUSB_Init();
     infrared_init();
 
-    uint8_t brightness_level = BRIGHTNESS_LEVEL_COUNT - 1;
-    LEDMatrix_SetBrightness(s_brightness_levels[brightness_level]);
+    Persist_Init();
+    // the brightness from last time (B / D or an app set it); full the first time
+    LEDMatrix_SetBrightness(Persist_Brightness() ? Persist_Brightness() : 255);
 
     for (uint8_t row = 0; row < LED_MATRIX_ROWS; row++) {
         for (uint8_t col = 0; col < LED_MATRIX_COLS; col++) {
@@ -100,6 +115,10 @@ int main(void) {
 
         uint32_t elapsed_ms = (funSysTick32() - last_tick) / DELAY_MS_TIME;
         last_tick += elapsed_ms * DELAY_MS_TIME;
+
+        // keep what the host, the app or the buttons changed
+        Persist_SetBrightness(LEDMatrix_GetBrightness());
+        Persist_Flush(elapsed_ms);
 
         uint8_t buttons = buttons_poll();
         if (g_app_mode == APP_MODE_APP) {
@@ -133,13 +152,11 @@ int main(void) {
 
         if (states[2]) {
             states[2] = false;
-            if (brightness_level < BRIGHTNESS_LEVEL_COUNT - 1) brightness_level++;
-            LEDMatrix_SetBrightness(s_brightness_levels[brightness_level]);
+            step_brightness(1);
         }
         if (states[3]) {
             states[3] = false;
-            if (brightness_level > 0) brightness_level--;
-            LEDMatrix_SetBrightness(s_brightness_levels[brightness_level]);
+            step_brightness(-1);
         }
 
         infrared_nec_message_t message;

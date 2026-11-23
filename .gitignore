@@ -8,3 +8,5 @@
 *.map
 apps/build/
 tools/emu/build/
+webui/firmware/
+webui/version.json

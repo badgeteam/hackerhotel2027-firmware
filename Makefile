@@ -17,6 +17,11 @@ STORE_MEMORY_LINES:=FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 30K\n  STORE (r) 
 RAM_MEMORY_LINE:=RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 20K
 FIRMWARE_RAM_LINE:=RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 8K
 
+# The firmware's identity (FW_INFO, webusb_protocol.c): the git commit, and
+# -dirty if the firmware's own sources differ from it
+FW_VERSION:=$(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet HEAD -- ':(glob)*.c' ':(glob)*.h' ':(glob)apps/hhapp.h' Makefile 2>/dev/null || echo -dirty)
+EXTRA_CFLAGS+=-DFW_VERSION=\"$(FW_VERSION)\"
+
 include ch32fun/ch32fun/ch32fun.mk
 
 $(LINKER_SCRIPT) : $(CH32FUN)/ch32fun.ld Makefile
@@ -25,6 +30,14 @@ $(LINKER_SCRIPT) : $(CH32FUN)/ch32fun.ld Makefile
 	grep -qF '$(RAM_MEMORY_LINE)' $@.tmp || { echo "$<: RAM memory line changed, update the Makefile" >&2; rm -f $@.tmp; exit 1; }
 	sed -e 's/$(FLASH_MEMORY_LINE)/$(STORE_MEMORY_LINES)/' -e 's/$(RAM_MEMORY_LINE)/$(FIRMWARE_RAM_LINE)/' $@.tmp > $@
 	rm -f $@.tmp
+
+# The web interface's firmware (webui/firmware/, not in git): what its
+# Firmware panel flashes when it is served from this checkout
+webui-firmware : $(TARGET).bin
+	mkdir -p webui/firmware
+	cp $(TARGET).bin webui/firmware/ledmatrix.bin
+	# the version as built into the image (its FW_INFO marker), not as of now
+	printf '{"commit": "%s", "date": "%s", "bytes": %s}\n' "$$(grep -ao 'HH27-STARFISH-FW S[0-9]* [^[:cntrl:]]*' $(TARGET).bin | cut -d' ' -f3)" "$$(git log -1 --format=%cs HEAD)" "$$(stat -c %s $(TARGET).bin)" > webui/firmware/firmware.json
 
 flash : cv_flash
 clean : cv_clean

@@ -297,6 +297,44 @@
 			<div class="side-column">
 
 				<fieldset>
+					<legend>Firmware</legend>
+					<p class="hint" id="fw-badge">Badge: connect it to see its firmware.</p>
+					<p class="hint" id="fw-site"></p>
+					<div class="button-row">
+						<button id="fw-update-btn">Update firmware</button>
+						<label class="file-button">
+							Pick a .bin
+							<input type="file" id="fw-file-input" accept=".bin">
+						</label>
+					</div>
+					<p class="hint" id="fw-confirm" hidden>
+						<span></span>
+						<span class="button-row">
+							<button id="fw-go-btn">Flash now</button>
+							<button id="fw-cancel-btn">Cancel</button>
+						</span>
+					</p>
+					<progress id="fw-progress" max="100" value="0" hidden></progress>
+					<p class="hint" id="fw-status"></p>
+					<details class="hint">
+						<summary>Help</summary>
+						<p>The page sends the badge into its USB boot ROM and asks you to pick it
+							("Unknown device from QinHeng Electronics"). Without a connected badge:
+							press C on the badge (leave an app first with A + C). Your items, name
+							and settings stay.</p>
+						<p><strong>Linux:</strong> the udev rule from the README, for 1a86:55e0 too.
+							<strong>Windows:</strong> once, install the WinUSB driver for the boot ROM
+							with <a href="https://zadig.akeo.ie/">Zadig</a>: Device &gt; Create New
+							Device, USB ID 1A86 55E0, driver WinUSB, Install Driver. Without it the
+							boot ROM never shows up in the list. <strong>Firefox and Safari</strong>
+							have no WebUSB: use Chrome, Edge or Opera, or flash with
+							<code>minichlink -w ledmatrix.bin flash -b</code>.</p>
+						<p>If an update stops half way, the badge starts in its boot ROM: update
+							again. If it no longer starts at all, unplug it (and its battery) and
+							plug it in again, or bring it to the badge recovery area at the event.</p>
+					</details>
+				</fieldset>
+				<fieldset>
 					<legend>On the badge</legend>
 					<label>
 						Your name
@@ -384,6 +422,8 @@
 	<script src="video_import.js"></script>
 	<script src="text_import.js"></script>
 	<script src="app.js"></script>
+	<script src="wchisp.js"></script>
+	<script src="firmware_update.js"></script>
 </body>
 
 </html>

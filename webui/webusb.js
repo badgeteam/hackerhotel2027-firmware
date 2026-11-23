@@ -33,6 +33,11 @@ const ITEM_TYPE = { ANIMATION: 1, APP: 2 };
 const ITEM_TYPE_NAMES = { 1: 'Animation', 2: 'App' };
 const NO_ITEM = 0xff;
 
+// The firmware's app API version (HH_API_VERSION in apps/hhapp.h) that this
+// web interface was made with. A badge with an older one lacks commands or
+// modes the page uses: the page asks for a firmware update.
+const FIRMWARE_API = 2;
+
 // The status reply's result byte (STORE_ERR_* in store.h)
 const STORE_ERRORS = {
 	1: 'bad command or index',
@@ -63,6 +68,8 @@ class LedMatrixDevice extends EventTarget {
 	// The emulator (tools/emu/emu.py --web) serves this page and takes the
 	// packets on POST /usb instead of over WebUSB. True if it is there.
 	static async emulatorPresent() {
+		// the emulator serves the page on this PC; a public site has none
+		if (!['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) return false;
 		try {
 			return (await fetch('emu', { cache: 'no-store' })).ok;
 		} catch (e) {

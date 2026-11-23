@@ -107,6 +107,7 @@ int main(void) {
     uint32_t chord_ms = 0;
 
     while (1) {
+        WebUSB_HandleCommand();
         uint8_t run = WebUSB_TakeRunRequest();
         if (run != STORE_NONE) run_item(run);
         // a command from the host (custom mode, STOP, erase) ends the app

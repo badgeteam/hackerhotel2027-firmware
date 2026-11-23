@@ -60,7 +60,12 @@ void WebUSB_Init(void);
 // WebUSB_Init() brings it back.
 void WebUSB_Deinit(void);
 
-// Call once per main loop tick: sends the pending reply.
+// Call once per main loop tick: runs the command the host sent, if any.
+// The USB interrupt only takes the command in; flash work happens here.
+void WebUSB_HandleCommand(void);
+
+// Call once per main loop tick, after WebUSB_HandleCommand() and after
+// starting a requested item: sends the reply, once the endpoint is free.
 void WebUSB_Poll(void);
 
 // The item the host asked to start (ITEM_COMMIT, ITEM_RUN), once;

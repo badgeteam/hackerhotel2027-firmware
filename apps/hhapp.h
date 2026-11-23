@@ -10,9 +10,10 @@
 // its main loop, about every 5 ms. tick() must return quickly: USB,
 // standby and leaving the app all happen between two ticks.
 //
-// The app gets all four buttons. To leave an app on the badge itself,
-// hold A and C together for a second; the web interface can also stop
-// it. Hold any button while the badge powers on, and it does not start
+// The app gets all four buttons. Holding A for a second opens the
+// badge's menu: the app gets no ticks while it is open, and goes on when
+// the menu closes, or stops when another entry is chosen. The web
+// interface can also stop it. Hold any button while the badge powers on, and it does not start
 // the boot item, so an app that hangs cannot lock the badge up.
 //
 // The app runs on the firmware's stack (about 5 KB): keep big arrays

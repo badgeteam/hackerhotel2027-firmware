@@ -20,3 +20,8 @@ int Text_Width(const char* text);
 // printable ASCII (UTF-8 bytes, for one) show as a blank.
 // Returns Text_Width(text).
 int Text_Draw(int x, int y, const char* text, uint8_t value);
+
+// A label at row y: centred if it fits the grid, else scrolling to the
+// left, t_ms after it was first shown, with a copy following every width +
+// 8 columns
+void Text_DrawLabel(const char* text, int y, uint32_t t_ms, uint8_t value);

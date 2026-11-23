@@ -20,7 +20,8 @@ typedef struct {
     uint32_t crc;    // CRC-32 of everything after this field
     uint8_t boot_item;
     uint8_t brightness;  // 0: never saved (records before it had 0 here)
-    uint8_t reserved[2];
+    uint8_t keys;  // MENU_KEYS_* (menu.h); 0 in records from before it
+    uint8_t reserved[1];
     char name[PERSIST_NAME_LEN];  // NUL-padded
     uint8_t reserved2[16];
     app_slot_t apps[PERSIST_APP_SLOTS];
@@ -94,6 +95,14 @@ uint8_t Persist_Brightness(void) { return s_rec.brightness; }
 void Persist_SetBrightness(uint8_t brightness) {
     if (s_rec.brightness == brightness) return;
     s_rec.brightness = brightness;
+    changed();
+}
+
+uint8_t Persist_Keys(void) { return s_rec.keys; }
+
+void Persist_SetKeys(uint8_t keys) {
+    if (s_rec.keys == keys) return;
+    s_rec.keys = keys;
     changed();
 }
 

@@ -128,3 +128,17 @@ int Text_Draw(int x, int y, const char* text, uint8_t value) {
     }
     return Text_Width(text);
 }
+
+#define SCROLL_CPS 10  // columns per second
+
+void Text_DrawLabel(const char* text, int y, uint32_t t_ms, uint8_t value) {
+    int w = Text_Width(text);
+    if (w <= HH_GRID_W) {
+        Text_Draw((HH_GRID_W - w) / 2, y, text, value);
+        return;
+    }
+    int period = w + 8;
+    int x = -(int)(t_ms * SCROLL_CPS / 1000 % (uint32_t)period);
+    Text_Draw(x, y, text, value);
+    Text_Draw(x + period, y, text, value);
+}

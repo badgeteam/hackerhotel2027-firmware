@@ -23,10 +23,10 @@ earn its place. This is how the space is split, and what uses it now:
 
 | Memory | Size | Use | In use now |
 |---|---|---|---|
-| Flash | 30 KB | firmware | 15.7 KB |
+| Flash | 30 KB | firmware | 18.1 KB |
 | Flash | 31 KB | item store: animations and apps | what you store |
 | Flash | 1 KB | persistent record: name, brightness, boot item, app data | 2 × 512 B |
-| RAM | 8 KB | firmware data and stack | 3.4 KB data, the rest is stack |
+| RAM | 8 KB | firmware data and stack | 3.8 KB data, the rest is stack |
 | RAM | 12 KB | the app that runs (its code and data) | snake: 1.4 KB code + 0.6 KB data |
 
 How we juggle space and usability:
@@ -36,7 +36,7 @@ How we juggle space and usability:
   - the LED driver, USB, infrared, the buttons and standby;
   - the item store and the persistent record;
   - the animation player and the app host;
-  - the font and the name tag.
+  - the font, the name tag and the menu.
 
   Everything else is an item in the store. You only pay space for what
   you put on your badge.
@@ -65,18 +65,54 @@ How we juggle space and usability:
 
 ## Buttons
 
-The letters are the ones on the silkscreen.
+The letters are the ones on the silkscreen: A top left, B top right,
+C bottom left, D bottom right.
 
-| Button | When no app runs |
+| Button | |
 |---|---|
-| **A** | standby: the badge sleeps until you press a button |
-| **B** | brighter |
-| **C** | reboot into the USB boot ROM, to flash new firmware |
-| **D** | dimmer |
+| **Hold A** | the menu, also from an app (hold it for a second there) |
+| **B** / **D** | brighter / dimmer (when no app runs) |
 
-- **Apps.** While an app runs, the app gets all four buttons. To leave
-  the app, hold **A + C** for a second; the badge then shows the name
-  tag.
+**The menu** lists the name tag, every stored animation and app, and the
+badge's settings. The name of the entry shows on the grid, the outline
+shows where you are in the list, and the arms show the group: orange the
+name tag, purple animations, green apps, white settings.
+
+| In the menu | |
+|---|---|
+| **C** / **D** | previous / next entry |
+| **Tap A** | start it (or change the setting) |
+| **Hold A** | close the menu, and go on with what ran before |
+| no button for 20 s | the menu closes |
+
+The settings in the menu:
+
+- **EDIT NAME:** type your name on the badge.
+  - C / D: previous / next character (hold to keep going).
+  - Tap A: next position. One blank after the end, it goes back to the
+    first character.
+  - B: previous position.
+  - Hold A: save, and show the name tag.
+
+  The characters come in this order: blank, A–Z, a–z, 0–9, then signs.
+  To make the name shorter, set the characters at the end to blank. After
+  a minute without a button, the editor closes without saving.
+- **BRIGHTNESS:** each tap is one level brighter, then back to the
+  dimmest.
+- **BUTTONS:** which pair steps through the menu. `C D` is the bottom pair,
+  side by side (the default). `B D` is the right pair, one above the
+  other: then B is previous, and in the editor C is the previous
+  position.
+- **SLEEP:** standby until you press a button. USB disconnects while the
+  badge sleeps.
+- **UPDATE:** reboot into the USB boot ROM, to flash new firmware.
+
+Further:
+
+- **Apps.** While an app runs, the app gets all four buttons. Holding A
+  for a second opens the menu, and the app waits. The app also gets that
+  press of A. Close the menu (hold A) and the app goes on; choose another
+  entry and the app stops.
 - **Safe start.** Hold any button while the badge powers on. The badge
   then does not start the boot item, so an app that hangs cannot lock up
   the badge.
@@ -107,7 +143,7 @@ waits about 5 s for a host. Do the steps in this order:
    ch32fun/minichlink/minichlink -w ledmatrix.bin flash -b
    ```
 
-2. Press **C** on the badge. If an app runs, leave it first with A + C.
+2. On the badge, open the menu (hold **A**) and choose **UPDATE**.
 
 Flashing the firmware does not erase the stored items, the name or the
 other settings: minichlink writes only the firmware's own pages.

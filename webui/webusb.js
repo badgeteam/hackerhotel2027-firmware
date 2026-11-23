@@ -184,17 +184,14 @@ class LedMatrixDevice extends EventTarget {
 		return this._send([CMD.SET_PIXEL, row, col, brightness]);
 	}
 
-	// frame: Uint8Array(352), row-major (index = row*16+col).
-	async uploadFrame(frame) {
+	// frame: Uint8Array(384), row-major (index = row * 24 + col).
+	// All packets go into the queue at once, so no other command (a Run, a
+	// Stop) can come between the chunks and the commit.
+	uploadFrame(frame) {
 		const CHUNK = 58;
 		for (let offset = 0; offset < frame.length; offset += CHUNK) {
 			const slice = frame.subarray(offset, Math.min(offset + CHUNK, frame.length));
-			await this._send([
-				CMD.FRAME_CHUNK,
-				offset & 0xff,
-				(offset >> 8) & 0xff,
-				...slice,
-			]);
+			this._send([CMD.FRAME_CHUNK, offset & 0xff, (offset >> 8) & 0xff, ...slice]);
 		}
 		return this._send([CMD.FRAME_COMMIT]);
 	}

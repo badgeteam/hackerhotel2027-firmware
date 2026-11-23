@@ -67,9 +67,7 @@ board.onPaintAt = (xmm, ymm) => {
 function paintPixel(row, col, level) {
 	board.setPixel(row, col, level);
 	currentFrame()[row * MATRIX_COLS + col] = level;
-	if (liveSendInput.checked && device.connected) {
-		device.setPixel(row, col, level);
-	}
+	liveSendCell(row * MATRIX_COLS + col);
 }
 
 // --- RGB LED selection/editing ---------------------------------------------------
@@ -100,12 +98,75 @@ function setRgbChannels(led, r, g, b) {
 	frame[led.row * MATRIX_COLS + led.col] = r;
 	frame[led.green_row * MATRIX_COLS + led.col] = g;
 	frame[led.blue_row * MATRIX_COLS + led.col] = b;
-	if (liveSendInput.checked && device.connected) {
-		device.setPixel(led.row, led.col, r);
-		device.setPixel(led.green_row, led.col, g);
-		device.setPixel(led.blue_row, led.col, b);
+	liveSendCell(led.row * MATRIX_COLS + led.col);
+	liveSendCell(led.green_row * MATRIX_COLS + led.col);
+	liveSendCell(led.blue_row * MATRIX_COLS + led.col);
+}
+
+// --- Live send: the badge shows the editor ---------------------------------------------------
+// Painting and the player both go through liveFlush(). Only one send is
+// on its way at a time. Changes made while it is on its way go into the
+// next send, so a fast brush or a high fps never builds up a queue of old
+// packets in front of Run or Stop.
+
+const LIVE_PIXEL_LIMIT = 8; // more changed LEDs than this: send the whole frame
+const liveDirty = new Set(); // matrix cells changed since the last send
+let liveWholeFrame = false; // send the whole frame next
+let liveStale = true; // the badge does not show the editor's frame
+let liveSending = false;
+let badgeMode = null; // APP_MODE_* from the badge's last reply
+
+function liveSendOn() {
+	return liveSendInput.checked && device.connected;
+}
+
+function liveSendCell(index) {
+	if (!liveSendOn()) return;
+	liveDirty.add(index);
+	liveFlush();
+}
+
+function liveSendFrame() {
+	if (!liveSendOn()) return;
+	liveWholeFrame = true;
+	liveFlush();
+}
+
+// Forget what is waiting: the badge gets something else to show
+function liveCancel() {
+	liveDirty.clear();
+	liveWholeFrame = false;
+	liveStale = true;
+}
+
+async function liveFlush() {
+	if (liveSending) return;
+	liveSending = true;
+	try {
+		while (liveWholeFrame || liveDirty.size) {
+			const frame = currentFrame();
+			// If the badge shows another frame or runs an item, single
+			// LEDs would mix the editor into it: send the whole frame
+			const badgeElsewhere = badgeMode !== MODE_CUSTOM;
+			if (liveWholeFrame || liveStale || badgeElsewhere || liveDirty.size > LIVE_PIXEL_LIMIT) {
+				liveWholeFrame = false;
+				liveDirty.clear();
+				liveStale = false;
+				await device.uploadFrame(Uint8Array.from(frame));
+			} else {
+				const cells = [...liveDirty];
+				liveDirty.clear();
+				// queued together, like the packets of a frame
+				await Promise.all(cells.map((i) => device.setPixel(Math.floor(i / MATRIX_COLS), i % MATRIX_COLS, frame[i])));
+			}
+		}
+	} finally {
+		liveSending = false;
 	}
 }
+
+device.addEventListener('connect', liveCancel);
+liveSendInput.addEventListener('change', liveCancel);
 
 board.onSelectRgb = (led) => {
 	selectedRgbLed = led;
@@ -168,9 +229,11 @@ device.addEventListener('connect', refreshConnButtons);
 device.addEventListener('disconnect', refreshConnButtons);
 // Must match APP_MODE_* in the firmware's webusb_protocol.h
 const DEVICE_MODE_NAMES = { 1: 'Custom frame', 2: 'Stored pattern', 3: 'App' };
+const MODE_CUSTOM = 1;
 
 device.addEventListener('status', (ev) => {
 	const { mode, brightness } = ev.detail;
+	badgeMode = mode;
 	const name = DEVICE_MODE_NAMES[mode] ?? `Mode ${mode}`;
 	deviceModeEl.textContent = `${name}, brightness ${brightness}`;
 	storeStatusChanged(ev.detail);
@@ -193,7 +256,10 @@ refreshConnButtons();
 document.getElementById('clear-btn').addEventListener('click', () => {
 	board.clear();
 	currentFrame().fill(0);
+	stopPlayback();
+	liveCancel();
 	if (device.connected) device.clear();
+	liveStale = false;
 });
 
 document.getElementById('send-frame-btn').addEventListener('click', () => {
@@ -201,7 +267,9 @@ document.getElementById('send-frame-btn').addEventListener('click', () => {
 		alert('Connect to a device first.');
 		return;
 	}
-	device.uploadFrame(Uint8Array.from(currentFrame()));
+	stopPlayback();
+	liveSendFrame();
+	if (!liveSendOn()) device.uploadFrame(Uint8Array.from(currentFrame()));
 });
 
 // --- Create animation tabs ---------------------------------------------------
@@ -518,6 +586,7 @@ function markFrameDirty() {
 
 function loadFrameIntoBoard() {
 	board.setFrame(currentFrame());
+	liveStale = true; // the next paint sends the whole frame
 }
 
 function setActivePattern(pattern) {
@@ -659,19 +728,14 @@ function stopPlayback() {
 
 function startPlayback() {
 	if (activePattern.frames.length < 2) return;
-	const sendToDevice = device.connected;
 	playBtn.textContent = '■ Stop';
-	playTimer = setInterval(async () => {
+	// With Live send on, the badge follows. If the badge is slower than the
+	// fps, it skips frames: liveFlush() sends only the newest one.
+	playTimer = setInterval(() => {
 		activeFrameIndex = (activeFrameIndex + 1) % activePattern.frames.length;
 		loadFrameIntoBoard();
 		renderFrameStrip();
-		if (sendToDevice) {
-			try {
-				await device.uploadFrame(Uint8Array.from(currentFrame()));
-			} catch (e) {
-				/* webusb.js already logs this */
-			}
-		}
+		liveSendFrame();
 	}, 1000 / activePattern.fps);
 }
 
@@ -770,6 +834,7 @@ document.getElementById('upload-pattern-btn').addEventListener('click', async ()
 		);
 		return;
 	}
+	handOverBadge();
 	uploadPatternStatusEl.textContent = `Uploading ${formatBytes(bytes.length)}...`;
 	try {
 		await device.uploadPattern(bytes, activePattern.name.toUpperCase() || 'PATTERN');
@@ -869,11 +934,18 @@ function storeStatusChanged(status) {
 	else if (marks) renderStore();
 }
 
+// The badge shows something else now: the editor stops sending to it
+function handOverBadge() {
+	stopPlayback();
+	liveCancel();
+}
+
 async function storeAction(action) {
 	if (!device.connected) {
 		alert('Connect to a device first.');
 		return;
 	}
+	handOverBadge();
 	try {
 		await action();
 	} catch (e) {
@@ -892,12 +964,13 @@ document.getElementById('store-add-input').addEventListener('change', async (ev)
 	}
 	const bytes = new Uint8Array(await file.arrayBuffer());
 	const magic = new TextDecoder().decode(bytes.subarray(0, 4));
-	const type = magic === 'HHAP' ? ITEM_TYPE.APP : magic === 'LA02' ? ITEM_TYPE.ANIMATION : 0;
+	const type = magic === 'HHAP' ? ITEM_TYPE.APP : magic === 'LA03' || magic === 'LA02' ? ITEM_TYPE.ANIMATION : 0;
 	if (!type) {
 		alert(`${file.name} is not an app (.hhapp) or an animation (.ledanim).`);
 		return;
 	}
 	const name = file.name.replace(/\.[^.]+$/, '').toUpperCase();
+	handOverBadge();
 	storeBusy = true;
 	try {
 		await device.storeItem(type, name, bytes, (sent, total) => {

@@ -55,6 +55,26 @@ class LedMatrixDevice extends EventTarget {
 		return !!this.device;
 	}
 
+	get emulator() {
+		return !!this.device?.emulator;
+	}
+
+	// The emulator (tools/emu/emu.py --web) serves this page and takes the
+	// packets on POST /usb instead of over WebUSB. True if it is there.
+	static async emulatorPresent() {
+		try {
+			return (await fetch('emu', { cache: 'no-store' })).ok;
+		} catch (e) {
+			return false;
+		}
+	}
+
+	async connectEmulator() {
+		if (!(await LedMatrixDevice.emulatorPresent())) throw new Error('no emulator serves this page');
+		this.device = { emulator: true };
+		this.dispatchEvent(new CustomEvent('connect'));
+	}
+
 	async requestAndOpen() {
 		const device = await navigator.usb.requestDevice({
 			filters: [{ vendorId: USB_VENDOR_ID, productId: USB_PRODUCT_ID }],
@@ -93,6 +113,11 @@ class LedMatrixDevice extends EventTarget {
 
 	async disconnect() {
 		if (!this.device) return;
+		if (this.emulator) {
+			this.device = null;
+			this.dispatchEvent(new CustomEvent('disconnect'));
+			return;
+		}
 		try {
 			await this.device.close();
 		} catch (e) {
@@ -115,10 +140,16 @@ class LedMatrixDevice extends EventTarget {
 
 	async _sendNow(bytes) {
 		if (!this.device) return null;
-		await this.device.transferOut(EP_OUT, new Uint8Array(bytes));
-		const result = await this.device.transferIn(EP_IN, 64);
-		if (result.data && result.data.byteLength >= 2) {
-			const d = result.data;
+		let d;
+		if (this.emulator) {
+			const r = await fetch('usb', { method: 'POST', body: new Uint8Array(bytes) });
+			if (!r.ok) throw new Error(`emulator: ${r.status} ${r.statusText}`);
+			d = new DataView(await r.arrayBuffer());
+		} else {
+			await this.device.transferOut(EP_OUT, new Uint8Array(bytes));
+			d = (await this.device.transferIn(EP_IN, 64)).data;
+		}
+		if (d && d.byteLength >= 2) {
 			const status = { mode: d.getUint8(0), brightness: d.getUint8(1) };
 			if (d.byteLength >= 8) {
 				Object.assign(status, {

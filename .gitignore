@@ -7,3 +7,4 @@
 *.lst
 *.map
 apps/build/
+tools/emu/build/

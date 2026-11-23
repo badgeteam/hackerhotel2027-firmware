@@ -8,6 +8,9 @@
 #include "layout.h"
 #include "persist.h"
 #include "standby.h"
+#ifdef HH_EMU
+#include "emu.h"  // tools/emu: the app runs in an RV32 interpreter there
+#endif
 
 static const hh_app_header_t* s_app;  // the running app's header, in app RAM
 static bool s_exit;
@@ -88,22 +91,24 @@ static bool in_image(uint32_t addr, uint32_t load_end) {
 }
 
 bool AppHost_Check(const hh_app_header_t* h, uint32_t length) {
-    uint32_t load_end = (uint32_t)h->load_end, bss_end = (uint32_t)h->bss_end;
+    uint32_t load_end = (uint32_t)(uintptr_t)h->load_end, bss_end = (uint32_t)(uintptr_t)h->bss_end;
     return h->magic == HH_APP_MAGIC && h->api >= 1 && h->api <= HH_API_VERSION && h->flags == 0 &&
            load_end >= HH_APP_RAM_BASE + sizeof(hh_app_header_t) && load_end - HH_APP_RAM_BASE <= length &&
            bss_end >= load_end && bss_end <= HH_APP_RAM_BASE + HH_APP_RAM_SIZE &&
-           in_image((uint32_t)h->init, load_end) && in_image((uint32_t)h->tick, load_end);
+           in_image((uint32_t)(uintptr_t)h->init, load_end) && in_image((uint32_t)(uintptr_t)h->tick, load_end);
 }
 
 bool AppHost_Start(const uint8_t* image, uint32_t length, const char* name) {
     const hh_app_header_t* h = (const hh_app_header_t*)image;
     if (!AppHost_Check(h, length)) return false;
-    char* load_end = h->load_end;
-    char* bss_end = h->bss_end;
-    memcpy((void*)HH_APP_RAM_BASE, image, (uint32_t)load_end - HH_APP_RAM_BASE);
+    char* load_end = (char*)(uintptr_t)h->load_end;
+    char* bss_end = (char*)(uintptr_t)h->bss_end;
+    memcpy((void*)(uintptr_t)HH_APP_RAM_BASE, image, (uint32_t)(uintptr_t)load_end - HH_APP_RAM_BASE);
     memset(load_end, 0, (size_t)(bss_end - load_end));
+#ifndef HH_EMU
     // fence.i (the build has no Zifencei, so spelled out): the copy is code now
     __asm__ volatile(".insn i 0x0F, 1, x0, x0, 0" ::: "memory");
+#endif
 
     s_app = (const hh_app_header_t*)HH_APP_RAM_BASE;
     s_exit = false;
@@ -113,7 +118,14 @@ bool AppHost_Start(const uint8_t* image, uint32_t length, const char* name) {
     s_random = funSysTick32() ^ ESIG->UID0 ^ 0x9E3779B9u;
     if (!s_random) s_random = 1;
     LEDMatrix_Clear();
+#ifdef HH_EMU
+    if (!emu_app_init(s_app->init, &s_api)) {
+        s_app = NULL;
+        return false;
+    }
+#else
     s_app->init(&s_api);
+#endif
     return true;
 }
 
@@ -122,7 +134,11 @@ bool AppHost_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held) {
     s_pressed = pressed;
     s_held = held;
     s_millis += elapsed_ms;
+#ifdef HH_EMU
+    if (!emu_app_tick(s_app->tick, elapsed_ms)) return false;  // it faulted or hangs: stop it
+#else
     s_app->tick(elapsed_ms);
+#endif
     return !s_exit;
 }
 

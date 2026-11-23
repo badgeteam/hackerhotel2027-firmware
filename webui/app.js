@@ -133,6 +133,8 @@ document.getElementById('rgb-editor-close-btn').addEventListener('click', () => 
 // --- Device connection ---------------------------------------------------
 
 const connectBtn = document.getElementById('connect-btn');
+const emuBtn = document.getElementById('emu-btn');
+let emulatorHere = false; // tools/emu/emu.py --web serves this page
 const disconnectBtn = document.getElementById('disconnect-btn');
 const connStatusEl = document.getElementById('conn-status');
 const deviceModeEl = document.getElementById('device-mode');
@@ -143,8 +145,9 @@ function webUsbAvailable() {
 
 function refreshConnButtons() {
 	connectBtn.hidden = device.connected;
+	emuBtn.hidden = device.connected || !emulatorHere;
 	disconnectBtn.hidden = !device.connected;
-	connStatusEl.textContent = device.connected ? 'Connected' : 'Not connected';
+	connStatusEl.textContent = device.connected ? (device.emulator ? 'Connected to the emulator' : 'Connected') : 'Not connected';
 	connStatusEl.classList.toggle('connected', device.connected);
 }
 
@@ -156,6 +159,11 @@ connectBtn.addEventListener('click', async () => {
 	}
 });
 disconnectBtn.addEventListener('click', () => device.disconnect());
+emuBtn.addEventListener('click', () => device.connectEmulator().catch((e) => alert(e.message)));
+LedMatrixDevice.emulatorPresent().then((here) => {
+	emulatorHere = here;
+	refreshConnButtons();
+});
 device.addEventListener('connect', refreshConnButtons);
 device.addEventListener('disconnect', refreshConnButtons);
 // Must match APP_MODE_* in the firmware's webusb_protocol.h
@@ -173,10 +181,11 @@ if (!webUsbAvailable()) {
 	connStatusEl.textContent = 'WebUSB not available in this browser';
 } else {
 	device.tryAutoReconnect().catch(() => {});
-	setInterval(() => {
-		if (device.connected) device.query();
-	}, 1000);
 }
+// the emulator works without WebUSB, so the status poll runs either way
+setInterval(() => {
+	if (device.connected) device.query();
+}, 1000);
 refreshConnButtons();
 
 // --- Clear / send ---------------------------------------------------

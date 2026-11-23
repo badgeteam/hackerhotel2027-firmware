@@ -8,7 +8,7 @@ You control the badge from a web interface over WebUSB (`webui/`). From
 the web interface you can:
 
 - draw on the LEDs,
-- make animations from video or text,
+- make animations from video, animated GIF (or WebP, PNG) or text,
 - store animations and apps on the badge,
 - set your name.
 
@@ -95,6 +95,40 @@ you can:
 Only one program at a time can have the badge open. Click
 **Disconnect** before you use `tools/badge.py`.
 
+## Emulator
+
+The emulator runs the firmware on a PC: the main loop, the item store, the
+persistent record, the animation player and the app host, built from the
+same C files. Apps run in a small RISC-V interpreter, so the emulator runs
+the same `.hhapp` files as the badge.
+
+```sh
+make -C tools/emu
+python3 tools/emu/emu.py --web
+```
+
+The window shows the badge. Use these keys:
+
+| Key | |
+|---|---|
+| **A**, **B**, **C**, **D** | the buttons (you can also click them) |
+| **R** | power off and on; a button held then is held at power-on, for a safe start |
+| **Esc** | quit |
+
+- **Flash.** The emulated flash is a file, `~/.cache/hh27-emu/flash.bin`
+  by default (`--flash` to change). Your items, name and settings stay
+  there after **R** and after you close the emulator.
+- **Web interface.** With `--web`, the emulator serves the web interface on
+  http://127.0.0.1:8027/ (`--port` to change). There, click **Connect
+  emulator**. This works in every browser, not only in the ones with
+  WebUSB.
+- **Infrared.** All emulators on one PC share an infrared "room", so apps
+  on two emulators can reach each other.
+- **Log.** The firmware's log appears in the terminal.
+
+`tools/emu/rv32_test/run.sh` checks the interpreter against the same
+code built for the PC.
+
 ## What the badge stores
 
 The top 32 KB of flash is the item store (`store.h`):
@@ -126,3 +160,4 @@ previous copy. **Erase all** removes the items but keeps the record.
 | `tools/badge.py` | the item store, the name, run and stop, from the command line (needs pyusb) |
 | `tools/gen_layout.py` | makes `layout.c` and `webui/layout_data.js` from `webui/board_data.js` |
 | `tools/codec_test/run.sh` | checks that the web interface and the firmware decode animations the same way |
+| `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

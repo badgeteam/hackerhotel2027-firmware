@@ -23,7 +23,7 @@ earn its place. This is how the space is split, and what uses it now:
 
 | Memory | Size | Use | In use now |
 |---|---|---|---|
-| Flash | 30 KB | firmware | 18.1 KB |
+| Flash | 30 KB | firmware | 17.9 KB |
 | Flash | 31 KB | item store: animations and apps | what you store |
 | Flash | 1 KB | persistent record: name, brightness, boot item, app data | 2 × 512 B |
 | RAM | 8 KB | firmware data and stack | 3.8 KB data, the rest is stack |

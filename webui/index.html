@@ -279,7 +279,7 @@
 					</label>
 					<p id="compression-stats" class="hint"></p>
 					<div class="button-row">
-						<button id="upload-pattern-btn">Store on device &amp; play on boot</button>
+						<button id="upload-pattern-btn">Add to the badge &amp; play on boot</button>
 					</div>
 					<p class="hint" id="upload-pattern-status"></p>
 					<div class="button-row">
@@ -294,6 +294,23 @@
 
 			</div>
 			<div class="side-column">
+
+				<fieldset>
+					<legend>On the badge</legend>
+					<p class="hint">Apps and animations stored on the badge. The one marked
+						&#9733; starts at power-on; hold any button while the badge powers on to
+						skip it. Leave an app on the badge by holding A and C for a second.</p>
+					<ul id="store-list" class="store-list"></ul>
+					<p class="hint" id="store-status">Connect to see what is stored.</p>
+					<div class="button-row">
+						<label class="file-button">
+							Add app or animation
+							<input type="file" id="store-add-input" accept=".hhapp,.ledanim">
+						</label>
+						<button id="store-stop-btn">Stop</button>
+						<button id="store-erase-btn">Erase all</button>
+					</div>
+				</fieldset>
 
 				<fieldset>
 					<legend>Pattern</legend>

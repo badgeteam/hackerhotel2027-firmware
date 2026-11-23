@@ -10,19 +10,43 @@
 //                       (pixel index = row * LED_MATRIX_COLS + col)
 //   0x03 FRAME_COMMIT                          show the staging frame, switch to custom mode
 //   0x05 CLEAR                                 all LEDs off, switch to custom mode
-//   0x10 PATTERN_BEGIN                         erase the pattern flash region (slow, wait for the reply)
-//   0x11 PATTERN_CHUNK  .ledanim bytes...      append to the pattern flash region, in order
-//   0x12 PATTERN_COMMIT                        finish the upload and play it on repeat
-//                                              (it also autoplays on every boot from then on)
+//
+//   The item store (store.h): animations (.ledanim) and apps (.hhapp)
+//   0x20 STORE_ERASE                           erase every item (slow, wait for the reply)
+//   0x21 ITEM_BEGIN     type, name...          start a new item after the last one; type 1 =
+//                                              animation, 2 = app; name up to 20 bytes
+//                                              (erases the free space: slow, wait for the reply)
+//   0x22 ITEM_CHUNK     data...                append to the new item, in order
+//   0x23 ITEM_COMMIT                           finish the item; it starts at once, and from
+//                                              then on at every boot
+//   0x24 ITEM_INFO      index                  the reply describes item `index`
+//   0x25 ITEM_RUN       index, boot            start item `index`; boot = 1 also makes it
+//                                              the item that starts at power-on
+//   0x26 STOP                                  stop the running animation or app (custom mode)
+//
+//   The protocol before the item store, still accepted: one animation only
+//   0x10 PATTERN_BEGIN                         erase every item, then ITEM_BEGIN an animation
+//   0x11 PATTERN_CHUNK  .ledanim bytes...      = ITEM_CHUNK
+//   0x12 PATTERN_COMMIT                        = ITEM_COMMIT
+//
 //   0xFF QUERY                                 no effect, just the status reply
 // Anything else is ignored (but still gets a status reply).
 //
-// IN, 2 bytes: [mode (APP_MODE_*), global brightness]
+// IN, 8 bytes (33 after ITEM_INFO):
+//   [0] mode (APP_MODE_*)        [1] global brightness
+//   [2] result of the command: 0 ok, else STORE_ERR_* (store.h)
+//   [3] number of items          [4] running item (0xFF: none)
+//   [5] boot item (0xFF: none)   [6] free 256-byte pages in the store
+//   [7] HH_API_VERSION, the app interface this firmware offers
+//   after ITEM_INFO, if [2] is 0:
+//   [8] type  [9..12] length (little-endian)  [13..32] name (NUL-padded)
 
 #define APP_MODE_CUSTOM 1         // showing whatever the host (or the firmware) last wrote
-#define APP_MODE_FLASH_PATTERN 2  // playing the pattern stored in flash on repeat
+#define APP_MODE_FLASH_PATTERN 2  // playing an animation from the store on repeat
+#define APP_MODE_APP 3            // running an app from the store
 
 extern volatile uint8_t g_app_mode;
+extern volatile uint8_t g_running_item;  // the store item that plays or runs (when not custom)
 
 void WebUSB_Init(void);
 
@@ -30,6 +54,9 @@ void WebUSB_Init(void);
 // WebUSB_Init() brings it back.
 void WebUSB_Deinit(void);
 
-// Call once per main loop tick: sends the pending reply and starts playback
-// of a freshly uploaded pattern.
+// Call once per main loop tick: sends the pending reply.
 void WebUSB_Poll(void);
+
+// The item the host asked to start (ITEM_COMMIT, ITEM_RUN), once;
+// STORE_NONE if none. The main loop starts it.
+uint8_t WebUSB_TakeRunRequest(void);

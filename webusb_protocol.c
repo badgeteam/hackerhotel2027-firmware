@@ -1,10 +1,11 @@
 #include "webusb_protocol.h"
 #include <stdbool.h>
+#include <string.h>
 #include "ch32fun.h"
 #include "ch643_ledpwm.h"
 #include "fsusb.h"  // includes fsusb.c itself, so only include it in this file
-#include "pattern_flash.h"
-#include "pattern_player.h"
+#include "store.h"
+#include "apps/hhapp.h"
 
 #define CMD_SET_PIXEL 0x01
 #define CMD_FRAME_CHUNK 0x02
@@ -13,19 +14,40 @@
 #define CMD_PATTERN_BEGIN 0x10
 #define CMD_PATTERN_CHUNK 0x11
 #define CMD_PATTERN_COMMIT 0x12
+#define CMD_STORE_ERASE 0x20
+#define CMD_ITEM_BEGIN 0x21
+#define CMD_ITEM_CHUNK 0x22
+#define CMD_ITEM_COMMIT 0x23
+#define CMD_ITEM_INFO 0x24
+#define CMD_ITEM_RUN 0x25
+#define CMD_STOP 0x26
 #define CMD_QUERY 0xFF
 
 #define FRAME_PIXELS (LED_MATRIX_ROWS * LED_MATRIX_COLS)
 
 volatile uint8_t g_app_mode = APP_MODE_CUSTOM;
+volatile uint8_t g_running_item = STORE_NONE;
 
 static uint8_t s_stage_frame[FRAME_PIXELS];
 static volatile bool s_reply_pending;
-static volatile bool s_pattern_committed;
+static volatile uint8_t s_result;      // of the last command, for the reply
+static volatile uint8_t s_info_item;   // ITEM_INFO asked about this item
+static volatile uint8_t s_run_request = STORE_NONE;
+
+static void commit(void) {
+    uint8_t index;
+    s_result = (uint8_t)Store_Commit(&index);
+    if (s_result == STORE_OK) {
+        Store_SetBootItem(index);
+        s_run_request = index;
+    }
+}
 
 // Called from the USB interrupt for every packet on the bulk OUT endpoint
 void WebUSBBulkDataOut(uint8_t* data, int len) {
     if (len < 1) return;
+    s_result = STORE_OK;
+    s_info_item = STORE_NONE;
 
     switch (data[0]) {
         case CMD_SET_PIXEL:
@@ -58,17 +80,53 @@ void WebUSBBulkDataOut(uint8_t* data, int len) {
 
         case CMD_PATTERN_BEGIN:
             g_app_mode = APP_MODE_CUSTOM;  // stop playing from the region we're about to erase
-            PatternFlash_EraseAll();
-            PatternFlash_BeginWrite();
+            Store_EraseAll();
+            s_result = (uint8_t)Store_Begin(STORE_TYPE_ANIMATION, "PATTERN", 7);
+            break;
+
+        case CMD_STORE_ERASE:
+            g_app_mode = APP_MODE_CUSTOM;
+            Store_EraseAll();
+            break;
+
+        case CMD_ITEM_BEGIN:
+            s_result = len >= 2 ? (uint8_t)Store_Begin(data[1], (const char*)&data[2], (unsigned)(len - 2))
+                                : STORE_ERR_ARGS;
             break;
 
         case CMD_PATTERN_CHUNK:
-            if (len >= 2) PatternFlash_WriteBytes(&data[1], (uint8_t)(len - 1));
+        case CMD_ITEM_CHUNK:
+            s_result = (uint8_t)Store_Write(&data[1], (unsigned)(len - 1));
             break;
 
         case CMD_PATTERN_COMMIT:
-            PatternFlash_FinishWrite();
-            s_pattern_committed = true;  // start playback from the main loop, see WebUSB_Poll()
+        case CMD_ITEM_COMMIT:
+            commit();
+            break;
+
+        case CMD_ITEM_INFO:
+            if (len < 2) {
+                s_result = STORE_ERR_ARGS;
+            } else if (!Store_Item(data[1])) {
+                s_result = STORE_ERR_NOT_FOUND;
+            } else {
+                s_info_item = data[1];
+            }
+            break;
+
+        case CMD_ITEM_RUN:
+            if (len < 2) {
+                s_result = STORE_ERR_ARGS;
+            } else if (!Store_Item(data[1])) {
+                s_result = STORE_ERR_NOT_FOUND;
+            } else {
+                if (len >= 3 && data[2]) Store_SetBootItem(data[1]);
+                s_run_request = data[1];
+            }
+            break;
+
+        case CMD_STOP:
+            g_app_mode = APP_MODE_CUSTOM;
             break;
 
         case CMD_QUERY:
@@ -106,17 +164,31 @@ void WebUSB_Deinit(void) {
 }
 
 void WebUSB_Poll(void) {
-    if (s_pattern_committed) {
-        s_pattern_committed = false;
-        PatternPlayer_Reset();
-        g_app_mode = APP_MODE_FLASH_PATTERN;
-    }
-
     if (!s_reply_pending) return;
     uint8_t* buffer = USBFS_GetEPBufferIfAvailable(USB_EP_TX);
     if (!buffer) return;
     buffer[0] = g_app_mode;
     buffer[1] = LEDMatrix_GetBrightness();
-    USBFS_SendEndpoint(USB_EP_TX, 2);
+    buffer[2] = s_result;
+    buffer[3] = Store_Count();
+    buffer[4] = g_app_mode == APP_MODE_CUSTOM ? STORE_NONE : g_running_item;
+    buffer[5] = Store_BootItem();
+    buffer[6] = Store_FreePages();
+    buffer[7] = HH_API_VERSION;
+    int len = 8;
+    const store_item_t* item = s_info_item != STORE_NONE ? Store_Item(s_info_item) : NULL;
+    if (item) {
+        buffer[8] = item->type;
+        for (int i = 0; i < 4; i++) buffer[9 + i] = (uint8_t)(item->length >> (8 * i));
+        memcpy(&buffer[13], item->name, STORE_NAME_LEN);
+        len = 13 + STORE_NAME_LEN;
+    }
+    USBFS_SendEndpoint(USB_EP_TX, len);
     s_reply_pending = false;
+}
+
+uint8_t WebUSB_TakeRunRequest(void) {
+    uint8_t r = s_run_request;
+    s_run_request = STORE_NONE;
+    return r;
 }

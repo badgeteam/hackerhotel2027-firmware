@@ -7,9 +7,10 @@
 #include "ch643_ledpwm.h"
 #include "debug_output.h"
 #include "infrared.h"
-#include "pattern_flash.h"
+#include "app_host.h"
 #include "pattern_player.h"
 #include "standby.h"
+#include "store.h"
 #include "webusb_protocol.h"
 
 #define TICK_MS 5
@@ -37,6 +38,26 @@ static void fill_halves(uint8_t top, uint8_t bottom) {
     }
 }
 
+// Leaving an app on the badge: hold A and C together this long
+#define APP_EXIT_CHORD (HH_BTN_A | HH_BTN_C)
+#define APP_EXIT_MS 1000
+
+// Starts store item `index`: an animation plays, an app runs. Whatever ran
+// before stops; if the item cannot start, the badge stays in custom mode.
+static void run_item(uint8_t index) {
+    AppHost_Stop();
+    g_app_mode = APP_MODE_CUSTOM;
+    const store_item_t* item = Store_Item(index);
+    if (!item) return;
+    g_running_item = index;
+    if (item->type == STORE_TYPE_ANIMATION) {
+        PatternPlayer_Start(Store_Payload(item));
+        g_app_mode = APP_MODE_FLASH_PATTERN;
+    } else if (item->type == STORE_TYPE_APP && AppHost_Start(Store_Payload(item), item->length)) {
+        g_app_mode = APP_MODE_APP;
+    }
+}
+
 int main(void) {
     SystemInit();
     funGpioInitAll();
@@ -55,18 +76,46 @@ int main(void) {
         }
     }
 
-    // Autoplay the pattern stored in flash by an earlier upload, if any
-    if (PatternFlash_IsValid()) {
-        PatternPlayer_Reset();
+    // Start the boot item from the store, unless a button is held: then
+    // the badge starts without it (in case it is an app that hangs)
+    if (buttons_raw()) {
+        buttons_ignore_held();  // that press is not a command
+    } else if (Store_BootItem() != STORE_NONE) {
+        run_item(Store_BootItem());
+    } else if (Store_LegacyPattern()) {  // stored by the firmware before the item store
+        PatternPlayer_Start(Store_LegacyPattern());
         g_app_mode = APP_MODE_FLASH_PATTERN;
     }
 
     bool states[4] = {0};
+    uint32_t last_tick = funSysTick32();
+    uint32_t chord_ms = 0;
 
     while (1) {
+        uint8_t run = WebUSB_TakeRunRequest();
+        if (run != STORE_NONE) run_item(run);
+        // a command from the host (custom mode, STOP, erase) ends the app
+        if (g_app_mode != APP_MODE_APP) AppHost_Stop();
         WebUSB_Poll();
 
+        uint32_t elapsed_ms = (funSysTick32() - last_tick) / DELAY_MS_TIME;
+        last_tick += elapsed_ms * DELAY_MS_TIME;
+
         uint8_t buttons = buttons_poll();
+        if (g_app_mode == APP_MODE_APP) {
+            // The app has the buttons and the infrared; only A + C held is ours
+            uint8_t held = buttons_down();
+            chord_ms = (held & APP_EXIT_CHORD) == APP_EXIT_CHORD ? chord_ms + elapsed_ms : 0;
+            if (chord_ms >= APP_EXIT_MS || !AppHost_Tick(elapsed_ms, buttons, held)) {
+                AppHost_Stop();
+                g_app_mode = APP_MODE_CUSTOM;
+                buttons_ignore_held();
+                chord_ms = 0;
+            }
+            Delay_Ms(TICK_MS);
+            continue;
+        }
+
         for (uint8_t i = 0; i < 4; i++) {
             if ((buttons >> i) & 1) {
                 states[i] = !states[i];
@@ -107,7 +156,7 @@ int main(void) {
         }
 
         if (g_app_mode == APP_MODE_FLASH_PATTERN) {
-            PatternPlayer_Tick(TICK_MS);
+            PatternPlayer_Tick(elapsed_ms);
         }
 
         Delay_Ms(TICK_MS);

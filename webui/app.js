@@ -159,12 +159,13 @@ disconnectBtn.addEventListener('click', () => device.disconnect());
 device.addEventListener('connect', refreshConnButtons);
 device.addEventListener('disconnect', refreshConnButtons);
 // Must match APP_MODE_* in the firmware's webusb_protocol.h
-const DEVICE_MODE_NAMES = { 1: 'Custom frame', 2: 'Stored pattern' };
+const DEVICE_MODE_NAMES = { 1: 'Custom frame', 2: 'Stored pattern', 3: 'App' };
 
 device.addEventListener('status', (ev) => {
 	const { mode, brightness } = ev.detail;
 	const name = DEVICE_MODE_NAMES[mode] ?? `Mode ${mode}`;
 	deviceModeEl.textContent = `${name}, brightness ${brightness}`;
+	storeStatusChanged(ev.detail);
 });
 
 if (!webUsbAvailable()) {
@@ -679,9 +680,15 @@ playBtn.addEventListener('click', () => {
 const compressionQuantSelect = document.getElementById('compression-quant');
 const compressionStatsEl = document.getElementById('compression-stats');
 
-// Size of the flash region the firmware reserves for the pattern
-// (PATTERN_FLASH_SIZE in pattern_flash.h)
-const PATTERN_FLASH_BYTES = 32 * 1024;
+// Room for a new item in the badge's store: what the badge reports, or,
+// before it has, the whole store (STORE_FLASH_SIZE in flash_pages.h, less
+// the settings page and the item header)
+const STORE_ITEM_HEADER_BYTES = 32;
+let storeStatus = null; // the badge's last status reply
+function patternBudgetBytes() {
+	const free = storeStatus && storeStatus.freeBytes !== undefined ? storeStatus.freeBytes : 32 * 1024 - 256;
+	return Math.max(0, free - STORE_ITEM_HEADER_BYTES);
+}
 
 function formatBytes(n) {
 	return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`;
@@ -690,7 +697,7 @@ function formatBytes(n) {
 function refreshCompressionStats() {
 	if (!activePattern) return;
 	const quantBits = Number(compressionQuantSelect.value);
-	const budgetBytes = PATTERN_FLASH_BYTES;
+	const budgetBytes = patternBudgetBytes();
 	const rawBytes = activePattern.frames.length * MATRIX_ROWS * MATRIX_COLS;
 	let compressedBytes;
 	try {
@@ -738,7 +745,7 @@ document.getElementById('upload-pattern-btn').addEventListener('click', async ()
 		return;
 	}
 	const quantBits = Number(compressionQuantSelect.value);
-	const budgetBytes = PATTERN_FLASH_BYTES;
+	const budgetBytes = patternBudgetBytes();
 	let bytes;
 	try {
 		bytes = compressPattern(activePattern, { quantBits });
@@ -756,9 +763,10 @@ document.getElementById('upload-pattern-btn').addEventListener('click', async ()
 	}
 	uploadPatternStatusEl.textContent = `Uploading ${formatBytes(bytes.length)}...`;
 	try {
-		await device.uploadPattern(bytes);
+		await device.uploadPattern(bytes, activePattern.name.toUpperCase() || 'PATTERN');
 		uploadPatternStatusEl.textContent =
 			`Stored (${formatBytes(bytes.length)}) and playing -- will autoplay on every boot from now on.`;
+		refreshStore();
 	} catch (e) {
 		uploadPatternStatusEl.textContent = `Upload failed: ${e.message}`;
 	}
@@ -780,6 +788,132 @@ document.getElementById('import-compressed-input').addEventListener('change', as
 	} catch (e) {
 		alert(`Couldn't load that .ledanim file: ${e.message}`);
 	}
+});
+
+// --- On the badge: the item store (store.h) ---------------------------------------------------
+
+const storeListEl = document.getElementById('store-list');
+const storeStatusEl = document.getElementById('store-status');
+let storeItems = []; // [{index, type, length, name}]
+let storeBusy = false; // an upload or a listing is going on
+
+function renderStore() {
+	storeListEl.innerHTML = '';
+	if (!device.connected) {
+		storeStatusEl.textContent = 'Connect to see what is stored.';
+		return;
+	}
+	for (const item of storeItems) {
+		const li = document.createElement('li');
+		li.className = 'store-item';
+		if (storeStatus && item.index === storeStatus.running) li.classList.add('running');
+		const label = document.createElement('span');
+		const boot = storeStatus && item.index === storeStatus.boot ? '\u2605 ' : '';
+		label.textContent = `${boot}${item.name || '(no name)'}`;
+		label.title = `${ITEM_TYPE_NAMES[item.type] ?? 'Type ' + item.type}, ${formatBytes(item.length)}`;
+		const kind = document.createElement('span');
+		kind.className = 'store-kind';
+		kind.textContent = ITEM_TYPE_NAMES[item.type] ?? item.type;
+		const run = document.createElement('button');
+		run.textContent = 'Run';
+		run.addEventListener('click', () => storeAction(() => device.runItem(item.index)));
+		const bootBtn = document.createElement('button');
+		bootBtn.textContent = '\u2605';
+		bootBtn.title = 'Run it, and at every power-on';
+		bootBtn.addEventListener('click', () => storeAction(() => device.runItem(item.index, true)));
+		li.append(label, kind, run, bootBtn);
+		storeListEl.appendChild(li);
+	}
+	if (storeStatus && storeStatus.freeBytes !== undefined) {
+		storeStatusEl.textContent =
+			`${storeItems.length} item${storeItems.length === 1 ? '' : 's'}, ` +
+			`${formatBytes(storeStatus.freeBytes)} free.`;
+	} else if (storeStatus) {
+		storeStatusEl.textContent = 'This firmware has no item store; update the badge.';
+	}
+}
+
+async function refreshStore() {
+	if (!device.connected || storeBusy) return;
+	storeBusy = true;
+	try {
+		const { status, items } = await device.listItems();
+		storeStatus = status;
+		storeItems = items;
+	} catch (e) {
+		storeStatusEl.textContent = e.message;
+	} finally {
+		storeBusy = false;
+	}
+	renderStore();
+	refreshCompressionStats();
+}
+
+// The once-a-second status: re-read the list when it changed size, else
+// just move the running and boot marks.
+function storeStatusChanged(status) {
+	const changed = !storeStatus || status.count !== storeStatus.count;
+	const marks = !storeStatus || status.running !== storeStatus.running || status.boot !== storeStatus.boot;
+	if (storeBusy) return;
+	storeStatus = status;
+	if (changed && status.count !== undefined) refreshStore();
+	else if (marks) renderStore();
+}
+
+async function storeAction(action) {
+	if (!device.connected) {
+		alert('Connect to a device first.');
+		return;
+	}
+	try {
+		await action();
+	} catch (e) {
+		alert(e.message);
+	}
+	refreshStore();
+}
+
+document.getElementById('store-add-input').addEventListener('change', async (ev) => {
+	const file = ev.target.files[0];
+	ev.target.value = '';
+	if (!file) return;
+	if (!device.connected) {
+		alert('Connect to a device first.');
+		return;
+	}
+	const bytes = new Uint8Array(await file.arrayBuffer());
+	const magic = new TextDecoder().decode(bytes.subarray(0, 4));
+	const type = magic === 'HHAP' ? ITEM_TYPE.APP : magic === 'LA02' ? ITEM_TYPE.ANIMATION : 0;
+	if (!type) {
+		alert(`${file.name} is not an app (.hhapp) or an animation (.ledanim).`);
+		return;
+	}
+	const name = file.name.replace(/\.[^.]+$/, '').toUpperCase();
+	storeBusy = true;
+	try {
+		await device.storeItem(type, name, bytes, (sent, total) => {
+			storeStatusEl.textContent = `Uploading ${name}: ${Math.round((100 * sent) / total)}%`;
+		});
+	} catch (e) {
+		alert(e.message);
+	} finally {
+		storeBusy = false;
+	}
+	refreshStore();
+});
+
+document.getElementById('store-stop-btn').addEventListener('click', () => storeAction(() => device.stop()));
+
+document.getElementById('store-erase-btn').addEventListener('click', () => {
+	if (!confirm('Erase every app and animation on the badge?')) return;
+	storeAction(() => device.eraseStore());
+});
+
+device.addEventListener('connect', refreshStore);
+device.addEventListener('disconnect', () => {
+	storeStatus = null;
+	storeItems = [];
+	renderStore();
 });
 
 // --- Init ---------------------------------------------------

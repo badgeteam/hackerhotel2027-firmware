@@ -7,6 +7,7 @@
 void LEDMatrix_Init(void);
 void LEDMatrix_Deinit(void);
 void LEDMatrix_SetPixel(uint8_t row, uint8_t col, uint8_t brightness);
+uint8_t LEDMatrix_GetPixel(uint8_t row, uint8_t col);
 void LEDMatrix_Clear(void);
 
 // Global brightness, applied on top of every pixel value (255 = unscaled)

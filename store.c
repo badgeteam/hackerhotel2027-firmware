@@ -79,6 +79,31 @@ void Store_EraseAll(void) {
     Persist_SetBootItem(STORE_NONE);
 }
 
+int Store_Delete(uint8_t index) {
+    const store_item_t* item = Store_Item(index);
+    if (!item) return STORE_ERR_NOT_FOUND;
+    s_writing = false;  // an upload going on would start after the old end
+
+    uint32_t start = (uint32_t)((uintptr_t)item - STORE_FLASH_BASE);
+    uint32_t gap = next_offset(start) - start;  // the deleted item's pages
+    uint32_t end = end_offset();
+    // Upwards, page by page: each target page lies below its source page,
+    // and every source page is read before a later target overwrites it
+    for (uint32_t src = start + gap; src < end; src += FLASH_PAGE_SIZE) {
+        memcpy(s_page, (const void*)(uintptr_t)(STORE_FLASH_BASE + src), FLASH_PAGE_SIZE);
+        FlashPages_Erase(STORE_FLASH_BASE + src - gap);
+        FlashPages_Program(STORE_FLASH_BASE + src - gap, s_page);
+    }
+    for (uint32_t off = end - gap; off < end; off += FLASH_PAGE_SIZE) FlashPages_Erase(STORE_FLASH_BASE + off);
+
+    uint8_t boot = Persist_BootItem();
+    if (boot == index)
+        Persist_SetBootItem(STORE_NONE);
+    else if (boot != STORE_NONE && boot > index)
+        Persist_SetBootItem(boot - 1);
+    return STORE_OK;
+}
+
 int Store_Begin(uint8_t type, const char* name, unsigned name_len) {
     s_writing = false;
     if (type != STORE_TYPE_ANIMATION && type != STORE_TYPE_APP) return STORE_ERR_ARGS;

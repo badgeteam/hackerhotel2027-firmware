@@ -7,6 +7,7 @@
 #include "infrared.h"
 #include "layout.h"
 #include "persist.h"
+#include "store.h"
 #include "standby.h"
 #ifdef HH_EMU
 #include "emu.h"  // tools/emu: the app runs in an RV32 interpreter there
@@ -17,7 +18,9 @@ static bool s_exit;
 static uint8_t s_pressed, s_held;
 static uint32_t s_random;
 static uint32_t s_millis;  // since the app started, counted in ticks
-static const char* s_name;  // the app's name in the store (persist.h key)
+// The app's name in the store (the persist.h key). A copy: Store_Delete()
+// can move the item while the app runs.
+static char s_name[STORE_NAME_LEN];
 
 static void api_set(uint16_t slot, uint8_t value) {
     if (slot < HH_SLOTS) LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, value);
@@ -114,7 +117,7 @@ bool AppHost_Start(const uint8_t* image, uint32_t length, const char* name) {
     s_exit = false;
     s_pressed = s_held = 0;
     s_millis = 0;
-    s_name = name;
+    memcpy(s_name, name, STORE_NAME_LEN);
     s_random = funSysTick32() ^ ESIG->UID0 ^ 0x9E3779B9u;
     if (!s_random) s_random = 1;
     LEDMatrix_Clear();

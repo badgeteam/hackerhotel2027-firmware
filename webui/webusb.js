@@ -22,6 +22,7 @@ const CMD = {
 	ITEM_INFO: 0x24,
 	ITEM_RUN: 0x25,
 	STOP: 0x26,
+	ITEM_DELETE: 0x27,
 	NAME_GET: 0x30,
 	NAME_SET: 0x31,
 	QUERY: 0xff,
@@ -251,6 +252,11 @@ class LedMatrixDevice extends EventTarget {
 
 	stop() {
 		return this._send([CMD.STOP]);
+	}
+
+	// Removes one item; the items after it move down one index
+	deleteItem(index) {
+		return this._checked([CMD.ITEM_DELETE, index], 'Deleting it');
 	}
 
 	eraseStore() {

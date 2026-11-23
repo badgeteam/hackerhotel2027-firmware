@@ -11,8 +11,9 @@
 //
 // A new item goes after the last one. Its first page, with the header, is
 // written last, on Store_Commit(), so an upload that breaks off leaves no
-// half item behind. Items cannot be deleted one by one: Store_EraseAll()
-// empties the store (the persistent record stays).
+// half item behind. Store_Delete() removes one item: the items after it
+// move down, so their indexes drop by one. Store_EraseAll() empties the
+// store (the persistent record stays).
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -53,6 +54,14 @@ void Store_SetBootItem(uint8_t index);
 const uint8_t* Store_LegacyPattern(void);
 
 void Store_EraseAll(void);
+
+// Removes item `index`: the items after it move down one by one, page by
+// page, and their indexes drop by one; the boot item follows (it is
+// cleared if it is the deleted item). The caller must first stop an
+// animation that plays from an item at or after `index`, because its
+// data moves. A power loss during the move can lose the items after
+// `index`. Returns STORE_OK or STORE_ERR_NOT_FOUND.
+int Store_Delete(uint8_t index);
 
 // Upload a new item: Store_Begin() erases the free space, Store_Write()
 // appends payload bytes, Store_Commit() checks the payload and writes the

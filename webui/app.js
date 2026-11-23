@@ -895,7 +895,14 @@ function renderStore() {
 		bootBtn.textContent = '\u2605';
 		bootBtn.title = 'Run it, and at every power-on';
 		bootBtn.addEventListener('click', () => storeAction(() => device.runItem(item.index, true)));
-		li.append(label, kind, run, bootBtn);
+		const del = document.createElement('button');
+		del.textContent = '\u{1F5D1}';
+		del.title = 'Delete it from the badge';
+		del.addEventListener('click', () => {
+			if (!confirm(`Delete ${item.name || 'this item'} from the badge?`)) return;
+			storeAction(() => device.deleteItem(item.index));
+		});
+		li.append(label, kind, run, bootBtn, del);
 		storeListEl.appendChild(li);
 	}
 	if (storeStatus && storeStatus.freeBytes !== undefined) {

@@ -85,6 +85,7 @@ you can:
 
 - run an item,
 - choose the boot item (★),
+- delete an item (🗑),
 - add a `.hhapp` or `.ledanim`,
 - stop what runs,
 - erase the store,
@@ -145,6 +146,10 @@ The top 32 KB of flash is the item store (`store.h`):
 
 The record is kept twice, so a power loss while it is written leaves the
 previous copy. **Erase all** removes the items but keeps the record.
+
+When you delete an item, the items after it move down to fill the gap.
+Keep the badge powered until the delete is done: a power loss during
+the move can lose the items after the deleted one.
 
 | Memory | Use |
 |---|---|

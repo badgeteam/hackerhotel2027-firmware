@@ -383,6 +383,10 @@ void USBFS_IRQHandler()
 								if( ( USBFS_SetupReqIndex & DEF_UEP_IN ) && ep < FUSB_CONFIG_EPS ) 
 								{
 									UEP_CTRL_H(ep) = USBFS_UEP_T_RES_NAK;
+									// The NAK drops what was armed: the endpoint is free again.
+									// Otherwise USBFS_GetEPBufferIfAvailable() never
+									// returns it, and the device never sends again.
+									ctx->USBFS_Endp_Busy[ ep ] = 0;
 								}
 								else
 								{
@@ -526,6 +530,7 @@ void USBFS_IRQHandler()
 		ctx->USBFS_DevEnumStatus = 0;
 
 		USBFS->DEV_ADDR = 0;
+		for( int i = 0; i < FUSB_CONFIG_EPS; i++ ) ctx->USBFS_Endp_Busy[ i ] = 0;
 		USBFS_InternalFinishSetup( );
 	}
 	else if( intfgst & CRB_UIF_SUSPEND )

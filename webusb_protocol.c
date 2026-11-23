@@ -51,9 +51,24 @@ static void commit(void) {
     }
 }
 
+// The USB interrupt only copies a command here; the main loop runs it
+// (WebUSB_Poll). Commands erase and program flash, which can take a long
+// time, and the main loop writes flash too (persist.c): in the interrupt,
+// the two could interleave their flash sequences, and a long interrupt
+// holds up the USB stack.
+#define CMD_MAX 64
+static uint8_t s_cmd[CMD_MAX];
+static volatile int s_cmd_len;  // > 0: a command waits for the main loop
+
 // Called from the USB interrupt for every packet on the bulk OUT endpoint
 void WebUSBBulkDataOut(uint8_t* data, int len) {
     if (len < 1) return;
+    if (len > CMD_MAX) len = CMD_MAX;
+    memcpy(s_cmd, data, (unsigned)len);
+    s_cmd_len = len;
+}
+
+static void handle_command(const uint8_t* data, int len) {
     s_result = STORE_OK;
     s_info_item = STORE_NONE;
     s_name_reply = false;
@@ -152,13 +167,12 @@ void WebUSBBulkDataOut(uint8_t* data, int len) {
             break;
     }
 
-    // One pending reply at a time; if the host hasn't read the previous one
-    // yet, it will see the current state with its next poll anyway
     s_reply_pending = true;
 }
 
 void WebUSB_Init(void) {
     s_reply_pending = false;
+    s_cmd_len = 0;
     FSUSBSetup();
 }
 
@@ -181,7 +195,34 @@ void WebUSB_Deinit(void) {
     s_reply_pending = false;
 }
 
+static void drop_unread_reply(void) {
+#ifndef HH_EMU  // the emulator's endpoint is never busy
+    if (FSUSBCTX.USBFS_Endp_Busy[USB_EP_TX]) {
+        USBFSD_UEP_TX_CTRL(USB_EP_TX) = (USBFSD_UEP_TX_CTRL(USB_EP_TX) & ~USBFS_UEP_T_RES_MASK) | USBFS_UEP_T_RES_NAK;
+        FSUSBCTX.USBFS_Endp_Busy[USB_EP_TX] = 0;
+    }
+#endif
+}
+
+void WebUSB_HandleCommand(void) {
+    if (s_cmd_len) {
+        uint8_t cmd[CMD_MAX];
+        NVIC_DisableIRQ(USBFS_IRQn);
+        int len = s_cmd_len;
+        memcpy(cmd, s_cmd, (unsigned)len);
+        s_cmd_len = 0;
+        // The host sends a command only after it has read the reply to the
+        // previous one, or has given up on it (a timeout, a closed page).
+        // A reply still armed now is one nobody reads: drop it, so this
+        // command's reply is the one the host gets.
+        drop_unread_reply();
+        NVIC_EnableIRQ(USBFS_IRQn);
+        handle_command(cmd, len);
+    }
+}
+
 void WebUSB_Poll(void) {
+    // The reply waits here until the endpoint is free
     if (!s_reply_pending) return;
     uint8_t* buffer = USBFS_GetEPBufferIfAvailable(USB_EP_TX);
     if (!buffer) return;

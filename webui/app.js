@@ -871,6 +871,13 @@ const storeStatusEl = document.getElementById('store-status');
 let storeItems = []; // [{index, type, length, name}]
 let storeBusy = false; // an upload or a listing is going on
 
+// The flash an item takes: the header and the payload, in whole pages
+// (store.h), which is what the free space counts
+const STORE_PAGE_BYTES = 256;
+function storeItemBytes(item) {
+	return Math.ceil((STORE_ITEM_HEADER_BYTES + item.length) / STORE_PAGE_BYTES) * STORE_PAGE_BYTES;
+}
+
 function renderStore() {
 	storeListEl.innerHTML = '';
 	if (!device.connected) {
@@ -888,6 +895,10 @@ function renderStore() {
 		const kind = document.createElement('span');
 		kind.className = 'store-kind';
 		kind.textContent = ITEM_TYPE_NAMES[item.type] ?? item.type;
+		const size = document.createElement('span');
+		size.className = 'store-size';
+		size.textContent = formatBytes(storeItemBytes(item));
+		size.title = `${formatBytes(item.length)} file; on the badge it takes whole 256-byte pages, with a 32-byte header`;
 		const run = document.createElement('button');
 		run.textContent = 'Run';
 		run.addEventListener('click', () => storeAction(() => device.runItem(item.index)));
@@ -902,13 +913,14 @@ function renderStore() {
 			if (!confirm(`Delete ${item.name || 'this item'} from the badge?`)) return;
 			storeAction(() => device.deleteItem(item.index));
 		});
-		li.append(label, kind, run, bootBtn, del);
+		li.append(label, kind, size, run, bootBtn, del);
 		storeListEl.appendChild(li);
 	}
 	if (storeStatus && storeStatus.freeBytes !== undefined) {
+		const used = storeItems.reduce((sum, item) => sum + storeItemBytes(item), 0);
 		storeStatusEl.textContent =
 			`${storeItems.length} item${storeItems.length === 1 ? '' : 's'}, ` +
-			`${formatBytes(storeStatus.freeBytes)} free.`;
+			`${formatBytes(used)} used, ${formatBytes(storeStatus.freeBytes)} free.`;
 	} else if (storeStatus) {
 		storeStatusEl.textContent = 'This firmware has no item store; update the badge.';
 	}

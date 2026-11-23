@@ -509,4 +509,12 @@ footer code {
 
 .store-kind {
 	color: var(--text-dim);
+	min-width: 4.6rem;
+}
+
+.store-size {
+	color: var(--text-dim);
+	font-variant-numeric: tabular-nums;
+	min-width: 3.8rem;
+	text-align: right;
 }

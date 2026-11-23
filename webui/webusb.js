@@ -68,6 +68,8 @@ class LedMatrixDevice extends EventTarget {
 	// The emulator (tools/emu/emu.py --web) serves this page and takes the
 	// packets on POST /usb instead of over WebUSB. True if it is there.
 	static async emulatorPresent() {
+		// the emulator serves the page on this PC; a public site has none
+		if (!['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) return false;
 		try {
 			return (await fetch('emu', { cache: 'no-store' })).ok;
 		} catch (e) {

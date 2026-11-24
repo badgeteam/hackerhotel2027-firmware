@@ -53,6 +53,10 @@ typedef struct {
 bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length);
 bool infrared_receive_packet(infrared_packet_t* packet);
 
+// A shot from a Fri3d Camp 2022 Time Blaster or a Hacker Hotel 2025 banana
+// (ir_codec.h), with a good CRC; false when none came in. Up to 7 are kept.
+bool infrared_receive_shot(ir_shot_t* shot);
+
 // The marks and spaces that came in since the last call, oldest first: bit
 // 15 set for a mark, the rest its length in us (32767: that or longer).
 // Up to 127 are kept. For looking at other devices' frames (tools/badge.py

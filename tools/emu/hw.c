@@ -237,6 +237,10 @@ bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length) {
     out_hex('P', p, 2u + length);
     return true;
 }
+bool infrared_receive_shot(ir_shot_t* shot) {  // the emulator has no shots yet
+    (void)shot;
+    return false;
+}
 unsigned infrared_raw_read(uint16_t* out, unsigned max) {  // the emulator's IR has no marks and spaces
     (void)out, (void)max;
     return 0;

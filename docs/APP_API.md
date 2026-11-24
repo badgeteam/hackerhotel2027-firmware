@@ -36,6 +36,7 @@ badge is older than the page.
 | 3 | `polar` |
 | 4 | `set_rgb`, `set_linear`, `sin8`, `hsv`, `isqrt`, `atan8`, `draw_number`, `step_brightness`; `HH_CENTER` for `draw_text` |
 | 5 | `ir_send_packet`, `ir_receive_packet` |
+| 6 | `ir_receive_shot` |
 
 | Member | Version |
 |---|---|
@@ -209,6 +210,33 @@ static void tick(uint32_t elapsed_ms) {
 
 On air, a packet is NEC-coded bits after a 4.5 ms mark and a 2.25 ms space
 (see `ir_codec.h`), so it is never taken for a remote's frame.
+
+### Shots from blasters and bananas (6)
+
+| Member | |
+|---|---|
+| `bool ir_receive_shot(hh_ir_shot_t *shot)` | A shot from a Hacker Hotel 2025 banana or a Fri3d Camp 2022 Time Blaster, with a good CRC. False when none came in; the firmware keeps up to 7. |
+
+`hh_ir_shot_t` has `.team` (0 .. 7), `.trigger` (1: a trigger pull),
+`.command` and `.parameter` (0 .. 15):
+
+| Command | | Parameter |
+|---|---|---|
+| `HH_SHOT_SHOOT` (1) | a shot | the channel |
+| `HH_SHOT_HEAL` (2) | a heal | the channel |
+| `HH_SHOT_TEAM` (8) | the banana: "take my team" | the channel |
+| `HH_SHOT_BYTE` (10) | the banana: one byte typed into its serial port, `HH_SHOT_BYTE_OF(shot)` | part of the byte |
+
+The banana's team is an index: 0 red, 1 green, 2 blue, 3 yellow, 4 magenta,
+5 light blue. The Time Blaster's is one bit per colour: 1 red, 2 green,
+4 blue. Before each shot the banana sends a NEC frame (address 0) for the
+bar's LED strips, which `ir_receive()` gets: command 0x44 red, 0x40 green,
+0x43 blue, 0x16 yellow, 0x0D magenta, 0x09 light blue.
+
+On air a shot is 16 bits with JVC timing (leader 8.4 ms + 4.2 ms), with no
+edge after its stop mark: the firmware takes it as a shot after 4 ms of
+silence. `apps/target` is an example; `tools/badge.py irlog` shows what any
+remote or blaster sends.
 
 ## System
 

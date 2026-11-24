@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 #define HH_APP_MAGIC 0x50414848u  // "HHAP"
-#define HH_API_VERSION 5  // 2: draw_text, text_width; 3: polar; 4: the helpers; 5: IR packets
+#define HH_API_VERSION 6  // 2: draw_text, text_width; 3: polar; 4: the helpers; 5: IR packets; 6: shots
 
 #define HH_APP_RAM_BASE 0x20002000u
 #define HH_APP_RAM_SIZE 0x3000u  // 12 KB: the image and its .bss
@@ -90,6 +90,22 @@ typedef struct {
     uint8_t length;  // 0 .. HH_IR_PACKET_MAX
     uint8_t data[HH_IR_PACKET_MAX];
 } hh_ir_packet_t;
+
+// A shot from a Fri3d Camp 2022 Time Blaster or a Hacker Hotel 2025 banana
+// (ir_receive_shot, HH_API_VERSION 6), CRC checked. The banana's team is
+// 0 red, 1 green, 2 blue, 3 yellow, 4 magenta, 5 light blue; the Time
+// Blaster's team is one bit per colour (1 red, 2 green, 4 blue).
+#define HH_SHOT_SHOOT 1  // parameter: the channel (0 .. 15)
+#define HH_SHOT_HEAL 2   // parameter: the channel
+#define HH_SHOT_TEAM 8   // the banana: take this team
+#define HH_SHOT_BYTE 10  // the banana: one byte of text, see HH_SHOT_BYTE_OF()
+typedef struct {
+    uint8_t team;       // 0 .. 7
+    uint8_t trigger;    // 1: from a trigger pull
+    uint8_t command;    // HH_SHOT_*
+    uint8_t parameter;  // 0 .. 15
+} hh_ir_shot_t;
+#define HH_SHOT_BYTE_OF(s) ((uint8_t)((s).team << 5 | (s).trigger << 4 | (s).parameter))
 
 // What the firmware offers an app. New members only ever go at the end:
 // check `version` (or `size`) before using one that came after version 1.
@@ -177,6 +193,12 @@ typedef struct {
     // if no answer comes.
     bool (*ir_send_packet)(uint8_t type, const void *data, uint8_t length);
     bool (*ir_receive_packet)(hh_ir_packet_t *packet);
+
+    // Shots (HH_API_VERSION 6): the 16-bit frames of the Fri3d Camp 2022
+    // Time Blaster and the Hacker Hotel 2025 banana. False when none came
+    // in; the firmware keeps up to 7. The banana sends a NEC frame (address
+    // 0) before each shot, for the bar's LED strips: ir_receive() gets it.
+    bool (*ir_receive_shot)(hh_ir_shot_t *shot);
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.

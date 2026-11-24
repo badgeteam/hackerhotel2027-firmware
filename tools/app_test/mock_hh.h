@@ -94,6 +94,15 @@ static int m_step_brightness(int dir) {  // as menu.c
     return i;
 }
 
+static hh_ir_shot_t mock_shot;  // the next shot, if mock_shot_pending
+static bool mock_shot_pending;
+static bool m_ir_receive_shot(hh_ir_shot_t* s) {
+    if (!mock_shot_pending) return false;
+    *s = mock_shot;
+    mock_shot_pending = false;
+    return true;
+}
+
 static const hh_api_t mock_api = {
     .version = HH_API_VERSION, .size = sizeof(hh_api_t),
     .set = m_set, .get = m_get, .clear = m_clear, .set_brightness = m_set_brightness, .brightness = m_brightness,
@@ -104,7 +113,7 @@ static const hh_api_t mock_api = {
     .draw_text = m_draw_text_at, .text_width = m_text_width, .polar = layout_polar,
     .set_rgb = m_set_rgb, .set_linear = m_set_linear, .sin8 = AppUtil_Sin8, .hsv = AppUtil_Hsv,
     .isqrt = AppUtil_Isqrt, .atan8 = AppUtil_Atan8, .draw_number = m_draw_number,
-    .step_brightness = m_step_brightness,
+    .step_brightness = m_step_brightness, .ir_receive_shot = m_ir_receive_shot,
 };
 
 // The test's checks

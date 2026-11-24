@@ -13,6 +13,11 @@
 //   9 ms + 2.25 ms  a NEC repeat code: no bits
 //   4.5 ms + 4.5 ms a Samsung32 frame (Samsung TV remotes): 32 bits as
 //                   NEC, the address byte twice (0x07 0x07 for a TV)
+//   8.4 ms + 4.2 ms a shot (JVC timing, 526 us marks, 526 / 1574 us
+//                   spaces): 16 bits, then silence. The Fri3d Camp 2022
+//                   Time Blaster's and the Hacker Hotel 2025 banana's.
+//                   The receiver takes it for a NEC leader; 16 bits and
+//                   then nothing make it a shot. See IrShot_Decode().
 //   4.5 ms + 2.25 ms a packet: type, length n (0 .. IR_PACKET_DATA_MAX),
 //                   n data bytes, CRC-8 (polynomial 0x07) over the bytes
 //                   before it. A packet is badge to badge (name swap,
@@ -71,8 +76,30 @@ typedef enum {
     IR_RX_NEC,         // a NEC or Samsung32 frame: its 32 bits are in bytes[0..3]
     IR_RX_NEC_REPEAT,  // a NEC repeat code
     IR_RX_PACKET,      // a packet with a good CRC: type bytes[0], length bytes[1], data from bytes[2]
+    IR_RX_SHOT,        // 16 bits after a NEC-like leader, then silence: bytes[0..1] (IrShot_Decode)
 } ir_rx_event_t;
+
+// After this long without an edge, a frame that stopped after 16 bits is a
+// shot (longer than any bit's space, shorter than the gap between frames)
+#define IR_SHOT_SILENCE_US 4000
 
 void IrRx_Reset(ir_rx_t* rx);
 // mark: the interval that just ended was a mark (carrier on), else a space
 ir_rx_event_t IrRx_Interval(ir_rx_t* rx, bool mark, uint32_t us);
+// No edge for us microseconds (the line is idle): ends a shot, which has
+// no edge after its stop mark until the next frame
+ir_rx_event_t IrRx_Silence(ir_rx_t* rx, uint32_t us);
+
+// A shot's 16 bits (Fri3d Camp 2022 Time Blaster, Hacker Hotel 2025
+// banana), LSB first: team (3 bits), trigger (1), command (4), parameter
+// (4), CRC (4). Commands: 1 shoot, 2 heal (parameter: the channel), 8 set
+// team, 10 one byte of text (team << 5 | trigger << 4 | parameter).
+typedef struct {
+    uint8_t team, trigger, command, parameter;
+} ir_shot_t;
+
+// The CRC of a shot's low 12 bits, as the Time Blaster's documentation gives it
+uint8_t IrShot_Crc(uint16_t bits);
+// false if the CRC is wrong
+bool IrShot_Decode(uint16_t bits, ir_shot_t* shot);
+uint16_t IrShot_Encode(const ir_shot_t* shot);  // with its CRC

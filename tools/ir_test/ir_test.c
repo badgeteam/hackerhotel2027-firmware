@@ -26,7 +26,8 @@ static unsigned rnd(unsigned n) {
 }
 
 typedef struct {
-    int nec, repeats, packets;
+    int nec, repeats, packets, shots;
+    uint16_t shot;
     uint32_t nec_data;
     uint8_t packet[IR_FRAME_BYTES];
 } result_t;
@@ -38,6 +39,10 @@ static void feed(ir_rx_t* rx, result_t* r, int mark, uint32_t us) {
             r->nec_data = rx->bytes[0] | rx->bytes[1] << 8 | rx->bytes[2] << 16 | (uint32_t)rx->bytes[3] << 24;
             break;
         case IR_RX_NEC_REPEAT: r->repeats++; break;
+        case IR_RX_SHOT:
+            r->shots++;
+            r->shot = (uint16_t)(rx->bytes[0] | rx->bytes[1] << 8);
+            break;
         case IR_RX_PACKET:
             r->packets++;
             memcpy(r->packet, rx->bytes, sizeof r->packet);
@@ -184,6 +189,67 @@ int main(void) {
         f.leader_space = IR_SAMSUNG_LEADER_SPACE;  // a packet with a Samsung leader: 32 bits of it as NEC
         send(&rx, &r, &f, 0, 0, -1);
         CHECK(r.packets == 0, "a 4.5 ms leader space never gives a packet");
+    }
+
+    // Shots: a banana's, as a badge recorded it (tools/badge.py irlog): the
+    // bar's NEC frame, 0.1 s of nothing, then the 16-bit shot (marks
+    // positive, spaces negative)
+    {
+        static const int bar[] = {9176, -4504, 609, -527, 606, -556, 599, -528, 634, -523, 593, -539, 634, -504, 597, -556, 578, -560, 574, -1687, 554, -1696, 508, -1747, 553, -1712, 541, -1704, 548, -1711, 553, -1693, 571, -1690, 578, -559, 540, -615, 577, -560, 574, -607, 544, -589, 551, -608, 491, -1750, 550, -608, 491, -1751, 549, -1714, 547, -1700, 542, -1718, 549, -1716, 491, -1751, 546, -610, 492, -1751, 546};
+        static const int banana[] = {8442, -4182, 546, -1572, 538, -504, 562, -513, 540, -1567, 540, -1567, 540, -514, 540, -515, 490, -565, 551, -1556, 552, -500, 563, -513, 539, -514, 539, -515, 539, -516, 550, -1557, 569, -484, 562};
+        result_t r = {0};
+        IrRx_Reset(&rx);
+        for (unsigned i = 0; i < sizeof bar / sizeof bar[0]; i++) feed(&rx, &r, bar[i] > 0, (uint32_t)abs(bar[i]));
+        feed(&rx, &r, 0, 100000);
+        for (unsigned i = 0; i < sizeof banana / sizeof banana[0]; i++) feed(&rx, &r, banana[i] > 0, (uint32_t)abs(banana[i]));
+        CHECK(r.nec == 1 && r.nec_data == 0xBF40FF00u, "the bar's NEC frame (%08x)", r.nec_data);
+        CHECK(IrRx_Silence(&rx, IR_SHOT_SILENCE_US - 1) == IR_RX_NOTHING, "3.999 ms of silence: not yet a shot");
+        CHECK(IrRx_Silence(&rx, IR_SHOT_SILENCE_US) == IR_RX_SHOT, "4 ms of silence: a shot");
+        uint16_t bits = (uint16_t)(rx.bytes[0] | rx.bytes[1] << 8);
+        ir_shot_t sh;
+        CHECK(bits == 0x4119 && IrShot_Decode(bits, &sh) && sh.team == 1 && sh.trigger == 1 && sh.command == 1 && sh.parameter == 1,
+              "the banana's shot: %04x, team %d, trigger %d, command %d, channel %d", bits, sh.team, sh.trigger, sh.command, sh.parameter);
+        CHECK(IrRx_Silence(&rx, 50000) == IR_RX_NOTHING, "and only once");
+
+        // the next frame's first mark ends the silence too, if nobody asked
+        int shots = 0;
+        IrRx_Reset(&rx);
+        for (unsigned i = 0; i < sizeof banana / sizeof banana[0]; i++) feed(&rx, &r, banana[i] > 0, (uint32_t)abs(banana[i]));
+        shots += IrRx_Interval(&rx, 0, 40000) == IR_RX_SHOT;
+        for (unsigned i = 0; i < sizeof banana / sizeof banana[0]; i++) feed(&rx, &r, banana[i] > 0, (uint32_t)abs(banana[i]));
+        shots += IrRx_Interval(&rx, 0, 40000) == IR_RX_SHOT;
+        CHECK(shots == 2, "two shots in a row, each ended by the next one's leader (%d)", shots);
+    }
+    // Shots through the receiver model, every value
+    {
+        int bad = 0;
+        for (unsigned v = 0; v < 4096; v += 7) {
+            ir_shot_t in = {(uint8_t)(v & 7), (uint8_t)(v >> 3 & 1), (uint8_t)(v >> 4 & 15), (uint8_t)(v >> 8 & 15)}, out;
+            uint16_t bits = IrShot_Encode(&in);
+            ir_frame_t sf;
+            IrFrame_Nec(&sf, bits);
+            sf.bits = 16;
+            sf.leader_mark = 8400, sf.leader_space = 4200;
+            result_t r = {0};
+            IrRx_Reset(&rx);
+            send(&rx, &r, &sf, 100, 60, -1);
+            bad += r.shots != 1 || !IrShot_Decode(r.shot, &out) ||
+                   out.team != in.team || out.trigger != in.trigger || out.command != in.command || out.parameter != in.parameter;
+        }
+        CHECK(bad == 0, "585 shots through the receiver, all decoded (%d bad)", bad);
+        int missed = 0;
+        for (unsigned v = 0; v < 4096; v++) {
+            ir_shot_t in = {(uint8_t)(v & 7), (uint8_t)(v >> 3 & 1), (uint8_t)(v >> 4 & 15), (uint8_t)(v >> 8 & 15)}, out;
+            uint16_t bits = IrShot_Encode(&in);
+            for (int b = 0; b < 16; b++) missed += IrShot_Decode((uint16_t)(bits ^ 1u << b), &out);
+        }
+        CHECK(missed == 0, "the CRC catches every single flipped bit (%d missed)", missed);
+        // a NEC frame is never a shot: its 32 bits run on past 16
+        result_t r = {0};
+        IrRx_Reset(&rx);
+        IrFrame_Nec(&f, 0x12ED34CBu);
+        send(&rx, &r, &f, 0, 0, -1);
+        CHECK(r.nec == 1 && r.shots == 0 && IrRx_Silence(&rx, 40000) == IR_RX_NOTHING, "a NEC frame gives no shot");
     }
 
     printf("%s  ir_codec: %d of %d checks\n", failures ? "FAIL" : "ok  ", checks - failures, checks);

@@ -1,6 +1,13 @@
 {
  "apps": [
   {
+   "name": "SIMON",
+   "file": "simon.hhapp",
+   "bytes": 1364,
+   "api": 2,
+   "description": "Simon says: the badge plays a sequence on the four arms next to the buttons, and you press it back. Every round adds one. The top arm shows how far you are, and lights green when you got it all. A wrong button, or 5 s without one, ends the game; any button then starts again. The grid shows the length; the outline the length and (dimly) the best so far. As in the previous firmware's Simon."
+  },
+  {
    "name": "SNAKE",
    "file": "snake.hhapp",
    "bytes": 1428,
@@ -13,6 +20,13 @@
    "bytes": 620,
    "api": 2,
    "description": "Sparkles on the grid and the outline, a rainbow turning round the arms. B: more sparkles, D: fewer."
+  },
+  {
+   "name": "WHACK",
+   "file": "whack.hhapp",
+   "bytes": 1048,
+   "api": 2,
+   "description": "Whack-a-mole: a random arm lights up from its tip towards the centre, one LED at a time. Stop it with any button before it reaches the centre: the sooner, the more points (5 with one LED lit, 2 with four). Reaching the centre ends the game, and so does pressing while nothing is lit. It gets faster every 3 hits. The grid shows the points, the outline the best so far; after the end, any button starts again. As in the previous firmware's whack-a-mole."
   }
  ]
 }

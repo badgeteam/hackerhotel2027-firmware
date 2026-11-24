@@ -140,6 +140,7 @@ uint8_t LEDMatrix_GetPixel(uint8_t row, uint8_t col) {
     return row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS ? s_cells[row][col] : 0;
 }
 void LEDMatrix_Clear(void) { memset(s_cells, 0, sizeof s_cells); }
+void LEDMatrix_Show(void) {}  // the emulator sends a frame from Delay_Ms(), after the drawing
 void LEDMatrix_SetBrightness(uint8_t b) { s_brightness = b; }
 uint8_t LEDMatrix_GetBrightness(void) { return s_brightness; }
 

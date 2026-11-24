@@ -194,7 +194,8 @@ colliding) when no answer comes.
 
 Pick a type of your own for your app's packets. `'H'` and `'R'` are SAY
 HI's name swap: outside apps the firmware answers them; while an app runs,
-the app gets them like any other.
+the app gets them like any other. `apps/four` (4 in a row) uses `'F'`, and is a
+full example: invites, moves, answers and sending again.
 
 ```c
 // Ping: B sends, any badge that hears it lights up

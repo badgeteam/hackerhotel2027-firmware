@@ -57,6 +57,7 @@ class Emu:
         self.frame = None
         self.frames = 0
         self.ir_sent = []  # the IR packets it sent, as bytes (type, length, data)
+        self.log = []      # the firmware's log lines ("L"), apps' print() too
         self.peers = []    # emulators that receive its IR packets (link())
         self.lock = threading.Lock()
         threading.Thread(target=self._read, daemon=True).start()
@@ -69,6 +70,8 @@ class Emu:
             elif kind == "F":
                 self.frame = bytes.fromhex(rest)
                 self.frames += 1
+            elif kind == "L":
+                self.log.append(rest)
             elif kind == "P":
                 self.ir_sent.append(bytes.fromhex(rest))
                 for peer in self.peers:

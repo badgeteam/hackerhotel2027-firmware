@@ -259,8 +259,15 @@ badge, close by. Open the menu (hold **A**), press **D** once to reach
 - **B**, **C** or **D** ends the greeting early. What ran before then
   goes on.
 
+**4 in a row** (`apps/four`, in the web interface's App library) plays
+against another badge over infrared. Start it on both badges and point
+them at each other: they pair up by themselves, and the badge that asked
+first starts. C / D aim, B drops. Drop a disc before another badge
+answers, and you play against your own badge. After 20 s without an
+answer from the other badge, the game ends.
+
 An app gets the infrared to itself: a badge that runs an app does not
-answer. The packets (`ir_codec.h`) can carry up to 32 bytes, and apps can
+answer a SAY HI. The packets (`ir_codec.h`) can carry up to 32 bytes, and apps can
 send and receive them too (`apps/README.md`).
 
 ## What the badge stores
@@ -306,6 +313,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/codec_test/run.sh` | checks that the web interface and the firmware decode animations the same way |
 | `tools/app_test/run.sh` | checks the apps: game rules on the PC (`mock_hh.h` stands in for the firmware), then every app in the emulator with random buttons |
 | `tools/text_test/run.sh` | checks text items: the web interface's payloads, played on the emulator |
+| `tools/four_test/run.sh` | checks 4 in a row: its rules on the PC, and whole games on two emulators |
 | `tools/ir_test/run.sh` | checks the infrared codec with a model of the receiver, and the name swap on two emulators |
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, the text on the grid |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |

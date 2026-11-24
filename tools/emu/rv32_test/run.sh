@@ -7,10 +7,10 @@ root="$here/../../.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 make -s -C "$here/.." >/dev/null
-riscv64-elf-gcc -march=rv32imac -mabi=ilp32 -Os -ffreestanding -fno-builtin -nostdlib -msmall-data-limit=0 \
+"${PREFIX:-riscv64-elf}-gcc" -march=rv32imac -mabi=ilp32 -Os -ffreestanding -fno-builtin -nostdlib -msmall-data-limit=0 \
     -I"$root/apps" -T "$root/apps/app.ld" -Wl,--no-relax -Wl,--no-warn-rwx-segments -nostartfiles \
     -o "$out/test.elf" "$here/app.c" "$here/work.c" "$root/apps/sdk.c"
-riscv64-elf-objcopy -O binary -j .image "$out/test.elf" "$out/test.hhapp"
+"${PREFIX:-riscv64-elf}-objcopy" -O binary -j .image "$out/test.elf" "$out/test.hhapp"
 cc -O2 -o "$out/host" "$here/host.c" "$here/work.c"
 "$out/host" > "$out/want"
 python3 - "$here/../build/hh27-emu" "$out/flash.bin" "$out/test.hhapp" > "$out/got" <<'PY'

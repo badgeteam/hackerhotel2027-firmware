@@ -1,0 +1,47 @@
+# Builds the firmware and the apps, and runs every test, on each pull
+# request and on main: tools/*/run.sh, the emulator's RV32 interpreter test
+# and the web flasher's test. The toolchain is Ubuntu's, as ch32fun's own CI
+# uses.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    env:
+      PREFIX: riscv64-unknown-elf  # the Makefiles' default is riscv64-elf (Arch)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get -yqq purge man-db || true  # its trigger is slow
+          sudo apt-get install -y --no-install-recommends gcc-riscv64-unknown-elf libnewlib-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Firmware
+        run: |
+          make MINICHLINK=ch32fun/minichlink ledmatrix.bin
+          ls -l ledmatrix.bin
+
+      - name: Apps
+        run: make -C apps
+
+      - name: Tests
+        run: |
+          set -e
+          node tools/isp_test/isp_test.js
+          sh tools/emu/rv32_test/run.sh
+          for t in tools/*/run.sh; do
+            echo "::group::$t"
+            sh "$t"
+            echo "::endgroup::"
+          done

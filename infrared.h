@@ -1,11 +1,13 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#include "ir_codec.h"  // IR_PACKET_DATA_MAX
 
-// NEC infrared remote protocol, sent with the IR LED (D315, cathode on PB21)
-// and received with the 38kHz IR receiver module (S1, output on PB19).
-// Received too: Samsung32 (Samsung TV remotes), NEC with a 4.5ms leader
-// mark and the address byte sent twice; it arrives as 16-bit extended NEC,
+// Infrared, sent with the IR LED (D315, cathode on PB21) and received with
+// the 38kHz IR receiver module (S1, output on PB19): NEC frames, as remote
+// controls send, and packets, from badge to badge (ir_codec.h has both
+// formats).
+// Samsung32 frames (Samsung TV remotes) arrive as 16-bit extended NEC,
 // address 0x0707 for a Samsung TV. A held Samsung button repeats the whole
 // frame, so it never sets `repeat`.
 //
@@ -35,3 +37,18 @@ bool infrared_tx_busy(void);
 
 // Fetch the next received message; returns false when there is none.
 bool infrared_receive(infrared_nec_message_t* message);
+
+// Packets: a type, then up to IR_PACKET_DATA_MAX (32) data bytes, with a
+// CRC on air. The receiver keeps up to 3 that came in with a good CRC;
+// more are dropped until they are taken.
+typedef struct {
+    uint8_t type;
+    uint8_t length;
+    uint8_t data[IR_PACKET_DATA_MAX];
+} infrared_packet_t;
+
+// Start sending a packet in the background: 0.65 s at most (6.75 ms + 1.1
+// or 2.2 ms per bit, 8 * (length + 3) bits). False while something else
+// goes out, or if length > IR_PACKET_DATA_MAX.
+bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length);
+bool infrared_receive_packet(infrared_packet_t* packet);

@@ -23,10 +23,10 @@ earn its place. This is how the space is split, and what uses it now:
 
 | Memory | Size | Use | In use now |
 |---|---|---|---|
-| Flash | 30 KB | firmware | 21.5 KB |
-| Flash | 31 KB | item store: animations and apps | what you store |
+| Flash | 30 KB | firmware | 23.4 KB |
+| Flash | 31 KB | item store: animations, texts and apps | what you store |
 | Flash | 1 KB | persistent record: name, brightness, boot item, app data | 2 × 512 B |
-| RAM | 8 KB | firmware data and stack | 3.9 KB data, the rest is stack |
+| RAM | 8 KB | firmware data and stack | 4.0 KB data, the rest is stack |
 | RAM | 12 KB | the app that runs (its code and data); while an animation plays, the animation decoder | snake: 1.4 KB code + 0.6 KB data; the decoder 3.5 KB |
 
 How we juggle space and usability:
@@ -76,11 +76,11 @@ C bottom left, D bottom right.
 | **Hold A** | the menu, also from an app (hold it for a second there) |
 | **B** / **D** | brighter / dimmer (when no app runs) |
 
-**The menu** lists the name tag, every stored animation, text and app,
-and the badge's settings. The name of the entry shows on the grid, the
-outline shows where you are in the list, and the arms show the group:
-orange the name tag, purple animations, blue texts, green apps, white
-settings.
+**The menu** lists the name tag, SAY HI, every stored animation, text and
+app, and the badge's settings. The name of the entry shows on the grid,
+the outline shows where you are in the list, and the arms show the group:
+orange the name tag and SAY HI, purple animations, blue texts, green apps,
+white settings.
 
 | In the menu | |
 |---|---|
@@ -88,6 +88,9 @@ settings.
 | **Tap A** | start it (or change the setting) |
 | **Hold A** | close the menu, and go on with what ran before |
 | no button for 20 s | the menu closes |
+
+**SAY HI** swaps names with another badge over infrared: see
+[Meeting other badges](#meeting-other-badges).
 
 The settings in the menu:
 
@@ -241,6 +244,25 @@ The window shows the badge. Use these keys:
 `tools/emu/rv32_test/run.sh` checks the interpreter against the same
 code built for the PC.
 
+## Meeting other badges
+
+Hold your badge so that its infrared LED and receiver face the other
+badge, close by. Open the menu (hold **A**), press **D** once to reach
+**SAY HI**, and tap **A**.
+
+- Your badge shows `HI?` and sends your name.
+- The other badge answers with its name, whatever it shows, as long as no
+  app runs there. Both badges show `HI` and the other's name, scrolling
+  through once.
+- Without an answer, your badge tries 4 times in 6 seconds, then shows
+  `NO REPLY`.
+- **B**, **C** or **D** ends the greeting early. What ran before then
+  goes on.
+
+An app gets the infrared to itself: a badge that runs an app does not
+answer. The packets (`ir_codec.h`) can carry up to 32 bytes, and apps can
+send and receive them too (`apps/README.md`).
+
 ## What the badge stores
 
 The top 32 KB of flash is the item store (`store.h`):
@@ -284,5 +306,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/codec_test/run.sh` | checks that the web interface and the firmware decode animations the same way |
 | `tools/app_test/run.sh` | checks the apps: game rules on the PC (`mock_hh.h` stands in for the firmware), then every app in the emulator with random buttons |
 | `tools/text_test/run.sh` | checks text items: the web interface's payloads, played on the emulator |
+| `tools/ir_test/run.sh` | checks the infrared codec with a model of the receiver, and the name swap on two emulators |
+| `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, the text on the grid |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

@@ -1,0 +1,151 @@
+#include "ir_codec.h"
+#include <string.h>
+
+// ---- Frames to send ----
+
+void IrFrame_Nec(ir_frame_t* f, uint32_t data) {
+    f->leader_mark = IR_NEC_LEADER_MARK;
+    f->leader_space = IR_NEC_LEADER_SPACE;
+    f->bits = 32;
+    for (int i = 0; i < 4; i++) f->bytes[i] = (uint8_t)(data >> (8 * i));
+}
+
+void IrFrame_NecRepeat(ir_frame_t* f) {
+    f->leader_mark = IR_NEC_LEADER_MARK;
+    f->leader_space = IR_NEC_REPEAT_SPACE;
+    f->bits = 0;
+}
+
+uint8_t Ir_Crc8(const uint8_t* p, unsigned n) {
+    uint8_t c = 0;
+    while (n--) {
+        c ^= *p++;
+        for (int i = 0; i < 8; i++) c = (uint8_t)(c & 0x80 ? (c << 1) ^ 0x07 : c << 1);
+    }
+    return c;
+}
+
+bool IrFrame_Packet(ir_frame_t* f, uint8_t type, const uint8_t* data, uint8_t length) {
+    if (length > IR_PACKET_DATA_MAX) return false;
+    f->leader_mark = IR_PACKET_LEADER_MARK;
+    f->leader_space = IR_PACKET_LEADER_SPACE;
+    f->bytes[0] = type;
+    f->bytes[1] = length;
+    if (length) memcpy(&f->bytes[2], data, length);
+    f->bytes[2 + length] = Ir_Crc8(f->bytes, 2u + length);
+    f->bits = (uint16_t)(8 * (length + 3));
+    return true;
+}
+
+uint16_t IrFrame_Segments(const ir_frame_t* f) { return (uint16_t)(2 + 2 * f->bits + 1); }
+
+uint16_t IrFrame_SegmentUs(const ir_frame_t* f, uint16_t i) {
+    if (i == 0) return f->leader_mark;
+    if (i == 1) return f->leader_space;
+    i -= 2;
+    if (!(i & 1)) return IR_BIT_MARK;  // a bit's mark, or the stop mark
+    unsigned bit = i / 2;
+    return (f->bytes[bit / 8] >> (bit % 8)) & 1 ? IR_ONE_SPACE : IR_ZERO_SPACE;
+}
+
+// ---- Receiving ----
+
+enum {
+    RX_IDLE = 0,      // waiting for a leader mark
+    RX_LEADER_SPACE,  // after a leader mark
+    RX_BIT_MARK,      // expecting a bit's mark
+    RX_BIT_SPACE,     // expecting a bit's space: 562 us (0) or 1687 us (1)
+    RX_REPEAT_MARK,   // expecting the stop mark of a repeat code
+    RX_STOP_MARK,     // the frame is in; its stop mark ends it
+};
+
+// Receivers stretch marks and shorten spaces, and the badge's clock is an
+// RC oscillator: allow 40% either way. A 4.5 ms space after a 9 ms mark is
+// tried before 2.25 ms (their ranges touch).
+static bool near(uint32_t us, uint32_t nominal) { return us > nominal * 6 / 10 && us < nominal * 14 / 10; }
+
+// The two leader marks split halfway, at 6.75 ms, so their ranges do not
+// overlap; after the short one (a packet's or Samsung32's), so do the two
+// spaces, at 3.375 ms
+#define LEADER_SPLIT ((IR_NEC_LEADER_MARK + IR_PACKET_LEADER_MARK) / 2)
+#define SHORT_SPACE_SPLIT ((IR_SAMSUNG_LEADER_SPACE + IR_PACKET_LEADER_SPACE) / 2)
+
+// Bits get wider windows, as the previous firmware had: a receiver may add
+// 150 us to a mark and take as much off a space, plus jitter. A space
+// longer than halfway between 562 and 1687 us is a 1.
+static bool bit_mark(uint32_t us) { return us > 250 && us < 1000; }
+static bool bit_space(uint32_t us) { return us > 250 && us < 2400; }
+
+void IrRx_Reset(ir_rx_t* rx) { rx->state = RX_IDLE; }
+
+ir_rx_event_t IrRx_Interval(ir_rx_t* rx, bool mark, uint32_t us) {
+    switch (rx->state) {
+        case RX_IDLE:
+            if (mark && us >= LEADER_SPLIT && near(us, IR_NEC_LEADER_MARK)) {
+                rx->packet = 0;
+                rx->state = RX_LEADER_SPACE;
+            } else if (mark && us < LEADER_SPLIT && near(us, IR_PACKET_LEADER_MARK)) {
+                rx->packet = 1;
+                rx->state = RX_LEADER_SPACE;
+            }
+            return IR_RX_NOTHING;
+
+        case RX_LEADER_SPACE:
+            if (mark) break;
+            if (rx->packet && us >= SHORT_SPACE_SPLIT) {
+                if (!near(us, IR_SAMSUNG_LEADER_SPACE)) break;
+                rx->packet = 0;  // Samsung32: 32 bits, as NEC
+                rx->bits = 0;
+                rx->want = 32;
+                rx->state = RX_BIT_MARK;
+                return IR_RX_NOTHING;
+            }
+            if (near(us, rx->packet ? IR_PACKET_LEADER_SPACE : IR_NEC_LEADER_SPACE)) {
+                rx->bits = 0;
+                rx->want = rx->packet ? 16 : 32;  // a packet: until its length byte is in
+                rx->state = RX_BIT_MARK;
+                return IR_RX_NOTHING;
+            }
+            if (!rx->packet && near(us, IR_NEC_REPEAT_SPACE)) {
+                rx->state = RX_REPEAT_MARK;
+                return IR_RX_NOTHING;
+            }
+            break;
+
+        case RX_BIT_MARK:
+            if (!mark || !bit_mark(us)) break;
+            rx->state = RX_BIT_SPACE;
+            return IR_RX_NOTHING;
+
+        case RX_BIT_SPACE: {
+            if (mark || !bit_space(us)) break;
+            unsigned bit = rx->bits++;
+            if (bit % 8 == 0) rx->bytes[bit / 8] = 0;
+            if (us > (IR_ZERO_SPACE + IR_ONE_SPACE) / 2) rx->bytes[bit / 8] |= (uint8_t)(1u << (bit % 8));
+            if (rx->packet && rx->bits == 16) {
+                if (rx->bytes[1] > IR_PACKET_DATA_MAX) break;
+                rx->want = (uint16_t)(8 * (rx->bytes[1] + 3));
+            }
+            if (rx->bits < rx->want) {
+                rx->state = RX_BIT_MARK;
+                return IR_RX_NOTHING;
+            }
+            rx->state = RX_STOP_MARK;
+            if (!rx->packet) return IR_RX_NEC;
+            unsigned n = rx->bytes[1] + 2u;
+            return Ir_Crc8(rx->bytes, n) == rx->bytes[n] ? IR_RX_PACKET : IR_RX_NOTHING;
+        }
+
+        case RX_REPEAT_MARK:
+            rx->state = RX_IDLE;
+            return mark && bit_mark(us) ? IR_RX_NEC_REPEAT : IR_RX_NOTHING;
+
+        case RX_STOP_MARK:
+            rx->state = RX_IDLE;
+            if (mark && bit_mark(us)) return IR_RX_NOTHING;
+            break;
+    }
+    // Out of step: this interval may be the start of a new leader
+    rx->state = RX_IDLE;
+    return mark ? IrRx_Interval(rx, mark, us) : IR_RX_NOTHING;
+}

@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 #define HH_APP_MAGIC 0x50414848u  // "HHAP"
-#define HH_API_VERSION 4  // 2: draw_text, text_width; 3: polar; 4: the helpers
+#define HH_API_VERSION 5  // 2: draw_text, text_width; 3: polar; 4: the helpers; 5: IR packets
 
 #define HH_APP_RAM_BASE 0x20002000u
 #define HH_APP_RAM_SIZE 0x3000u  // 12 KB: the image and its .bss
@@ -80,6 +80,16 @@ typedef struct {
     uint8_t command;
     uint8_t repeat;  // NEC repeat code: the sender holds its button
 } hh_ir_t;
+
+// An infrared packet from another badge (ir_send_packet, HH_API_VERSION 5).
+// Types 'H' and 'R' are the name swap: outside apps the firmware answers
+// them; while an app runs, the app gets them like any other.
+#define HH_IR_PACKET_MAX 32
+typedef struct {
+    uint8_t type;
+    uint8_t length;  // 0 .. HH_IR_PACKET_MAX
+    uint8_t data[HH_IR_PACKET_MAX];
+} hh_ir_packet_t;
 
 // What the firmware offers an app. New members only ever go at the end:
 // check `version` (or `size`) before using one that came after version 1.
@@ -156,6 +166,17 @@ typedef struct {
     uint8_t (*atan8)(int x, int y);  // the angle of (x, y), y down, in 1/256 turn clockwise from up, as polar
     int (*draw_number)(int x, int y, int32_t n, uint8_t value);  // as draw_text, n in decimal
     int (*step_brightness)(int dir);  // one level up (dir > 0) or down (< 0); the level now, 0 .. 5
+
+    // Infrared packets, badge to badge (HH_API_VERSION 5): a type and up to
+    // HH_IR_PACKET_MAX bytes, with a CRC on air, so what arrives is what
+    // was sent. A packet takes 6.75 ms + 1.1 to 2.2 ms per bit, 8 * (length
+    // + 3) bits: 0.2 s for 10 bytes. send returns false while the previous
+    // packet or NEC frame still goes out. The firmware keeps up to 3
+    // packets that came in; receive returns false when there is none.
+    // Nothing confirms that a packet arrived: answer it, and send again
+    // if no answer comes.
+    bool (*ir_send_packet)(uint8_t type, const void *data, uint8_t length);
+    bool (*ir_receive_packet)(hh_ir_packet_t *packet);
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.

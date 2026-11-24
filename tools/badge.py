@@ -9,6 +9,7 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
   tools/badge.py stop                      stop the running animation or app
   tools/badge.py delete INDEX              remove one item; the items after it move down one
   tools/badge.py erase                     erase every item (the name and app data stay)
+  tools/badge.py factory                   run the factory test now (docs/FACTORY_TEST.md)
   tools/badge.py recommended               erase, then install the recommended app set
                                            (webui/apps/index.json; make -C apps webui)
   tools/badge.py name [TEXT]               show or set the owner's name
@@ -174,6 +175,7 @@ def main():
     d.add_argument("index", type=int)
     sub.add_parser("erase")
     sub.add_parser("recommended")
+    sub.add_parser("factory")
     n = sub.add_parser("name")
     n.add_argument("text", nargs="?")
     sh = sub.add_parser("shoot")
@@ -216,6 +218,9 @@ def main():
         badge.check(badge.send(0x27, args.index, timeout=10000), "delete")
     elif args.cmd == "erase":
         badge.send(0x20, timeout=10000)
+    elif args.cmd == "factory":
+        badge.send(0x52)
+        print("factory test started on the badge")
     elif args.cmd == "recommended":
         here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "webui", "apps")
         import json

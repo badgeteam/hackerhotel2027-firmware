@@ -2,7 +2,7 @@ all : flash
 
 TARGET:=ledmatrix
 TARGET_MCU:=CH643Q
-ADDITIONAL_C_FILES:=debug_output.c ch643_ledpwm.c buttons.c standby.c bootloader.c infrared.c ir_codec.c webusb_protocol.c flash_pages.c store.c persist.c pattern_player.c la04.c app_host.c app_util.c layout.c font.c nametag.c menu.c greet.c
+ADDITIONAL_C_FILES:=debug_output.c ch643_ledpwm.c buttons.c standby.c bootloader.c infrared.c ir_codec.c power.c factory.c webusb_protocol.c flash_pages.c store.c persist.c pattern_player.c la04.c app_host.c app_util.c layout.c font.c nametag.c menu.c greet.c
 PREFIX?=riscv64-elf
 MINICHLINK:=$(dir $(shell which minichlink))
 

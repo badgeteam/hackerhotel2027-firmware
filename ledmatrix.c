@@ -6,6 +6,7 @@
 #include "ch32fun.h"
 #include "ch643_ledpwm.h"
 #include "debug_output.h"
+#include "factory.h"
 #include "greet.h"
 #include "infrared.h"
 #include "app_host.h"
@@ -13,6 +14,7 @@
 #include "nametag.h"
 #include "pattern_player.h"
 #include "persist.h"
+#include "power.h"
 #include "standby.h"
 #include "store.h"
 #include "webusb_protocol.h"
@@ -95,6 +97,7 @@ int main(void) {
     buttons_init();
     WebUSB_Init();
     infrared_init();
+    Power_Init();
 
     Persist_Init();
     // the brightness from last time (B / D or an app set it); full the first time
@@ -104,7 +107,16 @@ int main(void) {
     // the badge starts without it (in case it is an app that hangs).
     // Without a boot item, the name tag.
     g_app_mode = APP_MODE_NAMETAG;
-    if (buttons_raw()) {
+    // A badge whose factory test has not passed yet runs that first (not in
+    // the emulator, which starts with a fresh record every time)
+#ifndef HH_EMU
+    bool factory = !Persist_FactoryPassed();
+#else
+    bool factory = false;
+#endif
+    if (factory) {
+        Factory_Start();
+    } else if (buttons_raw()) {
         buttons_ignore_held();  // that press is not a command
     } else if (Store_BootItem() != STORE_NONE) {
         run_item(Store_BootItem());
@@ -137,6 +149,29 @@ int main(void) {
 
         uint8_t buttons = buttons_poll();
         uint8_t held = buttons_down();
+
+        // The factory test (factory.h) has the LEDs and the buttons until
+        // it passes or is left; USB goes on working
+        if (WebUSB_TakeFactoryRequest() && !factory) {
+            AppHost_Stop();
+            menu_open = false;
+            g_app_mode = APP_MODE_NAMETAG;
+            factory = true;
+            Factory_Start();
+        }
+        if (factory) {
+            factory_status_t f = Factory_Tick(elapsed_ms, buttons, held);
+            if (f == FACTORY_PASSED) Persist_SetFactoryPassed(true);
+            if (f == FACTORY_DONE) {
+                factory = false;
+                hold_ms = 0;
+                buttons_ignore_held();
+                g_app_mode = APP_MODE_NAMETAG;
+                if (Store_BootItem() != STORE_NONE) run_item(Store_BootItem());
+            }
+            Delay_Ms(TICK_MS);
+            continue;
+        }
 
         // The menu (menu.h). While it is open, what ran before waits; a
         // command from the host that changes what runs closes it.

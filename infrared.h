@@ -34,6 +34,9 @@ bool infrared_send_nec(uint16_t address, uint8_t command);
 bool infrared_send_nec_raw(uint32_t data);  // 32 bits, sent LSB first
 bool infrared_send_nec_repeat(void);
 bool infrared_tx_busy(void);
+// Decode the badge's own transmission too, as the receiver sees it (a
+// reflection, or straight from the LED): the factory test's IR step
+void infrared_set_loopback(bool on);
 
 // Fetch the next received message; returns false when there is none.
 bool infrared_receive(infrared_nec_message_t* message);

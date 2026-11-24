@@ -8,6 +8,7 @@
 #define RECORD_SIZE 512u
 #define COPY_ADDR(i) (PERSIST_FLASH_BASE + (i) * RECORD_SIZE)
 #define RECORD_MAGIC 0x31504848u  // "HHP1"
+#define FACTORY_PASSED 0xA5
 
 typedef struct {
     uint32_t key;  // FNV-1a of the app's name; 0 = free
@@ -21,7 +22,7 @@ typedef struct {
     uint8_t boot_item;
     uint8_t brightness;  // 0: never saved (records before it had 0 here)
     uint8_t keys;  // MENU_KEYS_* (menu.h); 0 in records from before it
-    uint8_t reserved[1];
+    uint8_t factory;  // FACTORY_PASSED once the factory test passed (factory.h); 0 in records from before it
     char name[PERSIST_NAME_LEN];  // NUL-padded
     uint8_t reserved2[16];
     app_slot_t apps[PERSIST_APP_SLOTS];
@@ -103,6 +104,15 @@ uint8_t Persist_Keys(void) { return s_rec.keys; }
 void Persist_SetKeys(uint8_t keys) {
     if (s_rec.keys == keys) return;
     s_rec.keys = keys;
+    changed();
+}
+
+bool Persist_FactoryPassed(void) { return s_rec.factory == FACTORY_PASSED; }
+
+void Persist_SetFactoryPassed(bool passed) {
+    uint8_t v = passed ? FACTORY_PASSED : 0;
+    if (s_rec.factory == v) return;
+    s_rec.factory = v;
     changed();
 }
 

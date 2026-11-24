@@ -25,8 +25,9 @@ static char mock_text[64];  // the last text drawn
 static void m_set(uint16_t s, uint8_t v) { if (s < HH_SLOTS) mock_leds[s] = v; }
 static uint8_t m_get(uint16_t s) { return s < HH_SLOTS ? mock_leds[s] : 0; }
 static void m_clear(void) { memset(mock_leds, 0, sizeof mock_leds); }
-static void m_set_brightness(uint8_t b) { (void)b; }
-static uint8_t m_brightness(void) { return 255; }
+static uint8_t mock_brightness = 255;
+static void m_set_brightness(uint8_t b) { mock_brightness = b; }
+static uint8_t m_brightness(void) { return mock_brightness; }
 static uint8_t m_pressed(void) { return mock_pressed_now; }
 static uint8_t m_held(void) { return mock_pressed_now; }
 static uint32_t m_millis(void) { return mock_ms; }

@@ -18,6 +18,7 @@ static void reset(void) {
     focus = blink = mt = t = acc = 0;
     again = false;
     ir_ms = 0;
+    level_shown = 0;
     mood = last = MOOD_NONE;
     init(&mock_api);
 }
@@ -169,6 +170,37 @@ int main(void) {
         if (mood == MOOD_LOVE) never = false;
     }
     CHECK(never, "B never picks love");
+
+    // brightness: D / C and Vol+ / Vol-, in the firmware's steps; the outline shows it
+    reset();
+    mock_brightness = 255;
+    run(5, HH_BTN_C);
+    CHECK(mock_brightness == 128, "C: dimmer (%d)", mock_brightness);
+    for (int i = 0; i < 40; i++) run(5, 0);
+    int lit = 0;
+    for (int i = 0; i < HH_EDGE_COUNT; i++) lit += mock_leds[layout_edge[i]] > 0;
+    CHECK(lit > 40 && lit < HH_EDGE_COUNT, "the outline shows the level (%d lit)", lit);
+    for (int i = 0; i < 10; i++) run(5, HH_BTN_C);
+    CHECK(mock_brightness == 8, "it stops at the dimmest (%d)", mock_brightness);
+    run(5, HH_BTN_D);
+    CHECK(mock_brightness == 16, "D: brighter (%d)", mock_brightness);
+    mock_brightness = 100;
+    run(5, HH_BTN_D);
+    CHECK(mock_brightness == 128, "from between two levels, up to the next (%d)", mock_brightness);
+    run(500, 0);
+    mock_ir = (hh_ir_t){0x0707, 0x07, 0};
+    mock_ir_pending = true;
+    run(5, 0);
+    CHECK(mock_brightness == 255, "Samsung Vol+: brighter (%d)", mock_brightness);
+    run(500, 0);
+    mock_ir = (hh_ir_t){0x0707, 0x0B, 0};
+    mock_ir_pending = true;
+    run(5, 0);
+    CHECK(mock_brightness == 128, "Samsung Vol-: dimmer (%d)", mock_brightness);
+    for (int i = 0; i < 2000; i++) run(5, 0);
+    lit = 0;
+    for (int i = 0; i < HH_EDGE_COUNT; i++) lit += mock_leds[layout_edge[i]] > 0;
+    CHECK(lit == 0, "and then the outline is dark again (%d)", lit);
 
     // B: a mood now, never the same one twice in a row
     reset();

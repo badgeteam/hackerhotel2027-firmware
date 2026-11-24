@@ -2,7 +2,9 @@
 // lashes. It looks around, blinks, and now and then opens its pupil wide to
 // search and tightens it to focus. Every 30 to 60 s it has a mood: a wink,
 // an eye roll, dizzy, sleepy, suspicious, angry, surprised, hypnotised,
-// crying, crazy or laughing. B: a mood now. A Samsung TV remote picks one:
+// crying, crazy or laughing. B: a mood now; D / C: brighter / dimmer (the
+// outline shows the level). A Samsung TV remote: Vol+ / Vol- the same, and
+// a mood:
 // 3 wink, 4 eye roll, 5 dizzy, 6 sleepy, 7 suspicious, 8 angry, 9 surprised,
 // 0 hypnotised, red crazy, blue crying, yellow laughing, green one at random;
 // and 1 or 2: it falls in love, which it never does by itself.
@@ -36,6 +38,9 @@
 // A held remote key repeats its frame every 108 ms: a key counts after
 // this long without one
 #define IR_QUIET_MS 250
+// Samsung TV remote: volume up and down set the brightness
+#define SAMSUNG_VOL_UP 0x07
+#define SAMSUNG_VOL_DOWN 0x0B
 
 typedef enum {
     MOOD_NONE,
@@ -113,6 +118,11 @@ static int lid_low[HH_GRID_W];  // the lower lid's edge per column, as last draw
 static uint8_t tear_c[TEARS];   // a tear's column + 1; 0 = no tear
 static int tear_y[TEARS], tear_v[TEARS];  // its height, and its speed in 1/4
 static uint32_t ir_ms;          // when the last IR frame came in
+static uint8_t level_shown;     // frames the outline still shows the brightness
+
+// The brightness levels, as the firmware's B / D outside apps
+static const uint8_t levels[] = {8, 16, 32, 64, 128, 255};
+#define LEVELS (int)sizeof levels
 
 // Samsung TV remote (Samsung32) keys, by their command; MOOD_NONE: at random
 static const uint8_t samsung_keys[][2] = {
@@ -191,6 +201,22 @@ static rgb_t mix(rgb_t a, rgb_t b, uint8_t amt) {
 static void circle(uint8_t a, int r, int* x, int* y) {
     *x = (sin8((uint8_t)(a + 64)) - 128) * r / 128;
     *y = (sin8(a) - 128) * r / 128;
+}
+
+// The level at or just above the brightness now
+static int level(void) {
+    int i = 0;
+    while (i < LEVELS - 1 && levels[i] < hh->brightness()) i++;
+    return i;
+}
+
+// One brightness level up (dir 1) or down (-1); the outline shows it
+static void brighter(int dir) {
+    int i = level();
+    if (dir > 0 && levels[i] == hh->brightness() && i < LEVELS - 1) i++;
+    if (dir < 0 && i > 0) i--;
+    hh->set_brightness(levels[i]);
+    level_shown = FPS;
 }
 
 // ------------------------------------------------------------------ moods
@@ -556,6 +582,13 @@ static void draw(void) {
         }
     }
 
+    // the brightness level, for a second after a change: a bar on the outline
+    if (level_shown) {
+        level_shown--;
+        int lit = HH_EDGE_COUNT * (level() + 1) / LEVELS;
+        for (int i = 0; i < lit; i++) hh->set(hh->edge[i], 160);
+    }
+
     // lashes: upper ones on the top three arms, lower ones on the bottom two;
     // they fold in with the lids and spring out again
     uint8_t hue = phase(t, 8);
@@ -597,7 +630,10 @@ static void now(mood_t m) {
 }
 
 static void tick(uint32_t elapsed_ms) {
-    if (hh->pressed() & HH_BTN_B) now(pick());
+    uint8_t pressed = hh->pressed();
+    if (pressed & HH_BTN_B) now(pick());
+    if (pressed & HH_BTN_D) brighter(1);
+    if (pressed & HH_BTN_C) brighter(-1);
     // a Samsung TV remote sends its address byte twice (plain NEC: with its
     // inverse, so never a 16-bit address with both bytes the same)
     hh_ir_t ir;
@@ -606,6 +642,8 @@ static void tick(uint32_t elapsed_ms) {
         bool fresh = ms - ir_ms >= IR_QUIET_MS || !ir_ms;
         ir_ms = ms ? ms : 1;
         if (!fresh || ir.repeat || ir.address <= 0xFF || (ir.address >> 8) != (ir.address & 0xFF)) continue;
+        if (ir.command == SAMSUNG_VOL_UP) brighter(1);
+        if (ir.command == SAMSUNG_VOL_DOWN) brighter(-1);
         for (unsigned i = 0; i < sizeof samsung_keys / sizeof samsung_keys[0]; i++)
             if (samsung_keys[i][0] == ir.command) now(samsung_keys[i][1] == MOOD_NONE ? pick() : (mood_t)samsung_keys[i][1]);
     }

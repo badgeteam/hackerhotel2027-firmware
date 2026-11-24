@@ -19,6 +19,8 @@ A slot is the LED's place in the matrix: row (COM, PB0..PB15) * 24 + col
 - LA04 neighbours (la04_tables.h): per position in ORDER, where the LA04
   decoder finds the neighbour above, to the left, to the right and below.
 
+- POLAR: each slot's place, as distance from the grid's centre (1/4 mm)
+  and angle (1/256 turn, clockwise from the top), for round effects.
 - GAMMA: brightness 0..255 as the web interface shows it (like a screen,
   sRGB) to PWM duty: gamma 2.2. LEDs are linear, so without it every
   mid-level value comes out far too bright.
@@ -110,6 +112,20 @@ def main():
         js.write("const LAYOUT_GRID = %s;\n" % json.dumps([[None if v == NONE else v for v in row] for row in grid]))
         js.write("const LAYOUT_GAMMA = %s;\n" % json.dumps(gamma))
 
+    # Where each LED is, from the grid's centre: distance in 1/4 mm (at most
+    # 255) and angle in 1/256 turn, clockwise from the top. An RGB LED's
+    # three slots get the same place.
+    def place(l):
+        dx, dy = l["x"] - cx, l["y"] - cy
+        return min(255, round(math.hypot(dx, dy) * 4)), round(angle(dx, dy) * 256 / 360) % 256
+
+    polar = [(0, 0)] * (COLS * 16)
+    for l in leds:
+        polar[l["row"] * COLS + l["col"]] = place(l)
+    for l in board["rgb_leds"]:
+        for row in (l["row"], l["green_row"], l["blue_row"]):
+            polar[row * COLS + l["col"]] = place(l)
+
     write_la04_tables(order, grid)
 
     out = open(os.path.join(HERE, "..", "layout.c"), "w")
@@ -129,6 +145,9 @@ def main():
     out.write("};\n\nconst uint16_t layout_order[HH_SLOTS] = {\n")
     for i in range(0, len(order), 16):
         out.write("    " + ", ".join("%3d" % v for v in order[i:i + 16]) + ",\n")
+    out.write("};\n\nconst uint8_t layout_polar[HH_SLOTS][2] = {\n")
+    for i in range(0, len(polar), 8):
+        out.write("    " + ", ".join("{%3d, %3d}" % pa for pa in polar[i:i + 8]) + ",\n")
     out.write("};\n\nconst uint8_t layout_gamma[256] = {\n")
     for i in range(0, 256, 16):
         out.write("    " + ", ".join("%3d" % v for v in gamma[i:i + 16]) + ",\n")

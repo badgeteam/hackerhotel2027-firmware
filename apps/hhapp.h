@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 #define HH_APP_MAGIC 0x50414848u  // "HHAP"
-#define HH_API_VERSION 2  // 2: draw_text, text_width
+#define HH_API_VERSION 3  // 2: draw_text, text_width; 3: polar
 
 #define HH_APP_RAM_BASE 0x20002000u
 #define HH_APP_RAM_SIZE 0x3000u  // 12 KB: the image and its .bss
@@ -125,6 +125,13 @@ typedef struct {
     // columns per character, without the blank column after the last one.
     int (*draw_text)(int x, int y, const char *text, uint8_t value);
     int (*text_width)(const char *text);
+
+    // Where each LED is (HH_API_VERSION 3), for round effects (ripples,
+    // spirals): polar[slot][0] is the distance from the grid's centre in
+    // 1/4 mm (at most 255; the outline is 21 to 45 mm out), polar[slot][1]
+    // the angle in 1/256 turn, clockwise from the top. An RGB LED's three
+    // slots have the same place.
+    const uint8_t (*polar)[2];
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.

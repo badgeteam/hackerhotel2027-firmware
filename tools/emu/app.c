@@ -15,7 +15,7 @@
 enum {
     M_SET, M_GET, M_CLEAR, M_SET_BRIGHTNESS, M_BRIGHTNESS, M_GRID, M_EDGE, M_RGB, M_PRESSED, M_HELD,
     M_MILLIS, M_RANDOM, M_IR_SEND, M_IR_RECEIVE, M_STANDBY, M_EXIT, M_PRINT, M_NAME, M_SET_NAME, M_LOAD,
-    M_SAVE, M_DRAW_TEXT, M_TEXT_WIDTH, M_COUNT
+    M_SAVE, M_DRAW_TEXT, M_TEXT_WIDTH, M_POLAR, M_COUNT
 };
 _Static_assert(sizeof(hh_api_t) == 8 + 8 * M_COUNT, "app.c lists every member of hh_api_t");
 
@@ -37,6 +37,7 @@ static void build_rom(void) {
     table[1 + M_GRID] = rom_put(&at, s_api->grid, sizeof(uint16_t) * HH_GRID_W * HH_GRID_H);
     table[1 + M_EDGE] = rom_put(&at, s_api->edge, sizeof(uint16_t) * HH_EDGE_COUNT);
     table[1 + M_RGB] = rom_put(&at, s_api->rgb, sizeof(hh_rgb_t) * HH_RGB_COUNT);
+    table[1 + M_POLAR] = rom_put(&at, s_api->polar, 2 * HH_SLOTS);
     s_name_addr = at;
     at += HH_NAME_MAX + 4;
 }

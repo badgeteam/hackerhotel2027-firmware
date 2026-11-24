@@ -72,7 +72,7 @@ static const hh_api_t mock_api = {
     .pressed = m_pressed, .held = m_held, .millis = m_millis, .random = m_random,
     .ir_send = m_ir_send, .ir_receive = m_ir_receive, .standby = m_standby, .exit = m_exit, .print = m_print,
     .name = m_name, .set_name = m_set_name, .load = m_load, .save = m_save,
-    .draw_text = m_draw_text, .text_width = m_text_width,
+    .draw_text = m_draw_text, .text_width = m_text_width, .polar = layout_polar,
 };
 
 // The test's checks

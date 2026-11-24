@@ -56,6 +56,12 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   - `grid[y][x]`: the centre grid, 17 × 16, with `HH_NONE` in the corners.
   - `edge[]`: the outline, clockwise from the top.
   - `rgb[]`: the RGB LEDs on the arms, by arm and rank.
+- **Positions.** `polar[slot]` gives each LED's place: distance from the
+  grid's centre in 1/4 mm, and angle in 1/256 turn, clockwise from the top
+  (API version 3). The animations (ripple, galaxy, ...) use it for round
+  effects. `fx.h` has their helpers: `sin8()`, `hsv()`, `fx_set()` (which
+  takes linear light, as the previous firmware's animations did), and B / D
+  for the brightness.
 - **Text.** `draw_text(x, y, text, value)` writes text on the centre
   grid, with its top left corner at column `x`, row `y`, in the
   firmware's 5 × 8 font (7 rows, plus one for descenders), which has all
@@ -93,9 +99,9 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 
 ## Limits
 
-- **API version.** An app built against `HH_API_VERSION` 2 (the text
-  calls) does not start on firmware with version 1; update the badge
-  first. `tools/badge.py list` prints the firmware's version ("app API").
+- **API version.** An app built against `HH_API_VERSION` 3 (`polar`)
+  does not start on firmware with version 2 or 1, and one built against 2
+  (the text calls) not on version 1; update the badge first. `tools/badge.py list` prints the firmware's version ("app API").
 
 - **Size.** The image and its `.bss` together must fit in 12 KB of RAM
   (`HH_APP_RAM_SIZE`). The store holds 31 KB for all items together.

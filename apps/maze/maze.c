@@ -139,28 +139,17 @@ static void step(uint8_t pressed, uint8_t held) {
     }
 }
 
-static void set_rgb(int i, uint8_t r, uint8_t g, uint8_t b) {
-    hh->set(hh->rgb[i].r, r);
-    hh->set(hh->rgb[i].g, g);
-    hh->set(hh->rgb[i].b, b);
-}
-
-static void number(unsigned n) {
-    char text[3] = {(char)('0' + n % 10), 0, 0};
-    hh->draw_text((HH_GRID_W - hh->text_width(text)) / 2, TEXT_Y, text, 255);
-}
-
 static void draw(void) {
     hh->clear();
     if (over || fx) {  // between mazes and after the end: the mazes solved
-        number(solved);
+        hh->draw_number(HH_CENTER, TEXT_Y, solved, 255);
         for (int i = 0; i < HH_RGB_COUNT; i++) {
             const hh_rgb_t* l = &hh->rgb[i];
             if (over && solved < MAZES) {
                 uint32_t ph = over_ms / 4 % 256;
-                set_rgb(i, (uint8_t)(ph < 128 ? ph * 2 : (255 - ph) * 2), 0, 0);
+                hh->set_rgb(i, (uint8_t)(ph < 128 ? ph * 2 : (255 - ph) * 2), 0, 0);
             } else if (l->arm < solved || fx) {
-                set_rgb(i, 0, 200, 60);
+                hh->set_rgb(i, 0, 200, 60);
             }
         }
         if (over)
@@ -186,13 +175,13 @@ static void draw(void) {
     for (int i = 0; i < HH_RGB_COUNT; i++) {
         const hh_rgb_t* l = &hh->rgb[i];
         if (l->rank == 1 || l->rank == 2) {
-            if (l->arm < solved) set_rgb(i, 0, 160, 40);
-            else set_rgb(i, 10, 10, 30);
+            if (l->arm < solved) hh->set_rgb(i, 0, 160, 40);
+            else hh->set_rgb(i, 10, 10, 30);
         } else if (l->arm == best_arm) {
             int k = 0;
             while (LINE[k] != l->rank) k++;
             uint32_t v = 80 + 35 * (uint32_t)k;
-            set_rgb(i, (uint8_t)(60 * v / 255), (uint8_t)(120 * v / 255), (uint8_t)v);
+            hh->set_rgb(i, (uint8_t)(60 * v / 255), (uint8_t)(120 * v / 255), (uint8_t)v);
         }
     }
     // The time left, round the outline; the last 5 s blink

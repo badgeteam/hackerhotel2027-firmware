@@ -159,12 +159,6 @@ static void step(uint8_t pressed, uint8_t held) {
     }
 }
 
-static void set_rgb(int i, uint8_t r, uint8_t g, uint8_t b) {
-    hh->set(hh->rgb[i].r, r);
-    hh->set(hh->rgb[i].g, g);
-    hh->set(hh->rgb[i].b, b);
-}
-
 static void draw(void) {
     hh->clear();
     for (int r = 0; r < BRICK_ROWS; r++)
@@ -178,11 +172,11 @@ static void draw(void) {
         int filled = (int)score / 3 - l->arm * 7;  // the score fills arm after arm
         if (over) {
             uint32_t ph = over_ms / 4 % 256;
-            set_rgb(i, (uint8_t)(ph < 128 ? ph * 2 : (255 - ph) * 2), 0, 0);
+            hh->set_rgb(i, (uint8_t)(ph < 128 ? ph * 2 : (255 - ph) * 2), 0, 0);
         } else if (l->rank < filled) {
-            set_rgb(i, 220, 130, 17);
+            hh->set_rgb(i, 220, 130, 17);
         } else if (l->arm < lives) {
-            set_rgb(i, 5, 19, 70);
+            hh->set_rgb(i, 5, 19, 70);
         }
     }
     for (int i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], over ? (i < best / 3 ? 40 : 0) : (uint8_t)(flash * 30));

@@ -10,6 +10,7 @@
 #include <string.h>
 #include "apps/hhapp.h"
 #include "layout.h"
+#include "app_util.c"  // the firmware's own helpers (sin8, hsv, ...)
 
 char __hh_load_end[1], __hh_bss_end[1];  // the app's linker symbols (HH_APP)
 
@@ -65,6 +66,34 @@ static int m_draw_text(int x, int y, const char* t, uint8_t v) {
     return m_text_width(t);
 }
 
+static int mock_text_x;  // where the last text went: HH_CENTER is worked out
+static int m_draw_text_at(int x, int y, const char* t, uint8_t v) {
+    mock_text_x = x == HH_CENTER ? (HH_GRID_W - m_text_width(t)) / 2 : x;
+    return m_draw_text(x, y, t, v);
+}
+static int m_draw_number(int x, int y, int32_t n, uint8_t v) {
+    char text[12];
+    return m_draw_text_at(x, y, AppUtil_Decimal(n, text), v);
+}
+static void m_set_rgb(int i, uint8_t r, uint8_t g, uint8_t b) {
+    if (i < 0 || i >= HH_RGB_COUNT) return;
+    m_set(layout_rgb[i].r, r), m_set(layout_rgb[i].g, g), m_set(layout_rgb[i].b, b);
+}
+static void m_set_linear(uint16_t s, uint8_t v) { m_set(s, layout_linear[v]); }
+static int m_step_brightness(int dir) {  // as menu.c
+    static const uint8_t levels[HH_BRIGHTNESS_LEVELS] = {8, 16, 32, 64, 128, 255};
+    for (int k = 0; dir && k < HH_BRIGHTNESS_LEVELS; k++) {
+        int i = dir > 0 ? k : HH_BRIGHTNESS_LEVELS - 1 - k;
+        if (dir > 0 ? levels[i] > mock_brightness : levels[i] < mock_brightness) {
+            mock_brightness = levels[i];
+            break;
+        }
+    }
+    int i = HH_BRIGHTNESS_LEVELS - 1;
+    while (i > 0 && levels[i] > mock_brightness) i--;
+    return i;
+}
+
 static const hh_api_t mock_api = {
     .version = HH_API_VERSION, .size = sizeof(hh_api_t),
     .set = m_set, .get = m_get, .clear = m_clear, .set_brightness = m_set_brightness, .brightness = m_brightness,
@@ -72,7 +101,10 @@ static const hh_api_t mock_api = {
     .pressed = m_pressed, .held = m_held, .millis = m_millis, .random = m_random,
     .ir_send = m_ir_send, .ir_receive = m_ir_receive, .standby = m_standby, .exit = m_exit, .print = m_print,
     .name = m_name, .set_name = m_set_name, .load = m_load, .save = m_save,
-    .draw_text = m_draw_text, .text_width = m_text_width, .polar = layout_polar,
+    .draw_text = m_draw_text_at, .text_width = m_text_width, .polar = layout_polar,
+    .set_rgb = m_set_rgb, .set_linear = m_set_linear, .sin8 = AppUtil_Sin8, .hsv = AppUtil_Hsv,
+    .isqrt = AppUtil_Isqrt, .atan8 = AppUtil_Atan8, .draw_number = m_draw_number,
+    .step_brightness = m_step_brightness,
 };
 
 // The test's checks

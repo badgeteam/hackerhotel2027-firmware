@@ -125,20 +125,13 @@ static void draw(void) {
         if (on_grid(tail, BIRD_COL - 1)) hh->set(hh->grid[tail][BIRD_COL - 1], 80);
     }
     if (state == OVER) {
-        char text[6], *p = text + sizeof text - 1;
-        uint16_t n = score;
-        *p = 0;
-        do *--p = (char)('0' + n % 10);
-        while ((n /= 10) && p > text);
-        hh->draw_text((HH_GRID_W - hh->text_width(p)) / 2, TEXT_Y, p, 255);
+        hh->draw_number(HH_CENTER, TEXT_Y, score, 255);
         for (int i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < best ? 40 : 0);
     }
     for (int i = 0; i < HH_RGB_COUNT; i++) {  // the score fills the arms gold, arm after arm
         const hh_rgb_t* l = &hh->rgb[i];
         bool on = l->rank < (int)score - l->arm * 7;
-        hh->set(l->r, on ? 220 : 0);
-        hh->set(l->g, on ? 160 : 0);
-        hh->set(l->b, on ? 17 : 0);
+        hh->set_rgb(i, on ? 220 : 0, on ? 160 : 0, on ? 17 : 0);
     }
 }
 

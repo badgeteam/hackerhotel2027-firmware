@@ -15,7 +15,8 @@
 enum {
     M_SET, M_GET, M_CLEAR, M_SET_BRIGHTNESS, M_BRIGHTNESS, M_GRID, M_EDGE, M_RGB, M_PRESSED, M_HELD,
     M_MILLIS, M_RANDOM, M_IR_SEND, M_IR_RECEIVE, M_STANDBY, M_EXIT, M_PRINT, M_NAME, M_SET_NAME, M_LOAD,
-    M_SAVE, M_DRAW_TEXT, M_TEXT_WIDTH, M_POLAR, M_COUNT
+    M_SAVE, M_DRAW_TEXT, M_TEXT_WIDTH, M_POLAR, M_SET_RGB, M_SET_LINEAR, M_SIN8, M_HSV, M_ISQRT, M_ATAN8,
+    M_DRAW_NUMBER, M_STEP_BRIGHTNESS, M_COUNT
 };
 _Static_assert(sizeof(hh_api_t) == 8 + 8 * M_COUNT, "app.c lists every member of hh_api_t");
 
@@ -102,6 +103,14 @@ static void trap(rv_cpu* cpu, unsigned m) {
             r = s ? (uint32_t)s_api->text_width(s) : 0;
             break;
         }
+        case M_SET_RGB: s_api->set_rgb((int32_t)a0, (uint8_t)a1, (uint8_t)x[12], (uint8_t)x[13]); break;
+        case M_SET_LINEAR: s_api->set_linear((uint16_t)a0, (uint8_t)a1); break;
+        case M_SIN8: r = s_api->sin8((uint8_t)a0); break;
+        case M_HSV: r = s_api->hsv((uint8_t)a0, (uint8_t)a1, (uint8_t)x[12]); break;
+        case M_ISQRT: r = s_api->isqrt(a0); break;
+        case M_ATAN8: r = s_api->atan8((int32_t)a0, (int32_t)a1); break;
+        case M_DRAW_NUMBER: r = (uint32_t)s_api->draw_number((int32_t)a0, (int32_t)a1, (int32_t)x[12], (uint8_t)x[13]); break;
+        case M_STEP_BRIGHTNESS: r = (uint32_t)s_api->step_brightness((int32_t)a0); break;
         default: emu_log("the app called hh_api_t member %u, which is not a function", m); break;
     }
     x[10] = r;

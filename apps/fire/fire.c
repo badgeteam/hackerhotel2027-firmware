@@ -33,11 +33,11 @@ static void tick(uint32_t elapsed_ms) {
         for (int c = 0; c < HH_GRID_W; c++)
             if (hh->grid[r][c] != HH_NONE) fx_set(hh, hh->grid[r][c], scale8(heat[r][c], heat[r][c]));
     for (int i = 0; i < HH_EDGE_COUNT; i++) {  // the lower half: the further down, the hotter
-        uint8_t down = (uint8_t)(255 - sin8((uint8_t)(hh->polar[hh->edge[i]][1] + 64)));
+        uint8_t down = (uint8_t)(255 - hh->sin8((uint8_t)(hh->polar[hh->edge[i]][1] + 64)));
         fx_set(hh, hh->edge[i], scale8(down > 90 ? (uint8_t)(down - 90) : 0, (uint8_t)(byte() / 2 + 64)));
     }
     for (int i = 0; i < HH_RGB_COUNT; i++) {
-        uint8_t down = (uint8_t)(255 - sin8((uint8_t)(hh->polar[hh->rgb[i].r][1] + 64)));
+        uint8_t down = (uint8_t)(255 - hh->sin8((uint8_t)(hh->polar[hh->rgb[i].r][1] + 64)));
         uint8_t v = scale8(down, (uint8_t)(100 + byte() / 2));
         fx_rgb(hh, i, scale8(255, v), scale8((uint8_t)(40 + v / 4), v), scale8(4, v));
     }

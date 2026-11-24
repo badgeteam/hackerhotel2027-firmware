@@ -74,18 +74,13 @@ static void game_over(void) {
 }
 
 static void rgb(const hh_rgb_t* led, const uint8_t c[3], uint32_t scale) {
-    hh->set(led->r, (uint8_t)(c[0] * scale / 255));
-    hh->set(led->g, (uint8_t)(c[1] * scale / 255));
-    hh->set(led->b, (uint8_t)(c[2] * scale / 255));
+    hh->set_rgb((int)(led - hh->rgb), (uint8_t)(c[0] * scale / 255), (uint8_t)(c[1] * scale / 255), (uint8_t)(c[2] * scale / 255));
 }
 
 static void draw(void) {
     hh->clear();
-    char text[4] = {0};
     uint8_t shown = state == OVER ? (uint8_t)(len - 1) : len;
-    if (shown >= 10) text[0] = (char)('0' + shown / 10), text[1] = (char)('0' + shown % 10);
-    else text[0] = (char)('0' + shown);
-    hh->draw_text((HH_GRID_W - hh->text_width(text)) / 2, TEXT_Y, text, state == SHOW ? 80 : 255);
+    hh->draw_number(HH_CENTER, TEXT_Y, shown, state == SHOW ? 80 : 255);
     for (int i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < shown ? 140 : i < best ? 40 : 0);
 
     static const uint8_t white[3] = {200, 200, 200}, dim[3] = {20, 20, 20}, green[3] = {0, 255, 60},

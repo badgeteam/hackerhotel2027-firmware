@@ -79,25 +79,6 @@ typedef struct {
     int open, droop, raise, tilt, vee;
 } lids_t;
 
-static const uint8_t SIN8[256] = {
-    128, 131, 134, 137, 140, 143, 146, 149, 152, 155, 158, 162, 165, 167, 170, 173,
-    176, 179, 182, 185, 188, 190, 193, 196, 198, 201, 203, 206, 208, 211, 213, 215,
-    218, 220, 222, 224, 226, 228, 230, 232, 234, 235, 237, 238, 240, 241, 243, 244,
-    245, 246, 248, 249, 250, 250, 251, 252, 253, 253, 254, 254, 254, 255, 255, 255,
-    255, 255, 255, 255, 254, 254, 254, 253, 253, 252, 251, 250, 250, 249, 248, 246,
-    245, 244, 243, 241, 240, 238, 237, 235, 234, 232, 230, 228, 226, 224, 222, 220,
-    218, 215, 213, 211, 208, 206, 203, 201, 198, 196, 193, 190, 188, 185, 182, 179,
-    176, 173, 170, 167, 165, 162, 158, 155, 152, 149, 146, 143, 140, 137, 134, 131,
-    128, 124, 121, 118, 115, 112, 109, 106, 103, 100, 97,  93,  90,  88,  85,  82,
-    79,  76,  73,  70,  67,  65,  62,  59,  57,  54,  52,  49,  47,  44,  42,  40,
-    37,  35,  33,  31,  29,  27,  25,  23,  21,  20,  18,  17,  15,  14,  12,  11,
-    10,  9,   7,   6,   5,   5,   4,   3,   2,   2,   1,   1,   1,   0,   0,   0,
-    0,   0,   0,   0,   1,   1,   1,   2,   2,   3,   4,   5,   5,   6,   7,   9,
-    10,  11,  12,  14,  15,  17,  18,  20,  21,  23,  25,  27,  29,  31,  33,  35,
-    37,  40,  42,  44,  47,  49,  52,  54,  57,  59,  62,  65,  67,  70,  73,  76,
-    79,  82,  85,  88,  90,  93,  97,  100, 103, 106, 109, 112, 115, 118, 121, 124,
-};
-
 static const hh_api_t* hh;
 
 static int gx, gy;          // the iris centre
@@ -120,10 +101,6 @@ static int tear_y[TEARS], tear_v[TEARS];  // its height, and its speed in 1/4
 static uint32_t ir_ms;          // when the last IR frame came in
 static uint8_t level_shown;     // frames the outline still shows the brightness
 
-// The brightness levels, as the firmware's B / D outside apps
-static const uint8_t levels[] = {8, 16, 32, 64, 128, 255};
-#define LEVELS (int)sizeof levels
-
 // Samsung TV remote (Samsung32) keys, by their command; MOOD_NONE: at random
 static const uint8_t samsung_keys[][2] = {
     {0x04, MOOD_LOVE},     {0x05, MOOD_LOVE},       {0x06, MOOD_WINK},      {0x08, MOOD_ROLL},
@@ -141,7 +118,7 @@ static int imax(int a, int b) { return a > b ? a : b; }
 static int clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 static uint32_t sat_sub(uint32_t a, uint32_t b) { return a > b ? a - b : 0; }
 
-static uint8_t sin8(uint8_t x) { return SIN8[x]; }
+static uint8_t sin8(uint8_t x) { return hh->sin8(x); }
 static uint8_t rnd8(void) { return (uint8_t)(hh->random() >> 8); }
 
 // a * b / 255
@@ -150,45 +127,11 @@ static uint8_t scale(uint8_t a, uint8_t b) { return (uint8_t)((a * b + 255) >> 8
 // A phase that turns per_s / 256 turns a second, at frame f
 static uint8_t phase(uint32_t f, uint32_t per_s) { return (uint8_t)(f * per_s / FPS); }
 
-static int isqrt(int n) {
-    int r = 0;
-    for (int b = 1 << 16; b; b >>= 2) {
-        if (n >= r + b) {
-            n -= r + b;
-            r = (r >> 1) + b;
-        } else {
-            r >>= 1;
-        }
-    }
-    return r;
-}
-
-// The angle of (x, y) in 1/256 turn, 0 = right, 64 = down; to a few units
-static uint8_t atan8(int y, int x) {
-    int ax = iabs(x), ay = iabs(y);
-    if (!ax && !ay) return 0;
-    int a = ax >= ay ? 32 * ay / ax : 64 - 32 * ax / ay;
-    if (x < 0) a = 128 - a;
-    if (y < 0) a = 256 - a;
-    return (uint8_t)a;
-}
-
 static rgb_t scaled(rgb_t c, uint8_t v) { return (rgb_t){scale(c.r, v), scale(c.g, v), scale(c.b, v)}; }
 
 static rgb_t hsv(uint8_t h, uint8_t s, uint8_t v) {
-    if (s == 0) return (rgb_t){v, v, v};
-    uint8_t region = h / 43, rem = (uint8_t)((h - region * 43) * 6);
-    uint8_t p = scale(v, 255 - s);
-    uint8_t q = scale(v, 255 - scale(s, rem));
-    uint8_t u = scale(v, 255 - scale(s, 255 - rem));
-    switch (region) {
-        case 0: return (rgb_t){v, u, p};
-        case 1: return (rgb_t){q, v, p};
-        case 2: return (rgb_t){p, v, u};
-        case 3: return (rgb_t){p, q, v};
-        case 4: return (rgb_t){u, p, v};
-        default: return (rgb_t){v, p, q};
-    }
+    uint32_t c = hh->hsv(h, s, v);
+    return (rgb_t){HH_RED(c), HH_GREEN(c), HH_BLUE(c)};
 }
 
 static uint8_t mix1(uint8_t x, uint8_t y, uint8_t amt) { return (uint8_t)((x * (256 - amt) + y * amt) >> 8); }
@@ -203,19 +146,10 @@ static void circle(uint8_t a, int r, int* x, int* y) {
     *y = (sin8(a) - 128) * r / 128;
 }
 
-// The level at or just above the brightness now
-static int level(void) {
-    int i = 0;
-    while (i < LEVELS - 1 && levels[i] < hh->brightness()) i++;
-    return i;
-}
-
-// One brightness level up (dir 1) or down (-1); the outline shows it
+// One brightness level up (dir 1) or down (-1), as the firmware's B / D
+// outside apps; the outline shows it
 static void brighter(int dir) {
-    int i = level();
-    if (dir > 0 && levels[i] == hh->brightness() && i < LEVELS - 1) i++;
-    if (dir < 0 && i > 0) i--;
-    hh->set_brightness(levels[i]);
+    hh->step_brightness(dir);
     level_shown = FPS;
 }
 
@@ -543,7 +477,7 @@ static void draw(void) {
             int in_pupil = clamp(8 - (d2 - p2) / (2 * p), 0, 16) * fade / 256;
             if (mood == MOOD_HYPNO && in_iris) {
                 // a two-armed spiral, turning
-                int sp = sin8((uint8_t)(isqrt(d2) * 6 + atan8(dy, dx) * 2 - (int)mt * 12)) > 128 ? 230 : 15;
+                int sp = sin8((uint8_t)((int)hh->isqrt((uint32_t)d2) * 6 + hh->atan8(dx, dy) * 2 - (int)mt * 12)) > 128 ? 230 : 15;
                 iris += (sp - iris) * a / 256;
             }
             int v = (sclera * (16 - in_iris) + iris * in_iris) / 16 * (16 - in_pupil) / 16;
@@ -585,7 +519,7 @@ static void draw(void) {
     // the brightness level, for a second after a change: a bar on the outline
     if (level_shown) {
         level_shown--;
-        int lit = HH_EDGE_COUNT * (level() + 1) / LEVELS;
+        int lit = HH_EDGE_COUNT * (hh->step_brightness(0) + 1) / HH_BRIGHTNESS_LEVELS;
         for (int i = 0; i < lit; i++) hh->set(hh->edge[i], 160);
     }
 
@@ -603,9 +537,7 @@ static void draw(void) {
         if (!cover) continue;
         uint8_t v = scale((uint8_t)(255 - l->rank * 22), cover);
         rgb_t col = lash(hsv((uint8_t)(hue + l->rank * 9 + (upper ? 0 : 40)), 220, v), l, v, ou);
-        hh->set(l->r, col.r);
-        hh->set(l->g, col.g);
-        hh->set(l->b, col.b);
+        hh->set_rgb(i, col.r, col.g, col.b);
     }
 }
 

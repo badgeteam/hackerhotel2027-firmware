@@ -31,3 +31,5 @@ menu_result_t Menu_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held, uint
 
 // One brightness level up (dir 1) or down (dir -1): the B and D shortcuts
 void Menu_StepBrightness(int dir);
+// The level of the brightness now: the highest of them at or below it, 0 .. 5
+int Menu_BrightnessLevel(void);

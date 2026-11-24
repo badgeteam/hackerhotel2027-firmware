@@ -92,12 +92,7 @@ static void step(void) {
 
 // The score as text, centred on the grid, over a dimmed snake
 static void draw_score(void) {
-    char text[6], *p = text + sizeof text - 1;
-    uint16_t n = score;
-    *p = 0;
-    do *--p = (char)('0' + n % 10);
-    while ((n /= 10) && p > text);
-    hh->draw_text((W - hh->text_width(p)) / 2, (H - HH_FONT_H) / 2, p, 255);
+    hh->draw_number(HH_CENTER, (H - HH_FONT_H) / 2, score, 255);
 }
 
 static void draw(void) {

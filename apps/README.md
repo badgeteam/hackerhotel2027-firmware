@@ -5,8 +5,9 @@ animations. You build it into a `.hhapp` file and add it with the web
 interface ("On the badge", **Add app or animation**) or with
 `tools/badge.py add`.
 
-`hhapp.h` is the whole interface between the firmware and an app. Read it
-first.
+`hhapp.h` is the whole interface between the firmware and an app.
+[docs/APP_API.md](../docs/APP_API.md) explains every member, with
+examples.
 
 ## Build
 
@@ -59,9 +60,13 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 - **Positions.** `polar[slot]` gives each LED's place: distance from the
   grid's centre in 1/4 mm, and angle in 1/256 turn, clockwise from the top
   (API version 3). The animations (ripple, galaxy, ...) use it for round
-  effects. `fx.h` has their helpers: `sin8()`, `hsv()`, `fx_set()` (which
-  takes linear light, as the previous firmware's animations did), and B / D
-  for the brightness.
+  effects. `fx.h` has their helpers: `fx_set()` (which takes linear light,
+  as the previous firmware's animations did), and B / D for the
+  brightness.
+- **Helpers.** From API version 4 the firmware has what many apps need:
+  `set_rgb()`, `sin8()`, `hsv()`, `isqrt()`, `atan8()`, `draw_number()`,
+  `step_brightness()` and `set_linear()`. Use them rather than a copy in
+  the app: the app stays small, and the store has room for more.
 - **Text.** `draw_text(x, y, text, value)` writes text on the centre
   grid, with its top left corner at column `x`, row `y`, in the
   firmware's 5 × 8 font (7 rows, plus one for descenders), which has all
@@ -99,12 +104,13 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 
 ## Limits
 
-- **API version.** An app built against `HH_API_VERSION` 3 (`polar`)
-  does not start on firmware with version 2 or 1, and one built against 2
-  (the text calls) not on version 1; update the badge first. `tools/badge.py list` prints the firmware's version ("app API").
+- **API version.** An app does not start on firmware with an older
+  `HH_API_VERSION` than the one it was built against (4: the helpers, 3:
+  `polar`, 2: the text calls); update the badge first. `tools/badge.py list` prints the firmware's version ("app API").
 
 - **Size.** The image and its `.bss` together must fit in 12 KB of RAM
-  (`HH_APP_RAM_SIZE`). The store holds 31 KB for all items together.
+  (`HH_APP_RAM_SIZE`). The store holds 31 KB for all items together, each
+  rounded up to whole 256-byte pages.
 - **No C library.** `sdk.c` supplies `memset` and `memcpy`. Do not use
   64-bit division: the toolchain's libgcc is 64-bit only.
 - **Stack.** The app runs on the firmware's stack, about 5 KB. Keep big

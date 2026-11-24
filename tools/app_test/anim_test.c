@@ -62,35 +62,18 @@ static int lit_rgb(void) {
     return n;
 }
 
-static uint8_t brightness_now = 255;
-static void m_set_brightness_t(uint8_t b) { brightness_now = b; }
-static uint8_t m_brightness_t(void) { return brightness_now; }
+#define brightness_now mock_brightness  // the mock keeps it (step_brightness)
 
 int main(void) {
     hh_api_t api = mock_api;
-    api.set_brightness = m_set_brightness_t;
-    api.brightness = m_brightness_t;
 
-    // fx.h
-    int worst = 0;
-    for (int x = 0; x < 256; x++) {
-        int want = (int)lround(128 + 127 * sin(2 * M_PI * x / 256)), d = abs(sin8((uint8_t)x) - want);
-        if (d > worst) worst = d;
-    }
-    CHECK(worst <= 1, "sin8 is a sine wave (off by %d at most)", worst);
-    uint8_t c[3];
-    hsv(0, 255, 255, c);
-    CHECK(c[0] == 255 && c[1] == 0 && c[2] == 0, "hue 0 is red (%d %d %d)", c[0], c[1], c[2]);
-    hsv(85, 255, 255, c);
-    CHECK(c[1] == 255 && c[0] < 10 && c[2] < 10, "hue 85 is green (%d %d %d)", c[0], c[1], c[2]);
-    hsv(170, 255, 255, c);
-    CHECK(c[2] == 255 && c[0] < 10 && c[1] < 10, "hue 170 is blue (%d %d %d)", c[0], c[1], c[2]);
+    // fx.h (the firmware's sin8 and hsv: util_test.c)
     int off = 0;
     for (int v = 1; v < 256; v++) {
-        int back = layout_gamma[FX_LIN[v]];  // fx_set's value through the firmware's gamma: the linear value again
+        int back = layout_gamma[layout_linear[v]];  // set_linear's value through the gamma: the linear value again
         if (abs(back - v) > 1 + v / 25) off++;
     }
-    CHECK(off == 0, "FX_LIN undoes the firmware's gamma (%d values off)", off);
+    CHECK(off == 0, "set_linear undoes the firmware's gamma (%d values off)", off);
     CHECK((uint8_t)(fx_phase(255999, 171) + 1) == fx_phase(256000, 171) || fx_phase(255999, 171) == fx_phase(256000, 171) ||
               (uint8_t)(fx_phase(256000, 171) - fx_phase(255999, 171)) <= 1,
           "fx_phase runs on smoothly where ms wraps");

@@ -105,12 +105,7 @@ static void tick(uint32_t elapsed_ms) {
 
     // Draw
     hh->clear();
-    char text[6], *p = text + sizeof text - 1;
-    uint16_t n = score;
-    *p = 0;
-    do *--p = (char)('0' + n % 10);
-    while ((n /= 10) && p > text);
-    hh->draw_text((HH_GRID_W - hh->text_width(p)) / 2, TEXT_Y, p, 255);
+    hh->draw_number(HH_CENTER, TEXT_Y, score, 255);
     for (int i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < best ? 40 : 0);
 
     uint32_t t = hh->millis();
@@ -133,9 +128,7 @@ static void tick(uint32_t elapsed_ms) {
                 g = k == 5 - lit ? 40 : 10;
             }
         }
-        hh->set(led->r, r);
-        hh->set(led->g, g);
-        hh->set(led->b, b);
+        hh->set_rgb(i, r, g, b);
     }
 }
 

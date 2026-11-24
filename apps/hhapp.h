@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 #define HH_APP_MAGIC 0x50414848u  // "HHAP"
-#define HH_API_VERSION 3  // 2: draw_text, text_width; 3: polar
+#define HH_API_VERSION 4  // 2: draw_text, text_width; 3: polar; 4: the helpers
 
 #define HH_APP_RAM_BASE 0x20002000u
 #define HH_APP_RAM_SIZE 0x3000u  // 12 KB: the image and its .bss
@@ -46,6 +46,18 @@
 #define HH_FONT_W 5
 #define HH_FONT_H 8
 #define HH_FONT_ADVANCE 6
+
+// draw_text / draw_number with this as x: the text centred on the grid
+#define HH_CENTER (-32768)
+
+// step_brightness(): the levels B and D step through outside apps (8, 16,
+// 32, 64, 128, 255)
+#define HH_BRIGHTNESS_LEVELS 6
+
+// The parts of a colour from hsv(): 0xRRGGBB
+#define HH_RED(c) ((uint8_t)((c) >> 16))
+#define HH_GREEN(c) ((uint8_t)((c) >> 8))
+#define HH_BLUE(c) ((uint8_t)(c))
 
 // Persistent data (survives power-off)
 #define HH_NAME_MAX 32      // the owner's name, characters
@@ -123,6 +135,7 @@ typedef struct {
     // left alone (clear() first for a clean line). All of printable ASCII;
     // other bytes show as a blank. Returns text_width(text): HH_FONT_ADVANCE
     // columns per character, without the blank column after the last one.
+    // From HH_API_VERSION 4, x = HH_CENTER centres the text.
     int (*draw_text)(int x, int y, const char *text, uint8_t value);
     int (*text_width)(const char *text);
 
@@ -132,6 +145,17 @@ typedef struct {
     // the angle in 1/256 turn, clockwise from the top. An RGB LED's three
     // slots have the same place.
     const uint8_t (*polar)[2];
+
+    // Helpers (HH_API_VERSION 4): what many apps need, kept once in the
+    // firmware so each app is smaller. See docs/APP_API.md.
+    void (*set_rgb)(int index, uint8_t r, uint8_t g, uint8_t b);  // RGB LED rgb[index]; ignores a bad index
+    void (*set_linear)(uint16_t slot, uint8_t value);  // value in linear light (PWM duty), as the old firmware
+    uint8_t (*sin8)(uint8_t angle);  // 128 + 127 sin(angle / 256 turn); sin8(angle + 64) is the cosine
+    uint32_t (*hsv)(uint8_t hue, uint8_t saturation, uint8_t value);  // 0xRRGGBB, see HH_RED()
+    uint32_t (*isqrt)(uint32_t n);   // the square root, rounded down
+    uint8_t (*atan8)(int x, int y);  // the angle of (x, y), y down, in 1/256 turn clockwise from up, as polar
+    int (*draw_number)(int x, int y, int32_t n, uint8_t value);  // as draw_text, n in decimal
+    int (*step_brightness)(int dir);  // one level up (dir > 0) or down (< 0); the level now, 0 .. 5
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.

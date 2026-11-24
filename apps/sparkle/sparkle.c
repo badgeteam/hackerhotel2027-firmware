@@ -7,19 +7,6 @@ static uint8_t level[HH_SLOTS];  // the sparkles fading out, per slot
 static uint8_t rate = 6;          // new sparkles per 256 ticks per LED, roughly
 static uint32_t hue_t;
 
-static void hsv(uint8_t h, uint8_t* r, uint8_t* g, uint8_t* b) {
-    uint8_t region = h / 43, rem = (uint8_t)((h - region * 43) * 6);
-    uint8_t q = (uint8_t)(255 - rem), t = rem;
-    switch (region) {
-        case 0: *r = 255, *g = t, *b = 0; break;
-        case 1: *r = q, *g = 255, *b = 0; break;
-        case 2: *r = 0, *g = 255, *b = t; break;
-        case 3: *r = 0, *g = q, *b = 255; break;
-        case 4: *r = t, *g = 0, *b = 255; break;
-        default: *r = 255, *g = 0, *b = q; break;
-    }
-}
-
 static void spark(uint16_t slot) {
     if (slot == HH_NONE) return;
     if ((hh->random() & 0xFFFF) < rate * 4u) level[slot] = 255;
@@ -41,11 +28,8 @@ static void tick(uint32_t elapsed_ms) {
     hue_t += elapsed_ms;
     for (int i = 0; i < HH_RGB_COUNT; i++) {
         const hh_rgb_t* led = &hh->rgb[i];
-        uint8_t r, g, b;
-        hsv((uint8_t)(hue_t / 8 + led->arm * 51 + led->rank * 12), &r, &g, &b);
-        hh->set(led->r, r * 2 / 3);
-        hh->set(led->g, g * 2 / 3);
-        hh->set(led->b, b * 2 / 3);
+        uint32_t c = hh->hsv((uint8_t)(hue_t / 8 + led->arm * 51 + led->rank * 12), 255, 170);  // two thirds
+        hh->set_rgb(i, HH_RED(c), HH_GREEN(c), HH_BLUE(c));
     }
 }
 

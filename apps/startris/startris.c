@@ -268,21 +268,12 @@ static void hsv(uint8_t h, uint8_t v, uint8_t out[3]) {
     for (int c = 0; c < 3; c++) out[c] = vals[pick[region][c]];
 }
 
-static void set_rgb(int i, const uint8_t c[3]) {
-    hh->set(hh->rgb[i].r, c[0]);
-    hh->set(hh->rgb[i].g, c[1]);
-    hh->set(hh->rgb[i].b, c[2]);
-}
+static void set_rgb(int i, const uint8_t c[3]) { hh->set_rgb(i, c[0], c[1], c[2]); }
 
 static void draw(void) {
     hh->clear();
     if (over) {
-        char text[6], *p = text + sizeof text - 1;
-        uint16_t n = lines;
-        *p = 0;
-        do *--p = (char)('0' + n % 10);
-        while ((n /= 10) && p > text);
-        hh->draw_text((HH_GRID_W - hh->text_width(p)) / 2, TEXT_Y, p, 255);
+        hh->draw_number(HH_CENTER, TEXT_Y, lines, 255);
         for (int i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < best ? 40 : 0);
     }
     for (int r = 0; r < H; r++) {

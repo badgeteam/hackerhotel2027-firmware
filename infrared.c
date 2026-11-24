@@ -106,6 +106,13 @@ bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length) {
     return true;
 }
 
+bool infrared_send_shot(uint16_t bits) {
+    if (!s_initialized || s_tx_busy) return false;
+    IrFrame_Shot(&s_tx_frame, bits);
+    tx_start();
+    return true;
+}
+
 bool infrared_tx_busy(void) {
     return s_tx_busy;
 }
@@ -207,14 +214,15 @@ void EXTI25_16_IRQHandler(void) {
     uint32_t us = (now - s_rx_last_edge) / DELAY_US_TIME;
     s_rx_last_edge = now;
 
-    if (s_tx_busy) {
-        IrRx_Reset(&s_rx);  // ignore our own transmission
-        return;
-    }
+    // the raw log takes our own transmission too, if the receiver sees it
     uint8_t next = (uint8_t)((s_raw_head + 1) & (RAW_LOG - 1));
     if (next != s_raw_tail) {  // full: the newest are dropped
         s_raw[s_raw_head] = (uint16_t)((ended_mark ? 0x8000u : 0) | (us < 0x7FFF ? us : 0x7FFF));
         s_raw_head = next;
+    }
+    if (s_tx_busy) {
+        IrRx_Reset(&s_rx);  // ignore our own transmission
+        return;
     }
     switch (IrRx_Interval(&s_rx, ended_mark, us)) {
         case IR_RX_NEC: rx_frame_done(now); break;

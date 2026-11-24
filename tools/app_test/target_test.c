@@ -1,6 +1,7 @@
 // apps/target on the PC (mock_hh.h): a shot counts and lights the arms in
-// the shooter's team colour, a heal takes one off, B counts from 0 again,
-// a banana's text bytes make a line that scrolls, then goes.
+// the shooter's team colour, a heal takes one off, a banana's text bytes
+// make a line that scrolls, then goes; the badge shoots back with B, picks
+// its team with C, gives it with D, and holding B counts from 0 again.
 #include "mock_hh.h"
 #include "../../apps/target/target.c"
 
@@ -61,8 +62,25 @@ int main(void) {
     CHECK(hits == 1, "another command does nothing");
     run(COUNT_MS, 0);
     CHECK(lit() > 10, "after a while, the target again");
+    // shooting back
+    CHECK(mock_shots_sent == 0, "nothing sent yet");
     run(10, HH_BTN_B);
-    CHECK(hits == 0, "B: from 0 again");
+    CHECK(mock_shots_sent == 1 && mock_sent_shot.command == HH_SHOT_SHOOT && mock_sent_shot.team == 2 && mock_sent_shot.trigger == 1,
+          "B shoots, as blue (team %d, command %d)", mock_sent_shot.team, mock_sent_shot.command);
+    CHECK(mock_sent_shot.parameter == 0, "on the last shot's channel (%d)", mock_sent_shot.parameter);
+    CHECK(hits == 1, "B alone keeps the count");
+    run(10, HH_BTN_C);
+    CHECK(my_team == 3 && !strcmp(mock_text, "YEL"), "C: the next team, its name shows (%s)", mock_text);
+    for (int i = 0; i < 3; i++) run(10, HH_BTN_C);
+    CHECK(my_team == 0, "C goes round six teams (%d)", my_team);
+    run(10, HH_BTN_D);
+    CHECK(mock_shots_sent == 2 && mock_sent_shot.command == HH_SHOT_TEAM && mock_sent_shot.team == 0, "D gives red (team %d, command %d)",
+          mock_sent_shot.team, mock_sent_shot.command);
+    run(10, HH_BTN_B);
+    mock_held_now = HH_BTN_B;
+    for (int i = 0; i < 60; i++) run(20, 0);
+    mock_held_now = 0;
+    CHECK(hits == 0 && mock_shots_sent == 3, "holding B a second: from 0 again, one shot (%d hits, %u sent)", hits, mock_shots_sent);
 
     const char* line = "PX 1 2 ff0000";
     for (const char* p = line; *p; p++) byte(*p);

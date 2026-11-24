@@ -30,7 +30,8 @@ static uint8_t mock_brightness = 255;
 static void m_set_brightness(uint8_t b) { mock_brightness = b; }
 static uint8_t m_brightness(void) { return mock_brightness; }
 static uint8_t m_pressed(void) { return mock_pressed_now; }
-static uint8_t m_held(void) { return mock_pressed_now; }
+static uint8_t mock_held_now;  // held without a new press
+static uint8_t m_held(void) { return mock_pressed_now | mock_held_now; }
 static uint32_t m_millis(void) { return mock_ms; }
 static uint32_t m_random(void) { return (mock_seed = mock_seed * 1103515245u + 12345u) >> 8; }
 static bool m_ir_send(uint16_t a, uint8_t c) { (void)a, (void)c; return true; }
@@ -103,6 +104,14 @@ static bool m_ir_receive_shot(hh_ir_shot_t* s) {
     return true;
 }
 
+static hh_ir_shot_t mock_sent_shot;  // the last shot the app sent
+static unsigned mock_shots_sent;
+static bool m_ir_send_shot(const hh_ir_shot_t* s) {
+    mock_sent_shot = *s;
+    mock_shots_sent++;
+    return true;
+}
+
 static const hh_api_t mock_api = {
     .version = HH_API_VERSION, .size = sizeof(hh_api_t),
     .set = m_set, .get = m_get, .clear = m_clear, .set_brightness = m_set_brightness, .brightness = m_brightness,
@@ -113,7 +122,7 @@ static const hh_api_t mock_api = {
     .draw_text = m_draw_text_at, .text_width = m_text_width, .polar = layout_polar,
     .set_rgb = m_set_rgb, .set_linear = m_set_linear, .sin8 = AppUtil_Sin8, .hsv = AppUtil_Hsv,
     .isqrt = AppUtil_Isqrt, .atan8 = AppUtil_Atan8, .draw_number = m_draw_number,
-    .step_brightness = m_step_brightness, .ir_receive_shot = m_ir_receive_shot,
+    .step_brightness = m_step_brightness, .ir_receive_shot = m_ir_receive_shot, .ir_send_shot = m_ir_send_shot,
 };
 
 // The test's checks

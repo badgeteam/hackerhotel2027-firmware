@@ -113,6 +113,11 @@ static bool api_ir_receive_shot(hh_ir_shot_t* shot) {
     return true;
 }
 
+static bool api_ir_send_shot(const hh_ir_shot_t* shot) {
+    ir_shot_t s = {shot->team, shot->trigger, shot->command, shot->parameter};
+    return infrared_send_shot(IrShot_Encode(&s));
+}
+
 static const hh_api_t s_api = {
     .version = HH_API_VERSION,
     .size = sizeof(hh_api_t),
@@ -151,6 +156,7 @@ static const hh_api_t s_api = {
     .ir_send_packet = api_ir_send_packet,
     .ir_receive_packet = api_ir_receive_packet,
     .ir_receive_shot = api_ir_receive_shot,
+    .ir_send_shot = api_ir_send_shot,
 };
 _Static_assert(HH_IR_PACKET_MAX == IR_PACKET_DATA_MAX, "hhapp.h and infrared.h agree on the packet size");
 

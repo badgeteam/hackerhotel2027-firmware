@@ -199,6 +199,11 @@ typedef struct {
     // in; the firmware keeps up to 7. The banana sends a NEC frame (address
     // 0) before each shot, for the bar's LED strips: ir_receive() gets it.
     bool (*ir_receive_shot)(hh_ir_shot_t *shot);
+    // Sends a shot (with its CRC) in JVC timing; false while something still
+    // goes out (a shot takes about 40 ms). A banana takes shots only in its
+    // mode 0, and a shoot only from another team; its 5th hit is game over
+    // until its owner holds btn1, so send only when the player asks.
+    bool (*ir_send_shot)(const hh_ir_shot_t *shot);
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.

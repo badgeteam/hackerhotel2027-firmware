@@ -12,6 +12,10 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
   tools/badge.py name [TEXT]               show or set the owner's name
   tools/badge.py irlog [--seconds N]       print the infrared marks and spaces the badge
                                            receives, frame by frame (Ctrl-C to stop)
+  tools/badge.py shoot TEAM [COMMAND [PARAMETER]]
+                                           send a shot as a HH2025 banana or Fri3d 2022 Time
+                                           Blaster does (command 1 shoot, 2 heal, 8 set team,
+                                           10 a text byte; default 1, parameter 0)
 """
 import argparse
 import os
@@ -169,6 +173,11 @@ def main():
     sub.add_parser("erase")
     n = sub.add_parser("name")
     n.add_argument("text", nargs="?")
+    sh = sub.add_parser("shoot")
+    sh.add_argument("team", type=int)
+    sh.add_argument("command", type=int, nargs="?", default=1)
+    sh.add_argument("parameter", type=int, nargs="?", default=0)
+    sh.add_argument("--no-trigger", action="store_true", help="trigger bit 0 (default 1)")
     i = sub.add_parser("irlog")
     i.add_argument("--seconds", type=float, default=0, help="stop after this long (default: Ctrl-C)")
     args = p.parse_args()
@@ -177,6 +186,12 @@ def main():
     if args.cmd == "irlog":
         badge.ir_raw()  # drop what came in before
         irlog(badge, args.seconds)
+        return
+    if args.cmd == "shoot":
+        if not (0 <= args.team < 8 and 0 <= args.command < 16 and 0 <= args.parameter < 16):
+            sys.exit("team 0..7, command 0..15, parameter 0..15")
+        badge.check(badge.send(0x51, args.team, 0 if args.no_trigger else 1, args.command, args.parameter), "shoot")
+        print("shot: team %d, command %d, parameter %d" % (args.team, args.command, args.parameter))
         return
     if args.cmd == "add":
         data = open(args.file, "rb").read()

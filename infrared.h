@@ -56,9 +56,13 @@ bool infrared_receive_packet(infrared_packet_t* packet);
 // A shot from a Fri3d Camp 2022 Time Blaster or a Hacker Hotel 2025 banana
 // (ir_codec.h), with a good CRC; false when none came in. Up to 7 are kept.
 bool infrared_receive_shot(ir_shot_t* shot);
+// Send a shot's 16 bits (IrShot_Encode: CRC included) in JVC timing; false
+// while something still goes out. A banana takes it only in its mode 0.
+bool infrared_send_shot(uint16_t bits);
 
 // The marks and spaces that came in since the last call, oldest first: bit
 // 15 set for a mark, the rest its length in us (32767: that or longer).
-// Up to 127 are kept. For looking at other devices' frames (tools/badge.py
-// irlog).
+// Up to 127 are kept, our own transmission too (the receiver sees the
+// badge's own LED), so it doubles as a self-test. For looking at other
+// devices' frames (tools/badge.py irlog).
 unsigned infrared_raw_read(uint16_t* out, unsigned max);

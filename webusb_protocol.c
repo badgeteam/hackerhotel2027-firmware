@@ -33,6 +33,7 @@
 #define CMD_BOOT_ROM 0x40
 #define CMD_FW_INFO 0x41
 #define CMD_IR_RAW 0x50  // reply: count, then that many marks / spaces (infrared_raw_read)
+#define CMD_IR_SHOT 0x51  // team, trigger, command, parameter: send a shot (tools/badge.py shoot)
 #define CMD_QUERY 0xFF
 
 #ifndef FW_VERSION
@@ -215,6 +216,15 @@ static void handle_command(const uint8_t* data, int len) {
 
         case CMD_IR_RAW:
             s_ir_raw_reply = true;
+            break;
+
+        case CMD_IR_SHOT:
+            if (len < 5) {
+                s_result = STORE_ERR_ARGS;
+            } else {
+                ir_shot_t shot = {data[1], data[2], data[3], data[4]};
+                if (!infrared_send_shot(IrShot_Encode(&shot))) s_result = STORE_ERR_ARGS;  // busy
+            }
             break;
 
         case CMD_NAME_SET:

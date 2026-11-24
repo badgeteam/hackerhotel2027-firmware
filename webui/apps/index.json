@@ -129,9 +129,9 @@
   {
    "name": "TARGET",
    "file": "target.hhapp",
-   "bytes": 1336,
+   "bytes": 1848,
    "api": 6,
-   "description": "Target: shoot the badge with a Hacker Hotel 2025 banana or a Fri3d Camp 2022 Time Blaster. A hit sends a ring out from the middle in the shooter's team colour, flashes the arms and counts; a heal takes one hit off. Text typed into a banana's serial port scrolls by. B: count from 0 again; D / C: brighter / dimmer."
+   "description": "Target: shoot the badge with a Hacker Hotel 2025 banana or a Fri3d Camp 2022 Time Blaster. A hit sends a ring out from the middle in the shooter's team colour, flashes the arms and counts; a heal takes one hit off. Text typed into a banana's serial port scrolls by. The badge shoots back too: C picks its team, B shoots, D gives a banana that team. Hold B for a second to count from 0 again."
   },
   {
    "name": "TWINKLE",

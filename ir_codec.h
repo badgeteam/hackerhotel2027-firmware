@@ -36,6 +36,11 @@
 #define IR_SAMSUNG_LEADER_SPACE 4500
 #define IR_PACKET_LEADER_MARK 4500
 #define IR_PACKET_LEADER_SPACE 2250
+#define IR_SHOT_LEADER_MARK 8400  // JVC timing: the banana takes 7 to 9 ms
+#define IR_SHOT_LEADER_SPACE 4200
+#define IR_SHOT_BIT_MARK 526
+#define IR_SHOT_ZERO_SPACE 526
+#define IR_SHOT_ONE_SPACE 1574
 #define IR_BIT_MARK 562
 #define IR_ZERO_SPACE 562
 #define IR_ONE_SPACE 1687
@@ -47,11 +52,13 @@
 typedef struct {
     uint16_t leader_mark, leader_space;  // us
     uint16_t bits;                       // 0 (a repeat code) .. 8 * IR_FRAME_BYTES
+    uint8_t jvc;                         // the bits in JVC timing (a shot), not NEC
     uint8_t bytes[IR_FRAME_BYTES];
 } ir_frame_t;
 
 void IrFrame_Nec(ir_frame_t* f, uint32_t data);  // 32 bits, as received
 void IrFrame_NecRepeat(ir_frame_t* f);
+void IrFrame_Shot(ir_frame_t* f, uint16_t bits);  // 16 bits, CRC included (IrShot_Encode)
 // false if length > IR_PACKET_DATA_MAX
 bool IrFrame_Packet(ir_frame_t* f, uint8_t type, const uint8_t* data, uint8_t length);
 

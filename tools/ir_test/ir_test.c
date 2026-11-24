@@ -227,9 +227,7 @@ int main(void) {
             ir_shot_t in = {(uint8_t)(v & 7), (uint8_t)(v >> 3 & 1), (uint8_t)(v >> 4 & 15), (uint8_t)(v >> 8 & 15)}, out;
             uint16_t bits = IrShot_Encode(&in);
             ir_frame_t sf;
-            IrFrame_Nec(&sf, bits);
-            sf.bits = 16;
-            sf.leader_mark = 8400, sf.leader_space = 4200;
+            IrFrame_Shot(&sf, bits);
             result_t r = {0};
             IrRx_Reset(&rx);
             send(&rx, &r, &sf, 100, 60, -1);
@@ -237,6 +235,17 @@ int main(void) {
                    out.team != in.team || out.trigger != in.trigger || out.command != in.command || out.parameter != in.parameter;
         }
         CHECK(bad == 0, "585 shots through the receiver, all decoded (%d bad)", bad);
+
+        // What we send, as the banana reads it (hh2025 code.py): a leader
+        // mark of 7 to 9 ms, then 16 spaces, under 1 ms a 0
+        ir_frame_t sf;
+        ir_shot_t give = {3, 1, 8, 1};
+        uint16_t sent = IrShot_Encode(&give);
+        IrFrame_Shot(&sf, sent);
+        unsigned got = 0, n = IrFrame_Segments(&sf);
+        for (int i = 0; i < 16; i++) got |= (IrFrame_SegmentUs(&sf, (uint16_t)(3 + 2 * i)) >= 1000) << i;
+        CHECK(n == 2 + 2 * 16 + 1 && IrFrame_SegmentUs(&sf, 0) > 7000 && IrFrame_SegmentUs(&sf, 0) < 9000 && got == sent,
+              "a shot as the banana reads it: %u segments, leader %u us, bits %04x (sent %04x)", n, IrFrame_SegmentUs(&sf, 0), got, sent);
         int missed = 0;
         for (unsigned v = 0; v < 4096; v++) {
             ir_shot_t in = {(uint8_t)(v & 7), (uint8_t)(v >> 3 & 1), (uint8_t)(v >> 4 & 15), (uint8_t)(v >> 8 & 15)}, out;

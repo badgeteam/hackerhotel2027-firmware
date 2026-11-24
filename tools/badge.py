@@ -10,12 +10,15 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
   tools/badge.py delete INDEX              remove one item; the items after it move down one
   tools/badge.py erase                     erase every item (the name and app data stay)
   tools/badge.py name [TEXT]               show or set the owner's name
+  tools/badge.py irlog [--seconds N]       print the infrared marks and spaces the badge
+                                           receives, frame by frame (Ctrl-C to stop)
 """
 import argparse
 import os
 import re
 import struct
 import sys
+import time
 import unicodedata
 
 import usb.core
@@ -55,6 +58,17 @@ class Badge:
                                   name=r[13:33].rstrip(b"\0").decode(errors="replace"))
         return status
 
+    def ir_raw(self):
+        """The marks and spaces received since the last call: (mark, us) pairs."""
+        self.dev.write(EP_OUT, bytes([0x50]), timeout=1000)
+        r = bytes(self.dev.read(EP_IN, 64, timeout=1000))
+        n = r[8] if len(r) > 8 else 0
+        out = []
+        for i in range(n):
+            v = r[9 + 2 * i] | r[10 + 2 * i] << 8
+            out.append((bool(v & 0x8000), v & 0x7FFF))
+        return out
+
     def check(self, status, what):
         if status["result"]:
             sys.exit("%s: %s" % (what, ERRORS.get(status["result"], status["result"])))
@@ -85,6 +99,58 @@ def text_item(text, speed, plain):
     return b"HHT1" + bytes([speed, 1 if plain else 0, 0, 0]) + ascii.encode("ascii")
 
 
+def ir_frame(segments):
+    """One frame's marks and spaces, as text, and its bits read as NEC-like
+    pulse distance (a space over 1 ms is a 1), LSB first."""
+    line = " ".join("%s%d" % ("M" if m else "S", us) for m, us in segments)
+    # the bits: the spaces after the leader (mark, space), each after a mark
+    spaces = [us for i, (m, us) in enumerate(segments) if not m and i >= 2]
+    bits = [1 if us > 1000 else 0 for us in spaces]
+    value = sum(b << i for i, b in enumerate(bits))
+    marks = [us for m, us in segments if m][1:]
+    desc = "%d bits" % len(bits)
+    if bits:
+        desc += ", 0x%0*X LSB first" % ((len(bits) + 3) // 4, value)
+        desc += ", bytes " + " ".join("%02X" % (value >> (8 * k) & 0xFF) for k in range((len(bits) + 7) // 8))
+    if marks:
+        desc += "; marks %d .. %d us" % (min(marks), max(marks))
+    return line, desc
+
+
+def irlog(badge, seconds):
+    """Prints what the receiver gets, a frame at a time: a space of 20 ms or
+    more ends a frame."""
+    frame, quiet_since = [], time.time()
+    end = time.time() + seconds if seconds else None
+    print("listening; point a remote, banana or blaster at the badge (Ctrl-C to stop)")
+    try:
+        while end is None or time.time() < end:
+            got = badge.ir_raw()
+            for m, us in got:
+                if not m and us >= 20000:
+                    if frame:
+                        line, desc = ir_frame(frame)
+                        print("leader M%d S%d: %s" % (frame[0][1], frame[1][1] if len(frame) > 1 else 0, desc))
+                        print("   " + line)
+                    frame = []
+                    continue
+                if not frame and not m:
+                    continue  # a frame starts with a mark
+                frame.append((m, us))
+            if got:
+                quiet_since = time.time()
+            elif frame and time.time() - quiet_since > 0.1:
+                # the last space of a frame comes only with the next mark:
+                # after 100 ms of nothing, the frame is over
+                line, desc = ir_frame(frame)
+                print("leader M%d S%d: %s" % (frame[0][1], frame[1][1] if len(frame) > 1 else 0, desc))
+                print("   " + line)
+                frame = []
+            time.sleep(0.02)
+    except KeyboardInterrupt:
+        pass
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -103,9 +169,15 @@ def main():
     sub.add_parser("erase")
     n = sub.add_parser("name")
     n.add_argument("text", nargs="?")
+    i = sub.add_parser("irlog")
+    i.add_argument("--seconds", type=float, default=0, help="stop after this long (default: Ctrl-C)")
     args = p.parse_args()
 
     badge = Badge()
+    if args.cmd == "irlog":
+        badge.ir_raw()  # drop what came in before
+        irlog(badge, args.seconds)
+        return
     if args.cmd == "add":
         data = open(args.file, "rb").read()
         name = (args.name or os.path.splitext(os.path.basename(args.file))[0]).upper().encode()[:20]

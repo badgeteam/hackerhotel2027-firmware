@@ -150,11 +150,13 @@ static void draw_menu(void) {
     Text_DrawLabel(label, TEXT_Y, s_shown_ms, 255);
     outline(s_cursor, s_cursor + 1, entry_count());
     // The arms show the group: the name tag orange, animations purple,
-    // apps green, the badge's settings white
+    // texts blue, apps green, the badge's settings white
     if (kind == ENTRY_NAMETAG)
         arms(255, 110, 0);
     else if (kind == ENTRY_ITEM && it && it->type == STORE_TYPE_ANIMATION)
         arms(150, 0, 255);
+    else if (kind == ENTRY_ITEM && it && it->type == STORE_TYPE_TEXT)
+        arms(0, 120, 255);
     else if (kind == ENTRY_ITEM)
         arms(0, 255, 60);
     else

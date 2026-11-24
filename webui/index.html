@@ -343,19 +343,40 @@
 							<button id="badge-name-btn">Save</button>
 						</span>
 					</label>
-					<p class="hint">Apps and animations stored on the badge. The one marked
+					<p class="hint">Apps, animations and texts stored on the badge. The one marked
 						&#9733; starts at power-on; hold any button while the badge powers on to
 						skip it. On the badge, hold A for the menu (also from an app).</p>
 					<ul id="store-list" class="store-list"></ul>
 					<p class="hint" id="store-status">Connect to see what is stored.</p>
 					<div class="button-row">
 						<label class="file-button">
-							Add app or animation
-							<input type="file" id="store-add-input" accept=".hhapp,.ledanim">
+							Add app, animation or text
+							<input type="file" id="store-add-input" accept=".hhapp,.ledanim,.txt">
 						</label>
 						<button id="store-stop-btn">Stop</button>
 						<button id="store-erase-btn">Erase all</button>
 					</div>
+					<details class="text-item">
+						<summary>Add a text</summary>
+						<p class="hint">The badge shows the text in its own font, as the name tag:
+							still if it fits, else scrolling. It stores one byte per letter, so a
+							long text fits (an animation of it would not). Letters outside plain
+							ASCII lose their accents or show as <code>?</code>.</p>
+						<textarea id="text-item-input" rows="3" placeholder="Your text"></textarea>
+						<div class="button-row">
+							<label>
+								Speed
+								<input type="number" id="text-item-speed" min="1" max="60" value="10">
+								columns/s
+							</label>
+							<label>
+								<input type="checkbox" id="text-item-plain">
+								Text only (no colours on the arms)
+							</label>
+							<button id="text-item-btn">Add to the badge</button>
+						</div>
+						<p class="hint" id="text-item-status"></p>
+					</details>
 					<p class="hint"><strong>App library:</strong> the apps that come with the
 						firmware. <strong>Add</strong> stores one on the badge and starts it;
 						<strong>Update</strong> replaces an older copy (its saved data, such as
@@ -421,6 +442,7 @@
 	<script src="compression.js"></script>
 	<script src="video_import.js"></script>
 	<script src="text_import.js"></script>
+	<script src="text_item.js"></script>
 	<script src="app.js"></script>
 	<script src="wchisp.js"></script>
 	<script src="firmware_update.js"></script>

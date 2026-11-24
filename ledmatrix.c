@@ -63,16 +63,24 @@ static void enter_boot_rom(void) {
     jump_to_bootloader();
 }
 
-// Starts store item `index`: an animation plays, an app runs. Whatever ran
-// before stops; if the item cannot start, the badge shows the name tag.
+// In APP_MODE_FLASH_PATTERN: a text item plays (nametag.h), not an animation.
+// Both play from the store's flash, so the store treats them the same.
+static bool s_text_plays;
+
+// Starts store item `index`: an animation or a text plays, an app runs.
+// Whatever ran before stops; if the item cannot start, the badge shows the
+// name tag.
 static void run_item(uint8_t index) {
     AppHost_Stop();
     g_app_mode = APP_MODE_NAMETAG;
     const store_item_t* item = Store_Item(index);
     if (!item) return;
     g_running_item = index;
+    s_text_plays = item->type == STORE_TYPE_TEXT;
     if (item->type == STORE_TYPE_ANIMATION) {
         if (PatternPlayer_Start(Store_Payload(item), item->length)) g_app_mode = APP_MODE_FLASH_PATTERN;
+    } else if (s_text_plays) {
+        if (Nametag_StartText(Store_Payload(item), item->length)) g_app_mode = APP_MODE_FLASH_PATTERN;
     } else if (item->type == STORE_TYPE_APP && AppHost_Start(Store_Payload(item), item->length, item->name)) {
         g_app_mode = APP_MODE_APP;
     }
@@ -198,7 +206,10 @@ int main(void) {
         }
 
         if (g_app_mode == APP_MODE_FLASH_PATTERN) {
-            PatternPlayer_Tick(elapsed_ms);
+            if (s_text_plays)
+                Nametag_Tick(elapsed_ms);
+            else
+                PatternPlayer_Tick(elapsed_ms);
         }
         if (g_app_mode == APP_MODE_NAMETAG) {
             if (last_mode != APP_MODE_NAMETAG) Nametag_Start();

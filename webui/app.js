@@ -228,7 +228,7 @@ LedMatrixDevice.emulatorPresent().then((here) => {
 device.addEventListener('connect', refreshConnButtons);
 device.addEventListener('disconnect', refreshConnButtons);
 // Must match APP_MODE_* in the firmware's webusb_protocol.h
-const DEVICE_MODE_NAMES = { 1: 'Custom frame', 2: 'Stored pattern', 3: 'App', 4: 'Name tag' };
+const DEVICE_MODE_NAMES = { 1: 'Custom frame', 2: 'Stored animation or text', 3: 'App', 4: 'Name tag' };
 const MODE_CUSTOM = 1;
 
 device.addEventListener('status', (ev) => {
@@ -1064,12 +1064,51 @@ document.getElementById('store-add-input').addEventListener('change', async (ev)
 	}
 	const bytes = new Uint8Array(await file.arrayBuffer());
 	const magic = new TextDecoder().decode(bytes.subarray(0, 4));
-	const type = magic === 'HHAP' ? ITEM_TYPE.APP : magic === 'LA04' ? ITEM_TYPE.ANIMATION : 0;
-	if (!type) {
-		alert(`${file.name} is not an app (.hhapp) or an animation (.ledanim).`);
+	const name = file.name.replace(/\.[^.]+$/, '').toUpperCase();
+	if (/\.txt$/i.test(file.name)) {
+		try {
+			await addToBadge(ITEM_TYPE.TEXT, name, makeTextItem(new TextDecoder().decode(bytes)));
+		} catch (e) {
+			alert(e.message);
+		}
 		return;
 	}
-	await addToBadge(type, file.name.replace(/\.[^.]+$/, '').toUpperCase(), bytes);
+	const type = magic === 'HHAP' ? ITEM_TYPE.APP : magic === 'LA04' ? ITEM_TYPE.ANIMATION : 0;
+	if (!type) {
+		alert(`${file.name} is not an app (.hhapp), an animation (.ledanim) or a text (.txt).`);
+		return;
+	}
+	await addToBadge(type, name, bytes);
+});
+
+// A text item (text_item.js): the badge draws the text in its own font
+const textItemInput = document.getElementById('text-item-input');
+const textItemStatus = document.getElementById('text-item-status');
+function textItemCheck() {
+	const ascii = textItemAscii(textItemInput.value);
+	const room = patternBudgetBytes() - TEXT_ITEM.HEADER_BYTES;
+	textItemStatus.textContent = ascii
+		? `${ascii.length} characters${ascii.length > room ? `, ${room} fit on the badge now` : ''}.`
+		: '';
+	return ascii;
+}
+textItemInput.addEventListener('input', textItemCheck);
+document.getElementById('text-item-btn').addEventListener('click', async () => {
+	if (!device.connected) {
+		alert('Connect to a device first.');
+		return;
+	}
+	let bytes;
+	try {
+		bytes = makeTextItem(textItemInput.value, {
+			speed: document.getElementById('text-item-speed').value,
+			style: document.getElementById('text-item-plain').checked ? TEXT_ITEM.STYLE.PLAIN : TEXT_ITEM.STYLE.NAMETAG,
+		});
+	} catch (e) {
+		alert(e.message);
+		return;
+	}
+	await addToBadge(ITEM_TYPE.TEXT, textItemName(textItemInput.value), bytes);
 });
 
 // Stores an item on the badge (it starts at once). If `replace` is the
@@ -1084,7 +1123,10 @@ async function addToBadge(type, name, bytes, replace = null) {
 		});
 		if (replace !== null) await device.deleteItem(replace);
 	} catch (e) {
-		alert(e.message);
+		// firmware from before text items refuses the type
+		if (type === ITEM_TYPE.TEXT && e.result === 1)
+			alert('The badge\'s firmware does not know text items yet. Update it in the Firmware panel first.');
+		else alert(e.message);
 	} finally {
 		storeBusy = false;
 	}

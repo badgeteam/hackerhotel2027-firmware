@@ -12,11 +12,12 @@
 //   0x03 FRAME_COMMIT                          show the staging frame, switch to custom mode
 //   0x05 CLEAR                                 all LEDs off, switch to custom mode
 //
-//   The item store (store.h): animations (.ledanim) and apps (.hhapp)
+//   The item store (store.h): animations (.ledanim), apps (.hhapp) and texts
 //   0x20 STORE_ERASE                           erase every item (slow, wait for the reply);
 //                                              the badge shows the name tag
 //   0x21 ITEM_BEGIN     type, name...          start a new item after the last one; type 1 =
-//                                              animation, 2 = app; name up to 20 bytes
+//                                              animation, 2 = app, 3 = text (nametag.h);
+//                                              name up to 20 bytes
 //                                              (erases the free space: slow, wait for the reply)
 //   0x22 ITEM_CHUNK     data...                append to the new item, in order
 //   0x23 ITEM_COMMIT                           finish the item; it starts at once, and from
@@ -42,7 +43,7 @@
 //
 //   Firmware updates (from the web interface, through the boot ROM)
 //   0x40 BOOT_ROM                              reply, then reboot into the USB boot ROM
-//                                              (as button C), to flash new firmware
+//                                              (as UPDATE in the menu), to flash new firmware
 //   0x41 FW_INFO                               the reply carries the firmware's identity
 //
 //   0xFF QUERY                                 no effect, just the status reply
@@ -61,7 +62,7 @@
 //   (NUL-padded) -- 56 bytes
 
 #define APP_MODE_CUSTOM 1         // showing whatever the host (or the firmware) last wrote
-#define APP_MODE_FLASH_PATTERN 2  // playing an animation from the store on repeat
+#define APP_MODE_FLASH_PATTERN 2  // playing an animation or a text from the store on repeat
 #define APP_MODE_APP 3            // running an app from the store
 #define APP_MODE_NAMETAG 4        // the name tag (nametag.h): nothing else runs
 

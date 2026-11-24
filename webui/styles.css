@@ -281,7 +281,7 @@ label:has(input[type="checkbox"]) {
 	gap: 0.5rem;
 }
 
-input, select, button {
+input, select, button, textarea {
 	font: inherit;
 	color: var(--text);
 	background: var(--control-bg);
@@ -525,4 +525,12 @@ footer code {
 	color: var(--text-dim);
 	font-size: 0.7rem;
 	font-variant-numeric: tabular-nums;
+}
+
+/* "Add a text" in the On the badge panel */
+.text-item textarea {
+	width: 100%;
+	box-sizing: border-box;
+	resize: vertical;
+	margin: 0.4em 0;
 }

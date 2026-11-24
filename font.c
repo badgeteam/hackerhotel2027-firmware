@@ -104,16 +104,23 @@ static const uint8_t s_glyphs[95][FONT_W] = {
 
 static const uint8_t* glyph(char c) { return s_glyphs[c >= ' ' && c <= '~' ? c - ' ' : 0]; }
 
-int Text_Width(const char* text) {
-    int n = 0;
+static unsigned length(const char* text) {
+    unsigned n = 0;
     while (text[n]) n++;
-    return n ? n * FONT_ADVANCE - 1 : 0;
+    return n;
 }
 
-int Text_Draw(int x, int y, const char* text, uint8_t value) {
-    for (int k = 0; text[k]; k++) {
-        int x0 = x + k * FONT_ADVANCE;
-        if (x0 >= HH_GRID_W || x0 + FONT_W <= 0) continue;
+int Text_WidthN(unsigned len) { return len ? (int)len * FONT_ADVANCE - 1 : 0; }
+
+int Text_Width(const char* text) { return Text_WidthN(length(text)); }
+
+int Text_DrawN(int x, int y, const char* text, unsigned len, uint8_t value) {
+    // Only the characters on the grid: a text item can be 30 000 long
+    unsigned k = x < 0 ? (unsigned)(-x / FONT_ADVANCE) : 0;
+    for (; k < len; k++) {
+        int x0 = x + (int)k * FONT_ADVANCE;
+        if (x0 >= HH_GRID_W) break;
+        if (x0 + FONT_W <= 0) continue;
         const uint8_t* g = glyph(text[k]);
         for (int dx = 0; dx < FONT_W; dx++) {
             int col = x0 + dx;
@@ -126,8 +133,10 @@ int Text_Draw(int x, int y, const char* text, uint8_t value) {
             }
         }
     }
-    return Text_Width(text);
+    return Text_WidthN(len);
 }
+
+int Text_Draw(int x, int y, const char* text, uint8_t value) { return Text_DrawN(x, y, text, length(text), value); }
 
 #define SCROLL_CPS 10  // columns per second
 

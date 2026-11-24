@@ -8,6 +8,20 @@
    "description": "Breakout: five rows of bricks on top, a 3-wide paddle near the bottom, and the octagon's angled walls to bounce off. C / D move the paddle (hold to keep moving); where the ball hits the paddle steers it. Clear all the bricks for a new wave, a little faster. 3 lives, shown blue on the top arms; the score fills the arms orange. After the last life, any button starts again. As in the previous firmware's breakout."
   },
   {
+   "name": "FLAPPY",
+   "file": "flappy.hhapp",
+   "bytes": 1292,
+   "api": 2,
+   "description": "Flappy: one button. B, C or D flaps; fly through the gaps in the pipes. The bird waits until the first flap. Hitting a pipe or the edge of the grid ends the game; the arms fill gold with the pipes you passed, and after the end the grid shows the score, the outline the best. As in the previous firmware's flappy."
+  },
+  {
+   "name": "PONG",
+   "file": "pong.hhapp",
+   "bytes": 1920,
+   "api": 2,
+   "description": "Pong against the badge: your paddle on the left edge, the badge's on the right. B moves yours up, D down (hold to keep moving); where the ball hits a paddle steers it. First to 5 wins. The left arms show your points in blue, the right arms the badge's in red. After a game the grid shows the score, the outline your wins so far (kept on the badge); any button starts the next game. As in the previous firmware's pong."
+  },
+  {
    "name": "SIMON",
    "file": "simon.hhapp",
    "bytes": 1364,

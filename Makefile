@@ -3,7 +3,7 @@ all : flash
 TARGET:=ledmatrix
 TARGET_MCU:=CH643Q
 ADDITIONAL_C_FILES:=debug_output.c ch643_ledpwm.c buttons.c standby.c bootloader.c infrared.c webusb_protocol.c flash_pages.c store.c persist.c pattern_player.c la04.c app_host.c layout.c font.c nametag.c menu.c
-PREFIX:=riscv64-elf
+PREFIX?=riscv64-elf
 MINICHLINK:=$(dir $(shell which minichlink))
 
 # Project linker script: ch32fun's own script with the top 32K of flash

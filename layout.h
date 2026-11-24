@@ -14,3 +14,5 @@ extern const uint16_t layout_order[HH_SLOTS];
 extern const uint8_t layout_polar[HH_SLOTS][2];
 // Brightness (as a screen shows it) to PWM duty: gamma 2.2
 extern const uint8_t layout_gamma[256];
+// And back: linear light (PWM duty) to brightness as a screen shows it
+extern const uint8_t layout_linear[256];

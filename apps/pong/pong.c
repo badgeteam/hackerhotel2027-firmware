@@ -126,7 +126,7 @@ static void draw(void) {
     hh->clear();
     if (over) {
         char text[4] = {(char)('0' + points[0]), ':', (char)('0' + points[1]), 0};
-        hh->draw_text((HH_GRID_W - hh->text_width(text)) / 2, TEXT_Y, text, 255);
+        hh->draw_text(HH_CENTER, TEXT_Y, text, 255);
         for (int i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < wins ? 60 : 0);
     } else {
         for (int r = 0; r < HH_GRID_H; r += 2) hh->set(hh->grid[r][8], 18);  // the net
@@ -147,9 +147,7 @@ static void draw(void) {
         if (who == 2) v = 25;
         else if (flash && flash_who == who) v = flash * 15u;
         else if (l->rank < points[who]) v = 220;
-        hh->set(l->r, (uint8_t)(colour[who][0] * v / 255));
-        hh->set(l->g, (uint8_t)(colour[who][1] * v / 255));
-        hh->set(l->b, (uint8_t)(colour[who][2] * v / 255));
+        hh->set_rgb(i, (uint8_t)(colour[who][0] * v / 255), (uint8_t)(colour[who][1] * v / 255), (uint8_t)(colour[who][2] * v / 255));
     }
 }
 

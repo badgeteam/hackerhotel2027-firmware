@@ -14,7 +14,7 @@ static void tick(uint32_t elapsed_ms) {
     for (int i = 0; i < FX_MONO_COUNT; i++) {
         uint16_t s = fx_mono(hh, i);
         uint32_t h = s * 2654435761u;  // each LED's speed and phase, from a cheap hash of its slot
-        uint8_t v = sin8((uint8_t)(fx_phase(ms, 40 + (h >> 28) * 12) + (uint8_t)(h >> 8)));
+        uint8_t v = hh->sin8((uint8_t)(fx_phase(ms, 40 + (h >> 28) * 12) + (uint8_t)(h >> 8)));
         uint32_t lit = v > 215 ? (v - 215u) * 6u : 0;
         fx_set(hh, s, (uint8_t)(lit > 255 ? 255 : lit));
     }

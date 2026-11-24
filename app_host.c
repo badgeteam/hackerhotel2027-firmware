@@ -1,4 +1,5 @@
 #include "app_host.h"
+#include "app_util.h"
 #include <stdio.h>
 #include <string.h>
 #include "buttons.h"
@@ -7,6 +8,7 @@
 #include "font.h"
 #include "infrared.h"
 #include "layout.h"
+#include "menu.h"
 #include "persist.h"
 #include "store.h"
 #include "standby.h"
@@ -64,6 +66,30 @@ static void api_set_name(const char* name) { Persist_SetName(name, strlen(name))
 static bool api_load(void* data, unsigned len) { return Persist_LoadApp(s_name, data, len); }
 static bool api_save(const void* data, unsigned len) { return Persist_SaveApp(s_name, data, len); }
 
+static int api_draw_text(int x, int y, const char* text, uint8_t value) {
+    if (x == HH_CENTER) x = (HH_GRID_W - Text_Width(text)) / 2;
+    return Text_Draw(x, y, text, value);
+}
+
+static int api_draw_number(int x, int y, int32_t n, uint8_t value) {
+    char text[12];
+    return api_draw_text(x, y, AppUtil_Decimal(n, text), value);
+}
+
+static void api_set_rgb(int index, uint8_t r, uint8_t g, uint8_t b) {
+    if (index < 0 || index >= HH_RGB_COUNT) return;
+    api_set(layout_rgb[index].r, r);
+    api_set(layout_rgb[index].g, g);
+    api_set(layout_rgb[index].b, b);
+}
+
+static void api_set_linear(uint16_t slot, uint8_t value) { api_set(slot, layout_linear[value]); }
+
+static int api_step_brightness(int dir) {
+    if (dir) Menu_StepBrightness(dir);
+    return Menu_BrightnessLevel();
+}
+
 static const hh_api_t s_api = {
     .version = HH_API_VERSION,
     .size = sizeof(hh_api_t),
@@ -88,9 +114,17 @@ static const hh_api_t s_api = {
     .set_name = api_set_name,
     .load = api_load,
     .save = api_save,
-    .draw_text = Text_Draw,
+    .draw_text = api_draw_text,
     .text_width = Text_Width,
     .polar = layout_polar,
+    .set_rgb = api_set_rgb,
+    .set_linear = api_set_linear,
+    .sin8 = AppUtil_Sin8,
+    .hsv = AppUtil_Hsv,
+    .isqrt = AppUtil_Isqrt,
+    .atan8 = AppUtil_Atan8,
+    .draw_number = api_draw_number,
+    .step_brightness = api_step_brightness,
 };
 
 static bool in_image(uint32_t addr, uint32_t load_end) {

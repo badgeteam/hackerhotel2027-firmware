@@ -39,7 +39,7 @@ static void tick(uint32_t elapsed_ms) {
     for (int j = 0; j < HH_EDGE_COUNT; j++) fx_set(hh, hh->edge[j], (j + step) % 3 == 0 ? 230 : 25);
     for (int i = 0; i < HH_RGB_COUNT; i++) {
         const hh_rgb_t* l = &hh->rgb[i];
-        uint8_t flicker = sin8((uint8_t)(fx_phase(ms, 90) + l->rank * 37 + l->arm * 71));
+        uint8_t flicker = hh->sin8((uint8_t)(fx_phase(ms, 90) + l->rank * 37 + l->arm * 71));
         uint8_t v = (uint8_t)(120 + flicker / 3);
         fx_rgb(hh, i, scale8(255, v), scale8(140, v), scale8(20, v));
     }

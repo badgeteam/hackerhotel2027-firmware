@@ -82,25 +82,15 @@ static void step(uint8_t pressed) {
     fx = FX_FRAMES;
 }
 
-static void set_rgb(int i, uint8_t r, uint8_t g, uint8_t b) {
-    hh->set(hh->rgb[i].r, r);
-    hh->set(hh->rgb[i].g, g);
-    hh->set(hh->rgb[i].b, b);
-}
-
 static void draw(void) {
     hh->clear();
     uint16_t level = over ? hits : (uint16_t)(hits + 1);
-    char text[6], *p = text + sizeof text - 1;
-    *p = 0;
-    do *--p = (char)('0' + level % 10);
-    while ((level /= 10) && p > text);
-    hh->draw_text((HH_GRID_W - hh->text_width(p)) / 2, TEXT_Y, p, over ? 255 : 200);
+    hh->draw_number(HH_CENTER, TEXT_Y, level, over ? 255 : 200);
     if (over) {
         for (int i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < best ? 40 : 0);
         for (int i = 0; i < HH_RGB_COUNT; i++) {
             uint32_t ph = over_ms / 4 % 256;
-            set_rgb(i, (uint8_t)(ph < 128 ? ph * 2 : (255 - ph) * 2), 0, 0);
+            hh->set_rgb(i, (uint8_t)(ph < 128 ? ph * 2 : (255 - ph) * 2), 0, 0);
         }
         return;
     }
@@ -117,14 +107,14 @@ static void draw(void) {
                 if (!hh->get(hh->grid[r][c])) hh->set(hh->grid[r][c], (uint8_t)(fx * 6));
         for (int i = 0; i < HH_RGB_COUNT; i++) {
             uint8_t ph = (uint8_t)(hh->rgb[i].arm * 51 + t * 10), v = (uint8_t)(fx * 15);
-            set_rgb(i, ph < 85 ? v : 0, ph >= 85 && ph < 170 ? v : 0, ph >= 170 ? v : 0);
+            hh->set_rgb(i, ph < 85 ? v : 0, ph >= 85 && ph < 170 ? v : 0, ph >= 170 ? v : 0);
         }
     } else if (fx) {  // a miss: the arms blink red
-        for (int i = 0; i < HH_RGB_COUNT; i++) set_rgb(i, fx % 6 < 3 ? 230 : 0, 0, 0);
+        for (int i = 0; i < HH_RGB_COUNT; i++) hh->set_rgb(i, fx % 6 < 3 ? 230 : 0, 0, 0);
     } else {          // the green arm pulses
         uint32_t ph = t * 8 % 256, v = 128 + (ph < 128 ? ph : 255 - ph);
         for (int i = 0; i < HH_RGB_COUNT; i++)
-            if (hh->rgb[i].arm == arm) set_rgb(i, (uint8_t)(20 * v / 255), (uint8_t)v, (uint8_t)(60 * v / 255));
+            if (hh->rgb[i].arm == arm) hh->set_rgb(i, (uint8_t)(20 * v / 255), (uint8_t)v, (uint8_t)(60 * v / 255));
     }
 }
 

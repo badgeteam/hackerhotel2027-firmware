@@ -106,6 +106,13 @@ void Menu_StepBrightness(int dir) {
     }
 }
 
+int Menu_BrightnessLevel(void) {
+    uint8_t now = LEDMatrix_GetBrightness();
+    int i = (int)sizeof s_levels - 1;
+    while (i > 0 && s_levels[i] > now) i--;
+    return i;
+}
+
 static void set_slot(uint16_t slot, uint8_t v) { LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, v); }
 
 static void arms(uint8_t r, uint8_t g, uint8_t b) {

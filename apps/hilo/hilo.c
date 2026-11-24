@@ -79,10 +79,7 @@ static void tick(uint32_t elapsed_ms) {
 
     // Draw
     hh->clear();
-    uint8_t n = showing || over ? next : now;
-    char text[3] = {(char)('0' + n / 10), (char)('0' + n % 10), 0};
-    const char* s = n >= 10 ? text : text + 1;
-    hh->draw_text((HH_GRID_W - hh->text_width(s)) / 2, TEXT_Y, s, 255);
+    hh->draw_number(HH_CENTER, TEXT_Y, showing || over ? next : now, 255);
     uint16_t lit = over ? best : streak;  // after the end: the best
     for (int j = 0; j < HH_EDGE_COUNT; j++) hh->set(hh->edge[j], j < lit * 5 ? (over ? 40 : 120) : 0);
     uint32_t blink = hh->millis() % 1000 < 670 ? 160 : 60;
@@ -102,9 +99,7 @@ static void tick(uint32_t elapsed_ms) {
         } else if (line && l->arm == 3) {  // next to C: lower
             r = (uint8_t)blink, g = (uint8_t)(60 * blink / 255);
         }
-        hh->set(l->r, r);
-        hh->set(l->g, g);
-        hh->set(l->b, b);
+        hh->set_rgb(i, r, g, b);
     }
 }
 

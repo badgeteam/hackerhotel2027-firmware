@@ -6,9 +6,9 @@ here=$(dirname "$0")
 root="$here/../.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
-for t in simon whack breakout flappy pong startris chase maze hilo snake eye; do
+for t in util simon whack breakout flappy pong startris chase maze hilo snake eye; do
     cc -std=gnu11 -Wall -Wextra -O1 -fsanitize=address,undefined -I"$root" -I"$root/apps" \
-        -o "$out/$t" "$here/${t}_test.c" "$root/layout.c"
+        -o "$out/$t" "$here/${t}_test.c" "$root/layout.c" -lm
     "$out/$t"
 done
 # The animations: each app built under a prefix, into one test

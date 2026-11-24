@@ -1,7 +1,7 @@
 #include "factory.h"
-#include <stdio.h>
+#include <stddef.h>
 #include "app_util.h"
-#include "ch32fun.h"  // printf (the emulator: its log)
+#include "debug_output.h"
 #include "ch643_ledpwm.h"
 #include "font.h"
 #include "infrared.h"
@@ -60,7 +60,7 @@ static void start(uint8_t step) {
     s_keys = 0;
     s_ir_sent = s_ir_heard = 0;
     infrared_set_loopback(step == IR);
-    printf("factory %s\n", NAME[step]);
+    debug_log("factory ", NAME[step], NULL);
 }
 
 static void next(void) {
@@ -71,14 +71,14 @@ static void next(void) {
     infrared_set_loopback(false);
     s_state = PASS;
     s_ms = 0;
-    printf("factory PASS\n");
+    debug_log("factory PASS", NULL);
 }
 
 static void fail(const char* why) {
     infrared_set_loopback(false);
     s_state = FAIL;
     s_ms = 0;
-    printf("factory FAIL %s: %s\n", NAME[s_step], why);
+    debug_log("factory FAIL ", NAME[s_step], ": ", why, NULL);
 }
 
 void Factory_Start(void) {
@@ -122,7 +122,7 @@ factory_status_t Factory_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held
     s_leave_ms = (held & (HH_BTN_A | HH_BTN_B)) == (HH_BTN_A | HH_BTN_B) ? s_leave_ms + elapsed_ms : 0;
     if (s_leave_ms >= LEAVE_MS) {
         infrared_set_loopback(false);
-        printf("factory left\n");
+        debug_log("factory left", NULL);
         return FACTORY_DONE;
     }
 
@@ -203,7 +203,7 @@ factory_status_t Factory_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held
                 center("IR?", 2, blink ? 255 : 90);
                 arms(255, 120, 0);
                 if (pressed & HH_BTN_B) {
-                    printf("factory IR passed by B\n");
+                    debug_log("factory IR passed by B", NULL);
                     next();
                     break;
                 }

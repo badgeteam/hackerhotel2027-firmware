@@ -3,12 +3,13 @@
 // adaptive state). The format is in docs/ANIMATION_FORMAT.md, the encoder in
 // webui/compression.js; the two must match bit for bit.
 #include "la04.h"
+#include <stddef.h>
 #include <string.h>
 #include "apps/hhapp.h"
 #include "la04_tables.h"
 #include "layout.h"
 
-#define N 384   // positions: the grid, the outline, then RGB (layout_order)
+#define N 384   // positions: the grid, the outline, then RGB (the order of LA04_Next's output loop)
 #define NG 208  // grid positions
 #define NE 71   // outline positions
 #define NFAM 4  // mode families: each has its own contexts
@@ -498,8 +499,15 @@ void LA04_Next(uint8_t* out) {
         s_hold--;
     }
     if (++s_fi == s_nf) s_fi = 0;
-    if (s_q == 8)
-        for (int p = 0; p < N; p++) out[layout_order[p]] = s_cur[p];
-    else
-        for (int p = 0; p < N; p++) out[layout_order[p]] = s_deq[s_cur[p]];
+    // the positions to their slots, in LA04's order: the grid row by row,
+    // the outline, then each RGB LED's red, green and blue
+    const uint8_t* deq = s_q == 8 ? NULL : s_deq;
+    int p = 0;
+#define PUT(slot) (out[slot] = deq ? deq[s_cur[p]] : s_cur[p], p++)
+    for (int r = 0; r < HH_GRID_H; r++)
+        for (int c = 0; c < HH_GRID_W; c++)
+            if (layout_grid[r][c] != HH_NONE) PUT(layout_grid[r][c]);
+    for (int e = 0; e < HH_EDGE_COUNT; e++) PUT(layout_edge[e]);
+    for (int i = 0; i < HH_RGB_COUNT; i++) PUT(layout_rgb[i].r), PUT(layout_rgb[i].g), PUT(layout_rgb[i].b);
+#undef PUT
 }

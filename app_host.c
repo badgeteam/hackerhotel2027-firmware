@@ -5,6 +5,7 @@
 #include "buttons.h"
 #include "ch32fun.h"
 #include "ch643_ledpwm.h"
+#include "debug_output.h"
 #include "font.h"
 #include "infrared.h"
 #include "layout.h"
@@ -73,7 +74,7 @@ static void api_standby(void) {
 
 static void api_exit(void) { s_exit = true; }
 
-static void api_print(const char* text) { printf("%s", text); }
+static void api_print(const char* text) { debug_output_write(text, (int)strlen(text)); }
 
 static void api_set_name(const char* name) { Persist_SetName(name, strlen(name)); }
 static bool api_load(void* data, unsigned len) { return Persist_LoadApp(s_name, data, len); }
@@ -96,7 +97,7 @@ static void api_set_rgb(int index, uint8_t r, uint8_t g, uint8_t b) {
     api_set(layout_rgb[index].b, b);
 }
 
-static void api_set_linear(uint16_t slot, uint8_t value) { api_set(slot, layout_linear[value]); }
+static void api_set_linear(uint16_t slot, uint8_t value) { api_set(slot, AppUtil_Linear(layout_gamma, value)); }
 
 static int api_step_brightness(int dir) {
     if (dir) Menu_StepBrightness(dir);

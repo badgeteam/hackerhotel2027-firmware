@@ -66,7 +66,7 @@ int main(void) {
     m_set_rgb(-1, 9, 9, 9);
     CHECK(1, "set_rgb ignores a bad index");
     m_set_linear(5, 128);
-    CHECK(mock_leds[5] == 186 && layout_gamma[mock_leds[5]] >= 126 && layout_gamma[mock_leds[5]] <= 130,
+    CHECK(layout_gamma[mock_leds[5]] >= 126 && layout_gamma[mock_leds[5]] <= 130,
           "set_linear: half the duty (%d)", mock_leds[5]);
     m_draw_number(HH_CENTER, 0, 123, 255);
     CHECK(!strcmp(mock_text, "123") && mock_text_x == 0, "draw_number, centred (%s at %d)", mock_text, mock_text_x);

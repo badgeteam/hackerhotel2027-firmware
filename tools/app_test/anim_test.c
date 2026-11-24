@@ -70,7 +70,7 @@ int main(void) {
     // fx.h (the firmware's sin8 and hsv: util_test.c)
     int off = 0;
     for (int v = 1; v < 256; v++) {
-        int back = layout_gamma[layout_linear[v]];  // set_linear's value through the gamma: the linear value again
+        int back = layout_gamma[AppUtil_Linear(layout_gamma, (uint8_t)v)];  // set_linear's value through the gamma: the linear value again
         if (abs(back - v) > 1 + v / 25) off++;
     }
     CHECK(off == 0, "set_linear undoes the firmware's gamma (%d values off)", off);

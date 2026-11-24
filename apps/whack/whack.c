@@ -3,8 +3,9 @@
 // the sooner, the more points (5 with one LED lit, 2 with four). Reaching
 // the centre ends the game, and so does pressing while nothing is lit. It
 // gets faster every 3 hits. The grid shows the points, the outline the best
-// so far; after the end, any button starts again. As in the previous
-// firmware's whack-a-mole.
+// so far; after the end, any button starts again. Until the first button
+// the badge plays a demo, and it goes back to that 15 s after a game. As in
+// the previous firmware's whack-a-mole.
 #include "hhapp.h"
 
 #define FIRST_STEP_MS 330  // per LED at the start: 1.7 s to the centre
@@ -13,6 +14,8 @@
 #define HIT_MS 400         // the arms flash green after a hit
 #define OVER_MS 1000       // after the end, buttons wait this long
 #define TEXT_Y 4
+#define DEMO_OVER_MS 2000      // a demo game's end shows this long
+#define BACK_TO_DEMO_MS 15000  // after a game, no button this long: the demo
 
 // An arm's centre line, from the centre out (ranks 1 and 2 are its sides)
 static const uint8_t LINE[5] = {0, 3, 4, 5, 6};
@@ -26,15 +29,20 @@ static uint32_t hit_ms;      // the hit flash, still this long
 static uint32_t over_ms;
 static bool over;
 static uint16_t hits, score, best;
+static bool demo;            // the badge plays by itself
+static uint8_t demo_at;      // it stops this mole with so many LEDs lit
+static uint16_t demo_hits;   // and misses after so many hits
 
 static void next_mole(void) {
     wait_ms = 500 + hh->random() % 1000;  // 0.5 to 1.5 s
     arm = (uint8_t)((arm + 1 + hh->random() % 4) % 5);  // never the same arm twice
     lit = 0;
     t_ms = 0;
+    demo_at = (uint8_t)(1 + hh->random() % 3);
 }
 
 static void start(void) {
+    demo_hits = (uint16_t)(15 + hh->random() % 16);
     step_ms = FIRST_STEP_MS;
     hits = score = 0;
     hit_ms = 0;
@@ -46,7 +54,7 @@ static void start(void) {
 static void game_over(void) {
     over = true;
     over_ms = 0;
-    if (score > best) {
+    if (!demo && score > best) {
         best = score;
         hh->save(&best, sizeof best);
     }
@@ -54,10 +62,21 @@ static void game_over(void) {
 
 static void tick(uint32_t elapsed_ms) {
     uint8_t pressed = hh->pressed();
+    if (demo && pressed) {  // the first button: a real game
+        demo = false;
+        start();
+        pressed = 0;
+    }
+    if (demo) pressed = lit && lit >= demo_at && hits < demo_hits;  // until it lets one through
     hit_ms = hit_ms > elapsed_ms ? hit_ms - elapsed_ms : 0;
     if (over) {
         over_ms += elapsed_ms;
-        if (over_ms >= OVER_MS && pressed) start();
+        if (demo ? over_ms >= DEMO_OVER_MS : over_ms >= OVER_MS && pressed) {
+            start();
+        } else if (!demo && over_ms >= BACK_TO_DEMO_MS) {
+            demo = true;
+            start();
+        }
     } else if (!lit) {
         if (pressed && !hit_ms) {
             game_over();  // too early (a double press on a hit does not count)
@@ -123,6 +142,7 @@ static void tick(uint32_t elapsed_ms) {
 static void init(const hh_api_t* api) {
     hh = api;
     if (!hh->load(&best, sizeof best)) best = 0;
+    demo = true;
     start();
 }
 

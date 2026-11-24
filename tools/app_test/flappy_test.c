@@ -11,23 +11,26 @@ static void run(uint32_t ms, uint8_t pressed) {
     mock_pressed_now = 0;
 }
 
-// The gap of the next pipe the bird is not past yet
-static int32_t next_gap(void) {
-    int32_t best_x = 1 << 30, gap = 7;
-    for (int i = 0; i < PIPES; i++)
-        if (pipes[i].x >= 0 && pipes[i].x + ONE * 3 / 5 >= BIRD_COL * ONE && pipes[i].x < best_x) best_x = pipes[i].x, gap = pipes[i].gap;
-    return gap;
-}
-
-// Flaps once it sinks half a row below the middle of that gap
-static bool pilot(void) {
-    int32_t mid = next_gap() * ONE + (GAP - 1) * ONE / 2;
-    return vy >= 0 && y > mid + ONE / 2;
-}
+// pilot() is the app's own: the demo flies with it
 
 int main(void) {
     (void)mock_rgb;
     init(&mock_api);
+
+    // The demo flies by itself, stops flapping after 15 .. 30 pipes, saves
+    // nothing, and starts over
+    CHECK(demo, "it opens with the demo");
+    for (int i = 0; i < 200000 && state != OVER; i++) run(33, 0);
+    CHECK(state == OVER && score >= 15 && score <= 30, "the demo passes %d pipes, then falls", score);
+    CHECK(best == 0 && mock_saves == 0, "a demo game saves nothing");
+    run(DEMO_OVER_MS, 0);
+    run(10, 0);
+    CHECK(demo && state != OVER && score == 0, "and starts over");
+    run(10, HH_BTN_A);
+    CHECK(demo, "A does not end the demo (it is the menu's)");
+    run(10, HH_BTN_D);
+    CHECK(!demo && state == READY, "D starts a real game, waiting for its first flap");
+
     for (int i = 0; i < 100; i++) run(10, 0);
     CHECK(state == READY && t == 0, "it waits for the first flap");
     run(10, HH_BTN_A);
@@ -72,6 +75,10 @@ int main(void) {
     run(10, HH_BTN_B);
     for (int i = 0; i < 200 && state == FLYING; i++) step(true);
     CHECK(state == OVER && cell(y) <= 1, "flapping all the time hits the top (row %d)", (int)cell(y));
+
+    state = OVER, over_ms = 0;  // a game that just ended
+    run(15000, 0);
+    CHECK(demo, "15 s after a game, the demo comes back");
 
     best = 0;
     init(&mock_api);

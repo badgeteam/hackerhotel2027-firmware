@@ -2,19 +2,24 @@
 // or lower (C)? The arm next to D blinks green for higher, the arm next to
 // C orange for lower. A right guess adds one to the streak, which fills the
 // outline; a wrong one ends the game. After the end, any button starts
-// again; the longest streak is kept on the badge. As in the previous
-// firmware's Higher Lower.
+// again; the longest streak is kept on the badge. Until the first button
+// the badge plays a demo, and it goes back to that 15 s after a game. As in
+// the previous firmware's Higher Lower.
 #include "hhapp.h"
 
 #define SHOW_MS 800  // the next number shows this long, with the verdict
 #define OVER_MS 1000
 #define TEXT_Y 4
+#define DEMO_THINK_MS 670      // the demo guesses after this
+#define DEMO_OVER_MS 2000      // a demo game's end shows this long
+#define BACK_TO_DEMO_MS 15000  // after a game, no button this long: the demo
 
 static const uint8_t LINE[5] = {0, 3, 4, 5, 6};  // an arm's centre line; ranks 1, 2 are its sides
 
 static const hh_api_t* hh;
 static uint8_t now, next;
 static bool showing, right, over;
+static bool demo;  // the badge plays by itself
 static uint16_t streak, best;
 static uint32_t t_ms;
 
@@ -34,15 +39,26 @@ static void start(void) {
 }
 
 static void tick(uint32_t elapsed_ms) {
-    uint8_t pressed = hh->pressed();
+    uint8_t pressed = hh->pressed() & (HH_BTN_B | HH_BTN_C | HH_BTN_D);
+    if (demo && pressed) {  // the first button: a real game
+        demo = false;
+        start();
+        pressed = 0;
+    }
     t_ms += elapsed_ms;
+    if (demo && !over && !showing && t_ms >= DEMO_THINK_MS) pressed = now < 50 ? HH_BTN_D : HH_BTN_C;  // the odds
     if (over) {
-        if (t_ms >= OVER_MS && pressed) start();
+        if (demo ? t_ms >= DEMO_OVER_MS : t_ms >= OVER_MS && pressed) {
+            start();
+        } else if (!demo && t_ms >= BACK_TO_DEMO_MS) {
+            demo = true;
+            start();
+        }
     } else if (showing) {
         if (t_ms >= SHOW_MS) {
             if (!right) {
                 over = true;
-                if (streak > best) {
+                if (!demo && streak > best) {
                     best = streak;
                     hh->save(&best, sizeof best);
                 }
@@ -95,6 +111,7 @@ static void tick(uint32_t elapsed_ms) {
 static void init(const hh_api_t* api) {
     hh = api;
     if (!hh->load(&best, sizeof best)) best = 0;
+    demo = true;
     start();
 }
 

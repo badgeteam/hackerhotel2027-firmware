@@ -36,6 +36,19 @@ int main(void) {
     (void)mock_rgb;
     init(&mock_api);
 
+    // The demo: the badge plays both sides to 5, saves nothing, starts over
+    CHECK(demo, "it opens with the demo");
+    for (int i = 0; i < 2000000 && !over; i++) run(33, 0);
+    CHECK(over && (points[0] == WIN || points[1] == WIN), "the demo plays a game to the end (%d:%d)", points[0], points[1]);
+    CHECK(wins == 0 && mock_saves == 0, "a demo game saves nothing");
+    run(DEMO_OVER_MS, 0);
+    CHECK(demo && !over && points[0] == 0 && points[1] == 0, "and starts over");
+    run(10, HH_BTN_A);
+    CHECK(demo, "A does not end the demo (it is the menu's)");
+    run(10, HH_BTN_C);
+    CHECK(!demo && !over, "C starts a real game");
+    start();
+
     // B up, D down, within rows 5 .. 10
     step(HH_BTN_B, 0);
     CHECK(paddle[0] == 6, "B moves your paddle up");
@@ -77,6 +90,10 @@ int main(void) {
     }
     CHECK(won == 10 && off_grid == 0, "ten more games won (%d), the ball always on the grid", won);
     CHECK(longest < 30 * 60 * 5, "no game takes over 5 minutes (the longest %d s)", longest / 30);
+
+    over = true, over_ms = 0;  // a game that just ended
+    run(15000, 0);
+    CHECK(demo, "15 s after a game, the demo comes back");
 
     wins = 0;
     init(&mock_api);

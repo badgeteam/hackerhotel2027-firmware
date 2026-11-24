@@ -40,6 +40,18 @@ int main(void) {
     (void)mock_rgb;
     init(&mock_api);
 
+    // The demo walks all five mazes by itself, saves nothing, starts over
+    CHECK(demo, "it opens with the demo");
+    for (int i = 0; i < 2000000 && !over; i++) run(33, 0);
+    CHECK(over && solved == MAZES, "the demo solves %d of %d mazes", solved, MAZES);
+    CHECK(best == 0 && mock_saves == 0, "a demo game saves nothing");
+    run(DEMO_OVER_MS, 0);
+    CHECK(demo && !over && solved == 0, "and starts over");
+    run(10, HH_BTN_A);
+    CHECK(demo, "A does not end the demo (holding it opens the menu)");
+    run(10, HH_BTN_C);
+    CHECK(!demo && !over && solved == 0 && pr == 1 && pc == 1, "C starts a real game, at the start");
+
     // Perfect mazes of 5 .. 13 cells: all cells reachable, and n*n - 1
     // openings (a tree: one way between any two cells)
     for (int s = 0; s < MAZES; s++) {
@@ -115,6 +127,10 @@ int main(void) {
     for (int i = 0; i < 16 * 30 && !over; i++) step(0, 0);
     CHECK(over && solved == 0, "15 s without moving: time is up");
     CHECK(mock_saves == 1, "a lower score does not save");
+
+    over = true, over_ms = 0;  // a game that just ended
+    run(15000, 0);
+    CHECK(demo, "15 s after a game, the demo comes back");
 
     best = 0;
     init(&mock_api);

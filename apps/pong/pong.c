@@ -3,7 +3,9 @@
 // a paddle steers it. First to 5 wins. The left arms show your points in
 // blue, the right arms the badge's in red. After a game the grid shows the
 // score, the outline your wins so far (kept on the badge); any button
-// starts the next game. As in the previous firmware's pong.
+// starts the next game. Until the first button the badge plays both sides,
+// and it goes back to that 15 s after a game. As in the previous firmware's
+// pong.
 #include "hhapp.h"
 
 #define FRAME_MS 33  // the game steps 30 times a second
@@ -15,6 +17,8 @@
 #define SERVE_FRAMES 20
 #define OVER_MS 1000
 #define TEXT_Y 4
+#define DEMO_OVER_MS 2000      // a demo game's end shows this long
+#define BACK_TO_DEMO_MS 15000  // after a game, no button this long: the demo
 
 static const hh_api_t* hh;
 static int32_t paddle[2];  // the top row of yours (0) and the badge's (1)
@@ -25,6 +29,7 @@ static int32_t aim_err[2];  // a computer player misjudges a ball now and then
 static uint8_t flash, flash_who;
 static uint32_t t, frame_ms, over_ms;
 static bool over;
+static bool demo;  // the badge plays both sides
 static uint16_t wins;  // saved
 
 static int32_t cell(int32_t v) { return (v + ONE / 2) >> 8; }
@@ -61,7 +66,9 @@ static void step(uint8_t pressed, uint8_t held) {
     t++;
     if (flash) flash--;
 
-    if ((pressed & HH_BTN_B) || ((held & HH_BTN_B) && t % 3 == 0)) paddle[0] = clamp(paddle[0] - 1, TOP, BOTTOM);
+    if (demo) {
+        if (t % 3 == 0 && paddle[0] != aim(0)) paddle[0] += paddle[0] < aim(0) ? 1 : -1;
+    } else if ((pressed & HH_BTN_B) || ((held & HH_BTN_B) && t % 3 == 0)) paddle[0] = clamp(paddle[0] - 1, TOP, BOTTOM);
     else if ((pressed & HH_BTN_D) || ((held & HH_BTN_D) && t % 3 == 0)) paddle[0] = clamp(paddle[0] + 1, TOP, BOTTOM);
     if ((t + 1) % 3 == 0 && paddle[1] != aim(1)) paddle[1] += paddle[1] < aim(1) ? 1 : -1;  // the badge, one row a step at most
 
@@ -105,7 +112,7 @@ static void step(uint8_t pressed, uint8_t held) {
         if (points[who] == WIN) {
             over = true;
             over_ms = 0;
-            if (who == 0) {
+            if (who == 0 && !demo) {
                 wins++;
                 hh->save(&wins, sizeof wins);
             }
@@ -148,9 +155,19 @@ static void draw(void) {
 
 static void tick(uint32_t elapsed_ms) {
     uint8_t pressed = hh->pressed(), held = hh->held();
+    if (demo && (pressed & (HH_BTN_B | HH_BTN_C | HH_BTN_D))) {  // the first button: a real game
+        demo = false;
+        start();
+        pressed = 0;
+    }
     if (over) {
         over_ms += elapsed_ms;
-        if (over_ms >= OVER_MS && pressed) start();
+        if (demo ? over_ms >= DEMO_OVER_MS : over_ms >= OVER_MS && pressed) {
+            start();
+        } else if (!demo && over_ms >= BACK_TO_DEMO_MS) {
+            demo = true;
+            start();
+        }
     } else {
         static uint8_t pending;  // a press between two game steps is not lost
         pending |= pressed;
@@ -167,6 +184,7 @@ static void tick(uint32_t elapsed_ms) {
 static void init(const hh_api_t* api) {
     hh = api;
     if (!hh->load(&wins, sizeof wins)) wins = 0;
+    demo = true;
     start();
 }
 

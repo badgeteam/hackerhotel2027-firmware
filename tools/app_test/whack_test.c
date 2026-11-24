@@ -33,6 +33,17 @@ static int line_lit(int a) {
 int main(void) {
     init(&mock_api);
 
+    // The demo: it hits moles by itself, then lets one through, saves
+    // nothing, and starts over
+    CHECK(demo, "it opens with the demo");
+    for (int i = 0; i < 400000 && !over; i++) run(5, 0);
+    CHECK(over && hits >= 15 && hits <= 30, "the demo hits %d moles, then misses one", hits);
+    CHECK(best == 0 && mock_saves == 0, "a demo game saves nothing");
+    run(DEMO_OVER_MS, 0);
+    CHECK(demo && !over && score == 0, "and starts over");
+    run(5, HH_BTN_B);
+    CHECK(!demo && !over && score == 0, "the first button starts a real game, and is no press in it");
+
     // Stopped with one LED lit: 5 points; with four: 2
     until_lit(1);
     CHECK(lit == 1 && line_lit(arm) == 0x10, "the mole comes up at the tip of arm %d (%02x)", arm, line_lit(arm));
@@ -75,6 +86,9 @@ int main(void) {
     run(5, HH_BTN_D);
     CHECK(over, "a press while nothing is lit ends it");
     CHECK(mock_saves == 1, "a lower score does not save");
+
+    run(15000, 0);
+    CHECK(demo && !over, "15 s after a game, the demo comes back");
 
     best = 0;
     init(&mock_api);

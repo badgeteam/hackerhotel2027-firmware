@@ -3,7 +3,8 @@
 // to keep moving); where the ball hits the paddle steers it. Clear all the
 // bricks for a new wave, a little faster. 3 lives, shown blue on the top
 // arms; the score fills the arms orange. After the last life, any button
-// starts again. As in the previous firmware's breakout.
+// starts again. Until the first button the badge plays a demo, and it goes
+// back to that 15 s after a game. As in the previous firmware's breakout.
 #include "hhapp.h"
 
 #define FRAME_MS 33      // the game steps 30 times a second
@@ -12,6 +13,9 @@
 #define PADDLE_ROW 14
 #define SERVE_FRAMES 20  // the ball sits on the paddle this long
 #define OVER_MS 1000     // after the end, buttons wait this long
+#define DEMO_OVER_MS 2000      // a demo game's end shows this long
+#define BACK_TO_DEMO_MS 15000  // after a game, no button this long: the demo
+#define DEMO_WAVES 2           // the demo clears this many waves, then lets the ball go
 
 static const hh_api_t* hh;
 static uint32_t bricks[BRICK_ROWS];  // bit c: a brick in column c
@@ -24,6 +28,9 @@ static uint16_t score, best;
 static uint32_t t, frame_ms, over_ms;
 static uint32_t idle;                // steps since the ball last hit a brick or the paddle
 static bool over;
+static bool demo;        // the badge plays by itself
+static int32_t demo_aim; // where on the paddle it takes the ball
+static uint8_t waves;    // cleared this game
 
 static int32_t cell(int32_t v) { return (v + ONE / 2) >> 8; }
 
@@ -58,6 +65,7 @@ static void start(void) {
     score = 0;
     speed = ONE / 2;  // 15 cells per second
     flash = 0;
+    waves = 0;
     over = false;
     serve_ball();
 }
@@ -69,10 +77,17 @@ static void step(uint8_t pressed, uint8_t held) {
     t++;
     if (flash) flash--;
 
-    // The paddle: a press moves it one, holding keeps it moving
+    // The paddle: a press moves it one, holding keeps it moving. The demo
+    // follows the ball, a cell to one side now and then, to steer it
     int32_t target = paddle;
-    if ((pressed & HH_BTN_C) || ((held & HH_BTN_C) && t % 3 == 0)) target = paddle - 1;
-    else if ((pressed & HH_BTN_D) || ((held & HH_BTN_D) && t % 3 == 0)) target = paddle + 1;
+    if (demo) {
+        if (vy < 0 && t % 8 == 0) demo_aim = (int32_t)(hh->random() % 3) - 1;
+        if (waves < DEMO_WAVES) target = clamp(cell(x) + demo_aim, paddle - 1, paddle + 1);
+    } else if ((pressed & HH_BTN_C) || ((held & HH_BTN_C) && t % 3 == 0)) {
+        target = paddle - 1;
+    } else if ((pressed & HH_BTN_D) || ((held & HH_BTN_D) && t % 3 == 0)) {
+        target = paddle + 1;
+    }
     paddle = clamp(target, 5, 11);
 
     if (serve) {
@@ -126,7 +141,7 @@ static void step(uint8_t pressed, uint8_t held) {
         if (--lives == 0) {
             over = true;
             over_ms = 0;
-            if (score > best) {
+            if (!demo && score > best) {
                 best = score;
                 hh->save(&best, sizeof best);
             }
@@ -136,9 +151,10 @@ static void step(uint8_t pressed, uint8_t held) {
     }
     bool empty = true;
     for (int i = 0; i < BRICK_ROWS; i++) empty = empty && !bricks[i];
-    if (empty) {  // the next wave, a bit faster
+    if (empty) {  // the next wave, a bit faster, up to a cell a step
         fill();
-        speed += ONE / 16;
+        waves++;
+        if (speed < ONE) speed += ONE / 16;
         serve_ball();
     }
 }
@@ -174,9 +190,19 @@ static void draw(void) {
 
 static void tick(uint32_t elapsed_ms) {
     uint8_t pressed = hh->pressed(), held = hh->held();
+    if (demo && (pressed & (HH_BTN_B | HH_BTN_C | HH_BTN_D))) {  // the first button: a real game
+        demo = false;
+        start();
+        pressed = 0;
+    }
     if (over) {
         over_ms += elapsed_ms;
-        if (over_ms >= OVER_MS && pressed) start();
+        if (demo ? over_ms >= DEMO_OVER_MS : over_ms >= OVER_MS && pressed) {
+            start();
+        } else if (!demo && over_ms >= BACK_TO_DEMO_MS) {
+            demo = true;
+            start();
+        }
     } else {
         // Whole game steps; a press is not lost between two of them
         static uint8_t pending;
@@ -194,6 +220,7 @@ static void tick(uint32_t elapsed_ms) {
 static void init(const hh_api_t* api) {
     hh = api;
     if (!hh->load(&best, sizeof best)) best = 0;
+    demo = true;
     start();
 }
 

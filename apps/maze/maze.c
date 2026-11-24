@@ -6,7 +6,9 @@
 // shows the time left. Five mazes, from 5 x 5 to 13 x 13 cells, with 15 s
 // for the first and 8 s more for each next one; an arm's sides turn green
 // for each maze solved. After the end, any button starts again; the most
-// mazes solved are kept on the badge. As in the previous firmware's maze.
+// mazes solved are kept on the badge. Until the first button the badge
+// walks the mazes itself, a hand on the right-hand wall, and it goes back
+// to that 15 s after a game. As in the previous firmware's maze.
 #include "hhapp.h"
 
 #define FRAME_MS 33  // the game steps 30 times a second
@@ -20,6 +22,9 @@
 #define SOLVED_FRAMES 30
 #define OVER_MS 1000
 #define TEXT_Y 4
+#define DEMO_OVER_MS 2000      // a demo game's end shows this long
+#define BACK_TO_DEMO_MS 15000  // after a game, no button this long: the demo
+#define DEMO_EVERY 5           // the demo steps every this many game steps
 
 static const int8_t DR[4] = {0, 1, 0, -1};  // right, down, left, up
 static const int8_t DC[4] = {1, 0, -1, 0};
@@ -39,6 +44,8 @@ static uint8_t rep;        // steps a direction has been held
 static uint32_t time_left, limit, fx;  // in steps
 static uint32_t t, frame_ms, over_ms;
 static bool over;
+static bool demo;       // the badge plays by itself
+static uint8_t heading; // the demo's direction
 
 static bool is_wall(int r, int c) { return r >= 0 && c >= 0 && r < size && c < size && (wall[r] >> c & 1); }
 static void open_px(int r, int c) { wall[r] &= ~(1u << c); }
@@ -68,6 +75,7 @@ static void make(void) {
         stack[top++] = (uint8_t)((cr + DR[d]) * n + cc + DC[d]);
     }
     pr = pc = 1;
+    heading = 0;
     limit = (15u + 8u * solved) * 30u;
     time_left = limit;
 }
@@ -82,7 +90,7 @@ static bool move(int d) {
 static void finish(void) {
     over = true;
     over_ms = 0;
-    if (solved > best) {
+    if (!demo && solved > best) {
         best = solved;
         hh->save(&best, sizeof best);
     }
@@ -117,6 +125,14 @@ static void step(uint8_t pressed, uint8_t held) {
         if (key >= 0 && !(++rep >= REPEAT_AFTER && rep % REPEAT_EVERY == 0)) key = -1;
     }
     if (key >= 0) move(KEY_DIR[key]);
+    if (demo && t % DEMO_EVERY == 0)
+        for (int k = 0; k < 4; k++) {  // right, straight, left, back
+            int d = (heading + 1 + 3 * k) % 4;
+            if (move(d)) {
+                heading = (uint8_t)d;
+                break;
+            }
+        }
     if (pr == size - 2 && pc == size - 2) {  // the exit
         if (++solved >= MAZES) finish();
         else fx = SOLVED_FRAMES;
@@ -187,9 +203,20 @@ static void draw(void) {
 
 static void tick(uint32_t elapsed_ms) {
     uint8_t pressed = hh->pressed(), held = hh->held();
+    if (demo && (pressed & (HH_BTN_B | HH_BTN_C | HH_BTN_D))) {  // the first button: a real game
+        demo = false;
+        start();
+        pressed = 0;
+    }
+    if (demo) pressed = held = 0;
     if (over) {
         over_ms += elapsed_ms;
-        if (over_ms >= OVER_MS && pressed) start();
+        if (demo ? over_ms >= DEMO_OVER_MS : over_ms >= OVER_MS && pressed) {
+            start();
+        } else if (!demo && over_ms >= BACK_TO_DEMO_MS) {
+            demo = true;
+            start();
+        }
     } else {
         static uint8_t pending;  // a press between two game steps is not lost
         pending |= pressed;
@@ -206,6 +233,7 @@ static void tick(uint32_t elapsed_ms) {
 static void init(const hh_api_t* api) {
     hh = api;
     if (!hh->load(&best, sizeof best)) best = 0;
+    demo = true;
     start();
 }
 

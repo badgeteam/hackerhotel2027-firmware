@@ -1,6 +1,13 @@
 {
  "apps": [
   {
+   "name": "BREAKOUT",
+   "file": "breakout.hhapp",
+   "bytes": 2020,
+   "api": 2,
+   "description": "Breakout: five rows of bricks on top, a 3-wide paddle near the bottom, and the octagon's angled walls to bounce off. C / D move the paddle (hold to keep moving); where the ball hits the paddle steers it. Clear all the bricks for a new wave, a little faster. 3 lives, shown blue on the top arms; the score fills the arms orange. After the last life, any button starts again. As in the previous firmware's breakout."
+  },
+  {
    "name": "SIMON",
    "file": "simon.hhapp",
    "bytes": 1364,

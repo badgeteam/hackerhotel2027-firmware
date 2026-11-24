@@ -21,6 +21,9 @@ FIRMWARE_RAM_LINE:=RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 8K
 # -dirty if the firmware's own sources differ from it
 FW_VERSION:=$(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet HEAD -- ':(glob)*.c' ':(glob)*.h' ':(glob)apps/hhapp.h' Makefile 2>/dev/null || echo -dirty)
 EXTRA_CFLAGS+=-DFW_VERSION=\"$(FW_VERSION)\"
+# The factory test's KEY step (factory.h); FACTORY_KEYS=0: the test runs by itself
+FACTORY_KEYS?=1
+EXTRA_CFLAGS+=-DFACTORY_KEYS=$(FACTORY_KEYS)
 
 include ch32fun/ch32fun/ch32fun.mk
 

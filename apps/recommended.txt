@@ -1,0 +1,17 @@
+# The apps a badge ships with, and what the web interface's "Install the
+# recommended set" (and tools/badge.py recommended) puts on an erased
+# badge, in this order. The last one becomes the boot item. One app (its
+# directory name) per line; tools/publish_apps.py checks that they fit in
+# the store with room left for people's own texts and animations.
+startris
+four
+breakout
+banana
+snake
+flappy
+simon
+fire
+hotel
+galaxy
+ripple
+eye

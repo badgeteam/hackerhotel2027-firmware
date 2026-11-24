@@ -50,7 +50,8 @@ and its row and column. The file was made from the PCB with
 - the centre grid (17 × 16, 2 mm pitch),
 - the outline in clockwise order,
 - the RGB LEDs by arm and rank,
-- LA03's spatial pixel order,
+- LA04's spatial pixel order, and the LA04 decoder's neighbour tables
+  (`la04_tables.h`),
 - the gamma table.
 
 The script writes `layout.c` for the firmware and `webui/layout_data.js`

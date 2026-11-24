@@ -49,10 +49,6 @@ uint8_t Store_FreePages(void);  // 256-byte pages left for new items
 uint8_t Store_BootItem(void);
 void Store_SetBootItem(uint8_t index);
 
-// A .ledanim at the start of the region, from firmware that stored a
-// single pattern there, without an item header; NULL if there is none.
-const uint8_t* Store_LegacyPattern(void);
-
 void Store_EraseAll(void);
 
 // Removes item `index`: the items after it move down one by one, page by

@@ -2,7 +2,8 @@
 // pattern_player.c, built for the host, and checks every frame against
 // what the web interface's decoder produced.
 //
-//   cc ... player_test.c ../../pattern_player.c ../../layout.c; ./player_test DIR NAME...
+//   cc -DLA04_RAM_IN_BSS ... player_test.c ../../pattern_player.c ../../la04.c ../../layout.c
+//   ./player_test DIR NAME...
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,8 +24,7 @@ static uint8_t* load(const char* path, long* len) {
     fseek(f, 0, SEEK_END);
     *len = ftell(f);
     rewind(f);
-    uint8_t* buf = malloc(*len + 64);  // the bit reader may look a little past the end
-    memset(buf, 0, *len + 64);
+    uint8_t* buf = malloc(*len);
     if (fread(buf, 1, *len, f) != (size_t)*len) exit(2);
     fclose(f);
     return buf;
@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
         long frames = flen / PIXELS;
         unsigned frame_ms = 1000u / anim[6];
 
-        PatternPlayer_Start(anim);
+        PatternPlayer_Start(anim, (uint32_t)len);
         int bad = -1;
         for (long f = 0; f < 2 * frames && bad < 0; f++) {  // twice: the loop back to frame 0 too
             PatternPlayer_Tick(frame_ms);

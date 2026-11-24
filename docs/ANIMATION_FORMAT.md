@@ -2,29 +2,57 @@
 
 A `.ledanim` file holds one animation for the badge's 384 LED slots. The
 web interface writes it (`webui/compression.js`) and the firmware plays it
-from flash (`pattern_player.c`). The firmware decodes one frame at a time,
-because the whole animation does not fit in 20 KB of RAM.
+from flash (`la04.c`, called by `pattern_player.c`). The firmware decodes
+one frame at a time, because the whole animation does not fit in RAM.
 
-There are two versions:
+The current version is **LA04**. The firmware and the web interface read
+only LA04. The older versions (LA02, LA03) are gone: the badge has not
+shipped yet, so no stored animations had to stay readable.
 
-- **LA03**: what the web interface writes now.
-- **LA02**: the version before LA03. The web interface and the firmware
-  still read it.
-
-Both formats were made for this badge. There is no external standard.
-LA03 uses well-known techniques (see [References](#references)):
-[run-length coding](https://en.wikipedia.org/wiki/Run-length_encoding),
-[delta frames](https://en.wikipedia.org/wiki/Delta_encoding), an
-[Elias gamma code](https://en.wikipedia.org/wiki/Elias_gamma_coding) and a
-very simple form of
-[motion compensation](https://en.wikipedia.org/wiki/Motion_compensation).
+LA04 was made for this badge. There is no external standard. It uses
+well-known techniques (see [References](#references)):
+[prediction](https://en.wikipedia.org/wiki/Motion_compensation) from the
+previous frames and from neighbouring LEDs,
+[run-length coding](https://en.wikipedia.org/wiki/Run-length_encoding)
+of what the prediction gets right, and
+[canonical Huffman codes](https://en.wikipedia.org/wiki/Canonical_Huffman_code)
+whose tables are in the file.
 
 `webui/compression.js` is the reference. If this document and the code do
 not agree, the code is correct, and this document must be fixed.
 `tools/codec_test/run.sh` checks that the web interface and the firmware
 decode the same frames.
 
-## Slots and values
+## Why LA04
+
+LA04 replaced LA03 in November 2026. It came out best of nine candidate
+formats that were built and measured on 27 test animations (the old
+firmware's animations and games, video, scrolling text, synthetic
+patterns), and checked on 10 more that were kept apart.
+
+| Content (4 bits per LED) | LA04, as a share of LA03 |
+|---|---|
+| Text effects, scrolling text | 13–35% |
+| Recorded games | 24–32% |
+| The old firmware's animations | 14–66% |
+| Video | 71–81% |
+| Random noise | about 100% |
+
+So the store holds about two to four times as much, except for video.
+
+The price:
+
+- The decoder is about 6 KB of code (LA03: 3 KB).
+- The decoder needs about 3.5 KB of tables and frame buffers. It borrows
+  the app RAM block (`HH_APP_RAM_BASE`, `apps/hhapp.h`) for them: no app
+  runs while an animation plays. The firmware's own RAM does not change.
+- The worst frame of the test animations takes about 67,000 instructions,
+  about 2 ms at 48 MHz. The average is about 15,000.
+- The encoder is slow: up to about 5 seconds for 300 frames at 8 bits per
+  LED. The web interface runs it in a worker
+  (`webui/compression_worker.js`), so the page does not stop.
+
+## Slots, positions and values
 
 A slot is one LED channel in the LED matrix: `row * 24 + col`, where
 `row` is the COM line (PB0..PB15) and `col` is the PWM channel
@@ -36,175 +64,273 @@ A slot is one LED channel in the LED matrix: `row * 24 + col`, where
 
 A frame gives each slot a brightness from 0 (off) to 255 (full).
 
-The file stores *quantized* values: each value has `quant_bits` bits (1,
-2, 4 or 8). The decoder keeps the previous frame as quantized values, and
-it compares and changes those values, not the brightness.
+The file codes the slots in **position order** (`layout_order` in
+`layout.c`, `LAYOUT_ORDER` in `webui/layout_data.js`, both made by
+`tools/gen_layout.py`), so that neighbours on the badge are neighbours in
+the stream:
+
+| Positions | LEDs |
+|---|---|
+| 0..207 | the centre grid, row by row from the top, left to right (the corners have no LED) |
+| 208..278 | the outline, clockwise from the top |
+| 279..383 | the RGB LEDs, as red, green, blue per LED; LED k = arm × 7 + rank (arm 0 at the top, then clockwise; rank 0 nearest the centre) |
+
+The file stores *quantized* values (levels): each value has q bits (1, 2,
+4 or 8), so a level is 0..m with m = 2^q − 1.
 
 ```
-quantize(v)   = round(v / 255 * (2^quant_bits - 1))       (v if quant_bits = 8)
-dequantize(l) = round(l / (2^quant_bits - 1) * 255)       (l if quant_bits = 8)
+quantize(v)   = round(v / 255 * m)       (v if q = 8)
+dequantize(l) = round(l / m * 255)       (l if q = 8)
 ```
 
 `round` rounds halves up (JavaScript `Math.round`; the firmware uses the
-integer form `(l * 255 + levels / 2) / levels`).
+integer form `(l * 255 + m / 2) / m`).
+
+At q = 8 the encoder may store a value that differs from the original, but
+only when the two have the same PWM duty: `layout_gamma` maps 256 values
+to 184 duties (all of 0..14 give duty 0), and the badge shows values with
+the same duty exactly alike, at every brightness. This saves about 7% at
+q = 8. If `layout_gamma` ever changes, re-encode the animations.
 
 ## Header
 
-The first 8 bytes are the same in both versions:
-
 | Byte | Content |
 |---|---|
-| 0..3 | magic: `LA03` or `LA02` (ASCII) |
+| 0..3 | magic: `LA04` (ASCII) |
 | 4..5 | number of frames, little-endian (1..65535) |
 | 6 | frames per second (1..255); each frame shows for `1000 / fps` ms (integer division) |
-| 7 | `quant_bits`: 1, 2, 4 or 8 |
+| 7 | q: 1, 2, 4 or 8 |
 
-The frames follow directly after the header.
+A bit stream follows directly after the header.
 
 ## Bit stream
 
-After the header, everything is packed bit by bit, with no padding until
-the end of the file. The last byte is padded with zero bits.
+- The bits are read **most significant bit first**: bit 7 of byte 8 is
+  the first bit. (LA03 was the other way round.)
+- A value of n bits comes most significant bit first.
+- The last byte is padded with zero bits. A reader that goes past the end
+  reads zero bits.
 
-- Bits fill each byte from bit 0 (the least significant bit) up.
-- A value of n bits is written least significant bit first.
+Primitives:
 
-The reader therefore reads bit 0 of byte 8 first.
+- `gamma(n)`, for n ≥ 1 ([Elias gamma](https://en.wikipedia.org/wiki/Elias_gamma_coding)):
+  k zero bits, a one bit, then the low k bits of n, with k = floor(log2 n).
+- `nb(n)`: the bits for a value 0..n−1: ceil(log2 n), and 0 if n ≤ 1.
+- **Bins** for a value x ≥ 0 (a number and its extra bits):
+  - x < 8: the bin is x, with no extra bits.
+  - Otherwise, with k = floor(log2 x): the bin is 8 + 2(k − 3) + bit k−1
+    of x, followed by k − 1 extra bits (the low k − 1 bits of x).
 
-Each frame starts with a 2-bit frame type. Frame 0 is always a key frame
-or a raw frame. The player loops: after the last frame it continues with
-frame 0. Because frame 0 sets every slot, the loop needs no reset.
+  So each octave above 8 has two bins, and the extra bits give the rest.
 
-## LA03
+### Huffman tables
 
-### Pixel order
+A table codes n symbols. In the file it is a list of code lengths:
 
-LA03 codes the slots in a spatial order, `LAYOUT_ORDER`. With this order,
-LEDs that are neighbours on the badge are also neighbours in the stream.
-`tools/gen_layout.py` generates it from `webui/board_data.js`, into
-`webui/layout_data.js` (for the web interface) and `layout.c` (for the
-firmware).
+1. `e`, in nb(n) bits: the last symbol that is used.
+2. Events, until symbol e has a length. p is the last length that was not
+   0; it starts at 0.
 
-1. The centre grid, row by row from the top, each row from left to right.
-   The grid is 17 columns by 16 rows on a 2 mm pitch. Its corners have no
-   LED and are skipped, which leaves 208 positions.
-2. The 71 outline LEDs, clockwise, starting at the top.
-3. The 35 RGB LEDs, as red, green, blue for each LED, ordered by arm
-   (0 = the top arm, then clockwise) and then by rank (0 = nearest the
-   centre).
-
-In the sections below, a *position* is an index into this order
-(0..383).
-
-### Gamma code
-
-Run lengths and gaps are positive integers. LA03 writes them with an
-Elias gamma code, so small numbers cost few bits.
-
-To write n (n ≥ 1), where k = floor(log2(n)):
-
-1. write k zero bits,
-2. write one bit with the value 1,
-3. write `n - 2^k` as a k-bit value (least significant bit first, like
-   every value).
-
-To read: count the zero bits up to the first 1 bit, which gives k. Then
-read k bits as a value v. The result is `2^k + v`.
-
-Example: 5 has k = 2, so it is written as `0 0 1`, then 1 as a 2-bit
-value: `1 0`. The 5 bits in stream order are `0 0 1 1 0`.
-
-A gamma code costs `2k + 1` bits: 1 costs 1 bit, 2..3 cost 3 bits, 4..7
-cost 5 bits, and 256..511 cost 17 bits.
-
-### Frame types
-
-| Type | Name | Content after the 2-bit type |
-|---|---|---|
-| 0 | key | runs until 384 positions are filled |
-| 1 | delta | a delta body |
-| 2 | shift | a 2-bit direction, then a delta body |
-| 3 | raw | 384 values, `quant_bits` each, in position order |
-
-**Key frame.** The frame is a sequence of runs. Each run is
-`gamma(run length)`, then the value (`quant_bits` bits). The run sets
-that many positions to the value, from the current position on. The
-runs continue until position 384.
-
-**Delta body.** Only the positions that changed:
-
-1. `gamma(count + 1)`, where count is the number of changed positions.
-   With no changes, this is 1 bit.
-2. For each change, in increasing position order:
-   - `gamma(gap)`, where gap is the distance from the previous change
-     (the first gap is counted from position -1);
-   - the new value (`quant_bits` bits).
-
-All other positions keep their values from the previous frame.
-
-**Shift frame.** First the grid of the previous frame moves one LED. Then
-a delta body applies the changes. The direction tells where each grid
-LED takes its value from in the previous frame:
-
-| Direction | Picture moves | Grid LED (x, y) takes the value of |
-|---|---|---|
-| 0 | left | (x + 1, y) |
-| 1 | right | (x - 1, y) |
-| 2 | up | (x, y + 1) |
-| 3 | down | (x, y - 1) |
-
-y = 0 is the top row. If the source is outside the grid, or is a corner
-without an LED, the value is 0. The outline and the RGB LEDs do not move.
-
-The firmware shifts in place. It walks the grid starting at the side the
-values come from, so it reads each source before it overwrites it.
-
-**Raw frame.** All 384 values, in position order.
-
-### Encoder
-
-For every frame, the encoder calculates the size of each possible frame
-type and writes the smallest one:
-
-- a key frame,
-- a raw frame,
-- a delta frame against the previous frame,
-- a shift frame in each of the 4 directions.
-
-Frame 0 has no previous frame, so only key or raw is possible there.
-
-Measured on test animations:
-
-| Content | LA03, as a share of LA02 |
+| Event | Meaning |
 |---|---|
-| Bad Apple on the LED positions | 54–58% |
-| Text that scrolls one LED per frame | 10–14% |
-| Random noise | about 100% |
+| `00` | length p |
+| `01` | length p + 1 |
+| `110` | length p − 1 |
+| `1110` | length p + 2 |
+| `1111` | length p − 2 |
+| `101` + 4 bits | this length |
+| `100` + gamma(k) | the next k symbols are not used (length 0) |
 
-## LA02
+The lengths are 1..12. The codes are canonical: shorter codes first, and
+within one length by symbol. A table with only one used symbol takes 0 bits
+per symbol.
 
-LA02 codes the slots in matrix order (slot 0..383), with fixed widths:
-`INDEX_BITS` = 9 bits for a slot index and for a run length.
+## The file header (after the 8 bytes)
 
-| Type | Name | Content after the 2-bit type |
-|---|---|---|
-| 0 | key frame | runs until 384 slots are filled: `run - 1` (9 bits), then the value (`quant_bits`) |
-| 1 | index delta | count (9 bits), then for each change: slot (9 bits), value (`quant_bits`) |
-| 2 | bitmap delta | 384 one-bit flags (1 = changed, in slot order), then a value for each set flag, in slot order |
-| 3 | raw | 384 values (`quant_bits` each), in slot order |
+1. `gamma(nt + 1)`: nt listed **tuples**, at most 32. A tuple is the three
+   prediction modes of a frame: grid, outline, RGB.
+2. nt tuples of 12 bits each: the mode index of the grid, the outline and
+   RGB, 4 bits each (see [Modes](#modes)).
+3. **Frame table 0**, over nt + 1 + 34 symbols:
+   - 0..nt−1: a listed tuple,
+   - nt: escape (the 12 bits of a tuple follow in the frame),
+   - nt+1..nt+34: a hold bin (see [Frames](#frames)).
+4. Only if frame table 0 uses a hold bin: **frame table 1**, over nt + 1
+   symbols. It is used after a hold (a hold never follows a hold).
+5. `fmask`, 12 bits: bit `segment × 4 + family` is set if a frame uses
+   that segment and mode family (see [Modes](#modes)).
+6. The transition table flag, 1 bit. If it is set:
+   - at q = 8 only: the key kind, 1 bit;
+   - the table (see [The transition table](#the-transition-table)).
+7. The activity flag, 1 bit. If it is set: three thresholds of q + 1 bits
+   each.
+8. `gamma(ntab + 1)`, then ntab **token tables** (ntab ≤ 16). The token
+   alphabet has nres + 18 + 1 symbols, with nres = 1, 3, 10, 18 for
+   q = 1, 2, 4, 8 (see [Tokens](#tokens)).
+9. The **context map**: which token table each context uses. If ntab ≤ 1,
+   nothing is coded and every entry is table 0. Otherwise, for each bit sf
+   that is set in fmask, from 0 to 11, the 16 entries `map[sf × 16 + c]`:
+   - `1`: all 16 entries are pm, the entry coded last. pm starts at 0 and
+     carries over from one family to the next.
+   - `0`, then per c = 0..15 one entry. Its candidates are `map[c − 8]`
+     (if c ≥ 8), `map[c − 4]` (if c ≥ 4) and pm, in that order; keep the
+     first two different values. `0`: the first candidate. `10`: the
+     second. `11` + nb(ntab) bits: the table. pm becomes this entry.
 
-The encoder picked the smallest of these types for each frame.
+The frames follow directly.
+
+### The transition table
+
+The table predicts a level from the two frames before it (prev and prev2):
+per key, a delta to prev (−128..127). It is used by mode X.
+
+- Key kind 0: `(prev >> ts) << tk | prev2 >> ts`, with tk = min(q, 4) and
+  ts = q − tk. That is 2^(2·tk) entries.
+- Key kind 1 (q = 8 only): `(prev >> 4) << 4 | dbin(prev − prev2)`:
+  - dbin(0) = 0;
+  - 1..7 for |d| in [1], [2, 3], [4, 7], [8, 15], [16, 31], [32, 63],
+    [64, 255];
+  - plus 7 if d < 0.
+- The table is coded as: a run of default entries as `gamma(run + 1)`;
+  then, if the table is not complete, one entry: `0` for delta 0, or `1` +
+  lb bits for a two's complement delta, with lb = min(q + 1, 8). Again
+  until the table is complete.
+- The default entry continues the trend at the centre of the key:
+  - h = 2^(ts−1) if ts > 0, else 0;
+  - A = ((key >> lo) << ts) + h, with lo = tk (kind 0) or 4 (kind 1);
+  - kind 0: B = ((key & (2^tk − 1)) << ts) + h;
+  - kind 1: B = A − D(lo), with D(x) = rep[x] for x ≤ 7 and −rep[x − 7]
+    for x > 7, rep = {0, 1, 2, 5, 11, 23, 47, 100, 0};
+  - default = clamp(clamp(2A − B, 0, m) − A, −128, 127).
+
+## Frames
+
+At frame 0, and again each time the animation loops:
+
+- prev and prev2 are all 0 (black),
+- the frame table is table 0,
+- no hold is active.
+
+Each frame:
+
+- If a hold is active: the frame is the same as the previous one. The hold
+  counts down by one.
+- Otherwise, read a symbol with the frame table:
+  - **A hold bin**: the bin's value + 1 frames (this one included) are the
+    same as the previous frame. The next symbol uses frame table 1.
+  - **A tuple** (listed, or the 12 bits after an escape): the next symbol
+    uses frame table 0. Decode the three segments in order: the grid
+    (positions 0..207), the outline (208..278), RGB (279..383).
+
+### Modes
+
+The mode index in a tuple:
+
+| Segment | Mode index 0, 1, 2, ... |
+|---|---|
+| grid | Z T V S G L R U D P X |
+| outline | Z T V S G +1 −1 +2 −2 +3 −3 P X |
+| RGB | Z T V S G A B P X |
+
+What each mode predicts for position p (cur is this frame, prev and prev2
+the two frames before it):
+
+| Mode | Prediction |
+|---|---|
+| Z | prev, and no tokens follow: the segment did not change |
+| T | prev |
+| P | prev2 (blinks, things that go back and forth) |
+| V | clamp(2 prev − prev2): a fade goes on at the same speed |
+| X | clamp(prev + the transition table's delta for the key of prev, prev2) |
+| L, R, U, D | prev at the grid position to the right, left, below or above: the picture moves left, right, up or down one LED. 0 if there is no LED there |
+| +k (outline) | prev at outline index (i − k) mod 71: the outline turns k LEDs clockwise |
+| S | cur at the spatial neighbour n |
+| G | clamp(prev[p] + cur[n] − prev[n]); prev[p] if there is no n |
+| A | as S, but n is the same colour and rank on the previous arm (p − 21), for the arms after the first |
+| B | as G, with the neighbour of A |
+
+The spatial neighbour n: on the grid the LED to the left, else the LED
+above; on the outline the previous LED; for RGB p − 3 (the same colour of
+the previous LED), or p − 1 for the green and blue of LED 0.
+
+The mode families: 0 = T, P, L, R, U, D and the outline turns; 1 = V, X;
+2 = S, A; 3 = G, B. Each family has its own contexts.
+
+The temporal modes (all except S, G, A and B) first fill the whole
+segment with their prediction; the tokens then only fix what is wrong.
+The spatial modes S, G, A, B predict each position when it is decoded,
+from the positions decoded before it.
+
+Scan order: the positions in order. The exception is the grid under L, R,
+U or D: first the positions that come into the picture (they have no
+source), then the others, both in position order. For text that scrolls
+left, the 16 row ends come first, so it costs about one short run per
+frame.
+
+### Tokens
+
+Tokens follow until the segment is full. Each token is read with token
+table `map[(segment × 4 + family) × 16 + c]`, where c is the context at
+the token's position (the start of a run):
+
+- c = base + 4·T + 8·U, or, with the activity flag, c = base +
+  4 × (the number of thresholds below a).
+- base: 3 at the start of the segment, 0 after a run, 1 after a residual
+  with z ≤ 2, 2 after a larger residual.
+- T: prev[p] ≠ prev2[p].
+- U: cur[u] ≠ prev[u], with u the position above: the row above on the
+  grid, p − 3 for RGB (p ≥ 282), none on the outline. Where nothing is
+  decoded yet, cur holds the prediction.
+- a = |prev[p] − prev2[p]| + |cur[u] − prev[u]|.
+
+The token symbol s:
+
+- s < nres: **a residual** for this position. z = the bin value of s (with
+  its extra bits) + 1; r = −(z + 1) / 2 if z is odd, else z / 2; cur[p] =
+  (prediction + r) mod 2^q.
+- nres ≤ s < nres + 18: **a run**: the next (bin value + 1) positions are
+  their prediction.
+- s = nres + 18: the rest of the segment is its prediction.
+
+## The encoder
+
+`compressPattern()` in `webui/compression.js`:
+
+1. Quantize. At q = 8, make two versions that use the duty classes (each
+   LED keeps its previous value while that shows the same; or every value
+   becomes the lowest one of its class), and keep the smaller result.
+2. Find the holds: frames the same as the previous one.
+3. Code every segment of every frame under every mode, as tokens.
+4. Four passes. Each pass:
+   - picks the mode per segment and frame by the estimated bits (with the
+     tables of the pass before);
+   - counts the symbols per context (segment × family × 16);
+   - merges contexts into at most 16 tables, each merge the one that saves
+     the most bits (code lengths included);
+   - makes length-limited Huffman codes (package-merge, at most 12 bits).
+5. After the first pass: choose the activity thresholds, if they beat T/U.
+6. The transition table: for q ≤ 4 per key the most frequent next level,
+   for q = 8 the median delta (both key kinds are tried). The file is
+   encoded with and without the table; the smaller one stays.
+7. The tuples used at least twice are listed (at most 32); the others are
+   escapes.
 
 ## References
 
+- [Huffman coding](https://en.wikipedia.org/wiki/Huffman_coding) and
+  [canonical Huffman codes](https://en.wikipedia.org/wiki/Canonical_Huffman_code):
+  the frame and token tables.
+- [Package-merge](https://en.wikipedia.org/wiki/Package-merge_algorithm):
+  Huffman codes with a maximum length.
 - [Run-length encoding](https://en.wikipedia.org/wiki/Run-length_encoding):
-  the key frames of LA02 and LA03.
-- [Delta encoding](https://en.wikipedia.org/wiki/Delta_encoding): the delta
-  frames, which store only what changed since the previous frame.
-- [Elias gamma coding](https://en.wikipedia.org/wiki/Elias_gamma_coding):
-  LA03's run lengths and gaps.
+  the runs of correct predictions.
 - [Motion compensation](https://en.wikipedia.org/wiki/Motion_compensation):
-  what LA03's shift frame does in its simplest form, with one shift of one
-  LED for the whole grid.
+  the grid shifts and outline turns.
+- [Lossless JPEG](https://en.wikipedia.org/wiki/Lossless_JPEG) and
+  [JPEG-LS](https://en.wikipedia.org/wiki/Lossless_JPEG#JPEG-LS): coding the
+  error of a prediction from neighbours, with contexts.
+- [Elias gamma coding](https://en.wikipedia.org/wiki/Elias_gamma_coding):
+  counts in the header.
 - [Gamma correction](https://en.wikipedia.org/wiki/Gamma_correction): the
-  firmware applies gamma 2.2 to the decoded values (`docs/LEDPWM_MATRIX.md`).
+  firmware applies gamma 2.2 to the decoded values (`docs/LEDPWM_MATRIX.md`);
+  the encoder's duty classes come from it.

@@ -2,8 +2,10 @@
 // lashes. It looks around, blinks, and now and then opens its pupil wide to
 // search and tightens it to focus. Every 30 to 60 s it has a mood: a wink,
 // an eye roll, dizzy, sleepy, suspicious, angry, surprised, hypnotised,
-// crying, crazy or laughing. B: a mood now. Press 1 or 2 on a Samsung TV
-// remote and it falls in love.
+// crying, crazy or laughing. B: a mood now. A Samsung TV remote picks one:
+// 3 wink, 4 eye roll, 5 dizzy, 6 sleepy, 7 suspicious, 8 angry, 9 surprised,
+// 0 hypnotised, red crazy, blue crying, yellow laughing, green one at random;
+// and 1 or 2: it falls in love, which it never does by itself.
 #include "hhapp.h"
 
 // The eye thinks in frames: 30 a second, stepped from the 5 ms ticks
@@ -31,9 +33,9 @@
 #define WAKE (10 * FPS)
 // Crying: tears at once at most
 #define TEARS 3
-// Samsung TV remote (Samsung32): the commands of 1 and 2
-#define SAMSUNG_KEY_1 0x04
-#define SAMSUNG_KEY_2 0x05
+// A held remote key repeats its frame every 108 ms: a key counts after
+// this long without one
+#define IR_QUIET_MS 250
 
 typedef enum {
     MOOD_NONE,
@@ -110,6 +112,15 @@ static uint32_t acc;        // ms * FPS towards the next frame
 static int lid_low[HH_GRID_W];  // the lower lid's edge per column, as last drawn
 static uint8_t tear_c[TEARS];   // a tear's column + 1; 0 = no tear
 static int tear_y[TEARS], tear_v[TEARS];  // its height, and its speed in 1/4
+static uint32_t ir_ms;          // when the last IR frame came in
+
+// Samsung TV remote (Samsung32) keys, by their command; MOOD_NONE: at random
+static const uint8_t samsung_keys[][2] = {
+    {0x04, MOOD_LOVE},     {0x05, MOOD_LOVE},       {0x06, MOOD_WINK},      {0x08, MOOD_ROLL},
+    {0x09, MOOD_DIZZY},    {0x0A, MOOD_SLEEPY},     {0x0C, MOOD_SUSPICIOUS}, {0x0D, MOOD_ANGRY},
+    {0x0E, MOOD_SURPRISED}, {0x11, MOOD_HYPNO},     {0x6C, MOOD_CRAZY},     {0x16, MOOD_CRYING},
+    {0x15, MOOD_LAUGHING}, {0x14, MOOD_NONE},
+};
 
 // ---------------------------------------------------------------- helpers
 
@@ -577,22 +588,26 @@ static void init(const hh_api_t* api) {
     draw();
 }
 
+// A mood now, unless it is the one going on
+static void now(mood_t m) {
+    if (m == mood) return;
+    blink = 0;
+    focus = 0;
+    start(m);
+}
+
 static void tick(uint32_t elapsed_ms) {
-    if (hh->pressed() & HH_BTN_B) {
-        blink = 0;
-        focus = 0;
-        start(pick());
-    }
+    if (hh->pressed() & HH_BTN_B) now(pick());
     // a Samsung TV remote sends its address byte twice (plain NEC: with its
     // inverse, so never a 16-bit address with both bytes the same)
     hh_ir_t ir;
     while (hh->ir_receive(&ir)) {
-        bool samsung = ir.address > 0xFF && (ir.address >> 8) == (ir.address & 0xFF);
-        if (samsung && (ir.command == SAMSUNG_KEY_1 || ir.command == SAMSUNG_KEY_2) && mood != MOOD_LOVE) {
-            blink = 0;
-            focus = 0;
-            start(MOOD_LOVE);
-        }
+        uint32_t ms = hh->millis();
+        bool fresh = ms - ir_ms >= IR_QUIET_MS || !ir_ms;
+        ir_ms = ms ? ms : 1;
+        if (!fresh || ir.repeat || ir.address <= 0xFF || (ir.address >> 8) != (ir.address & 0xFF)) continue;
+        for (unsigned i = 0; i < sizeof samsung_keys / sizeof samsung_keys[0]; i++)
+            if (samsung_keys[i][0] == ir.command) now(samsung_keys[i][1] == MOOD_NONE ? pick() : (mood_t)samsung_keys[i][1]);
     }
     acc += elapsed_ms * FPS;
     if (acc < 1000) return;

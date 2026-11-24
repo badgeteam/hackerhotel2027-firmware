@@ -17,6 +17,7 @@ static void reset(void) {
     gx = gy = tx = ty = 0;
     focus = blink = mt = t = acc = 0;
     again = false;
+    ir_ms = 0;
     mood = last = MOOD_NONE;
     init(&mock_api);
 }
@@ -120,19 +121,47 @@ int main(void) {
 
     for (int m = 1; m < MOOD_COUNT; m++) check_mood((mood_t)m);
 
-    // love: only from 1 or 2 on a Samsung TV remote
-    reset();
-    struct { uint16_t address; uint8_t command; bool love; const char* what; } ir[] = {
-        {0x0010, 4, false, "NEC 0x10, 4"},   {0x0000, 5, false, "NEC 0x00, 5"}, {0x1234, 4, false, "extended NEC 0x1234"},
-        {0x0707, 6, false, "Samsung 3"},     {0x0707, 4, true, "Samsung 1"},    {0x0707, 5, true, "Samsung 2"},
+    // a Samsung TV remote picks the mood; love only from 1 or 2
+    struct { uint16_t address; uint8_t command; mood_t mood; const char* what; } ir[] = {
+        {0x0010, 4, MOOD_NONE, "NEC 0x10, 4"},  {0x0000, 5, MOOD_NONE, "NEC 0x00, 5"},
+        {0x1234, 4, MOOD_NONE, "extended NEC 0x1234, 4"}, {0x0707, 0x02, MOOD_NONE, "Samsung power"},
+        {0x0707, 0x04, MOOD_LOVE, "Samsung 1"}, {0x0707, 0x05, MOOD_LOVE, "Samsung 2"},
+        {0x0707, 0x06, MOOD_WINK, "Samsung 3"}, {0x0707, 0x08, MOOD_ROLL, "Samsung 4"},
+        {0x0707, 0x09, MOOD_DIZZY, "Samsung 5"}, {0x0707, 0x0A, MOOD_SLEEPY, "Samsung 6"},
+        {0x0707, 0x0C, MOOD_SUSPICIOUS, "Samsung 7"}, {0x0707, 0x0D, MOOD_ANGRY, "Samsung 8"},
+        {0x0707, 0x0E, MOOD_SURPRISED, "Samsung 9"}, {0x0707, 0x11, MOOD_HYPNO, "Samsung 0"},
+        {0x0707, 0x6C, MOOD_CRAZY, "Samsung red"}, {0x0707, 0x16, MOOD_CRYING, "Samsung blue"},
+        {0x0707, 0x15, MOOD_LAUGHING, "Samsung yellow"},
     };
     for (unsigned i = 0; i < sizeof ir / sizeof ir[0]; i++) {
         reset();
+        run(500, 0);
         mock_ir = (hh_ir_t){ir[i].address, ir[i].command, 0};
         mock_ir_pending = true;
         run(5, 0);
-        CHECK((mood == MOOD_LOVE) == ir[i].love, "%s: %s", ir[i].what, ir[i].love ? "love" : "no love");
+        CHECK(mood == ir[i].mood, "%s: %s (%s)", ir[i].what, names[ir[i].mood], names[mood]);
     }
+    // green: one at random, never love; a held key (its frame every 108 ms) counts once
+    reset();
+    run(500, 0);
+    mock_ir = (hh_ir_t){0x0707, 0x14, 0};
+    mock_ir_pending = true;
+    run(5, 0);
+    mood_t green = mood;
+    CHECK(green != MOOD_NONE && green != MOOD_LOVE, "Samsung green: a mood at random (%s)", names[green]);
+    for (int i = 0; i < 10; i++) {
+        run(103, 0);
+        mock_ir = (hh_ir_t){0x0707, 0x14, 0};
+        mock_ir_pending = true;
+        run(5, 0);
+    }
+    CHECK(mood == green && mt > 20, "held green: still %s (%s)", names[green], names[mood]);
+    run(400, 0);
+    mock_ir = (hh_ir_t){0x0707, 0x06, 0};
+    mock_ir_pending = true;
+    run(5, 0);
+    CHECK(mood == MOOD_WINK, "let go, then 3: wink (%s)", names[mood]);
+
     reset();
     bool never = true;
     for (int i = 0; i < 300; i++) {

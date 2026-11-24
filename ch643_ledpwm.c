@@ -7,7 +7,8 @@ static const uint8_t s_com_sel_for_row[LED_MATRIX_ROWS] = {
     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
 };
 
-static volatile uint8_t s_brightness[LED_MATRIX_ROWS][LED_MATRIX_COLS];
+static volatile uint8_t s_brightness[LED_MATRIX_ROWS][LED_MATRIX_COLS];  // shown: the row scan reads this
+static uint8_t s_draw[LED_MATRIX_ROWS][LED_MATRIX_COLS];                 // drawn: LEDMatrix_SetPixel writes this
 static uint32_t s_row_dma_buf[LED_MATRIX_COLS / 3];
 static volatile uint8_t s_next_row;
 static volatile uint8_t s_last_loaded_row;
@@ -110,17 +111,27 @@ void LEDMatrix_Deinit(void) {
 }
 
 void LEDMatrix_SetPixel(uint8_t row, uint8_t col, uint8_t brightness) {
-    if (row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS) s_brightness[row][col] = brightness;
+    if (row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS) s_draw[row][col] = brightness;
 }
 
 uint8_t LEDMatrix_GetPixel(uint8_t row, uint8_t col) {
-    return row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS ? s_brightness[row][col] : 0;
+    return row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS ? s_draw[row][col] : 0;
 }
 
 void LEDMatrix_Clear(void) {
     for (uint8_t row = 0; row < LED_MATRIX_ROWS; row++) {
         for (uint8_t col = 0; col < LED_MATRIX_COLS; col++) {
-            s_brightness[row][col] = 0;
+            s_draw[row][col] = 0;
+        }
+    }
+}
+
+// Each LED goes from its old value straight to its new one; a row the scan
+// loads during the copy mixes the two frames, but is never dark
+void LEDMatrix_Show(void) {
+    for (uint8_t row = 0; row < LED_MATRIX_ROWS; row++) {
+        for (uint8_t col = 0; col < LED_MATRIX_COLS; col++) {
+            s_brightness[row][col] = s_draw[row][col];
         }
     }
 }

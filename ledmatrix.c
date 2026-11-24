@@ -116,6 +116,7 @@ int main(void) {
     uint8_t menu_mode = 0, menu_item = STORE_NONE;  // what ran when it opened
 
     while (1) {
+        LEDMatrix_Show();  // what the previous pass drew (the app, the menu, the name tag, the host)
         WebUSB_HandleCommand();
         uint8_t run = WebUSB_TakeRunRequest();
         if (run != STORE_NONE) run_item(run);

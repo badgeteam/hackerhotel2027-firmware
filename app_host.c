@@ -90,6 +90,7 @@ static const hh_api_t s_api = {
     .save = api_save,
     .draw_text = Text_Draw,
     .text_width = Text_Width,
+    .polar = layout_polar,
 };
 
 static bool in_image(uint32_t addr, uint32_t load_end) {

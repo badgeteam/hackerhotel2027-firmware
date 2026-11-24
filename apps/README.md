@@ -85,6 +85,11 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   applies gamma 2.2, so 128 looks half as bright.
 - **Safe start.** Hold any button while the badge powers on, and it does
   not start the boot item.
+- **Demo mode.** The games open with a demo: the badge plays by itself
+  until the first button (B, C or D; A is the menu's), which starts a real
+  game. 15 s after a game without a button, the demo comes back. A demo
+  never saves a score. The demo players are the games' own, and the tests
+  in `tools/app_test` use them too.
 
 ## Limits
 

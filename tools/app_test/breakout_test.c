@@ -21,6 +21,19 @@ static int brick_count(void) {
 
 int main(void) {
     init(&mock_api);
+
+    // The demo: it clears two waves by itself, then lets the ball go,
+    // saves nothing, and starts over
+    CHECK(demo, "it opens with the demo");
+    for (int i = 0; i < 2000000 && !over; i++) run(33, 0, 0);
+    CHECK(over && waves == DEMO_WAVES, "the demo clears %d waves, then loses its balls", waves);
+    CHECK(best == 0 && mock_saves == 0, "a demo game saves nothing");
+    run(DEMO_OVER_MS, 0, 0);
+    CHECK(demo && !over && lives == 3 && score == 0, "and starts over");
+    run(10, HH_BTN_A, 0);
+    CHECK(demo, "A does not end the demo (it is the menu's)");
+    run(10, HH_BTN_C, 0);
+    CHECK(!demo && !over && score == 0, "C starts a real game");
     int full = brick_count(), cells = 0;
     for (int r = 1; r <= BRICK_ROWS; r++)
         for (int c = 0; c < HH_GRID_W; c++) cells += layout_grid[r][c] != HH_NONE;
@@ -74,6 +87,11 @@ int main(void) {
     run(10, HH_BTN_C, 0);
     run(30, 0, 0);
     CHECK(paddle == p - 1, "a short press moves the paddle (%d -> %d)", p, (int)paddle);
+
+    over = true, over_ms = 0;  // a game that just ended
+    run(15000, 0, 0);
+    CHECK(demo && !over, "15 s after a game, the demo comes back");
+    demo = false;
 
     uint16_t saved = best;
     best = 0;

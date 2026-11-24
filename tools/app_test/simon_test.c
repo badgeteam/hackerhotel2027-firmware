@@ -25,7 +25,19 @@ static void watch_show(void) {
 
 int main(void) {
     init(&mock_api);
-    CHECK(state == SHOW && len == 1, "it starts by showing one step");
+    CHECK(demo && state == SHOW && len == 1, "it opens with the demo, showing one step");
+
+    // The demo plays by itself until it slips up, saves nothing, and starts over
+    uint8_t slip = demo_slip;
+    for (int i = 0; i < 200000 && state != OVER; i++) run(5, 0);
+    CHECK(state == OVER && len == slip, "the demo plays to length %d, then slips (%d)", slip, len);
+    CHECK(best == 0 && mock_saves == 0, "a demo game saves nothing");
+    run(DEMO_OVER_MS, 0);
+    CHECK(demo && state == SHOW && len == 1, "and starts over");
+
+    // The first button: a real game, and that press is not a move
+    run(5, HH_BTN_C);
+    CHECK(!demo && state == SHOW && len == 1 && lit < 0, "the first button starts a real game");
 
     // Round after round: what it shows is the sequence, pressing it back works
     for (int round = 1; round <= 12; round++) {
@@ -79,6 +91,10 @@ int main(void) {
     for (int i = 0; i < IDLE_MS / 10 + 1; i++) run(10, 0);
     CHECK(state == OVER, "5 s without a button ends it");
     CHECK(best == length - 1 && mock_saves == 1, "a shorter game does not save");
+
+    // 15 s after a game without a button, the demo again
+    run(15000, 0);
+    CHECK(demo && state == SHOW, "15 s after a game, the demo comes back");
 
     // The best comes back after a restart of the app
     best = 0;

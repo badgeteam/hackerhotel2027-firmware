@@ -2,8 +2,9 @@
 // beside the arm that shows green. Every hit makes the light faster, up to
 // a limit; three misses and the game is over. The grid shows the level,
 // the dots below it the lives left. After the end, any button starts
-// again; the best level is kept on the badge. As in the previous
-// firmware's Star Chase.
+// again; the best level is kept on the badge. Until the first button the
+// badge plays a demo, and it goes back to that 15 s after a game. As in the
+// previous firmware's Star Chase.
 #include "hhapp.h"
 
 #define FRAME_MS 33   // the game steps 30 times a second
@@ -13,6 +14,8 @@
 #define OVER_MS 1000
 #define TEXT_Y 3
 #define KEYS (HH_BTN_B | HH_BTN_C | HH_BTN_D)
+#define DEMO_OVER_MS 2000      // a demo game's end shows this long
+#define BACK_TO_DEMO_MS 15000  // after a game, no button this long: the demo
 
 // The outline LEDs (edge[] indices) beside each arm's tip: within 7/256 of
 // a turn of the tip's angle, from webui/board_data.js (arm 0 wraps round
@@ -29,6 +32,7 @@ static uint8_t fx;     // flash steps left
 static bool fx_hit;
 static uint32_t t, frame_ms, over_ms;
 static bool over;
+static bool demo;  // the badge plays by itself
 
 static bool in_zone(int j) {
     int a = ZONE[arm][0], b = ZONE[arm][1];
@@ -53,7 +57,7 @@ static void step(uint8_t pressed) {
         if (--fx == 0 && !lives) {
             over = true;
             over_ms = 0;
-            if (hits > best) {
+            if (!demo && hits > best) {
                 best = hits;
                 hh->save(&best, sizeof best);
             }
@@ -61,7 +65,11 @@ static void step(uint8_t pressed) {
         return;
     }
     pos = (pos + speed) % (HH_EDGE_COUNT * ONE);
-    if (!(pressed & KEYS)) return;
+    if (demo) {  // it presses at the end of the zone; from level 5 on, a bit late
+        int h = head(), n = HH_EDGE_COUNT;
+        pressed = hits < 4 ? in_zone(h) && !in_zone((h + 2) % n) : !in_zone(h) && in_zone((h - 2 + n) % n);
+    }
+    if (!pressed) return;
     if (in_zone(head())) {
         hits++;
         speed = speed * 6 / 5 < ONE * 2 ? speed * 6 / 5 : ONE * 2;  // never so fast that it jumps a zone
@@ -121,10 +129,20 @@ static void draw(void) {
 }
 
 static void tick(uint32_t elapsed_ms) {
-    uint8_t pressed = hh->pressed();
+    uint8_t pressed = hh->pressed() & KEYS;
+    if (demo && pressed) {  // the first button: a real game
+        demo = false;
+        start();
+        pressed = 0;
+    }
     if (over) {
         over_ms += elapsed_ms;
-        if (over_ms >= OVER_MS && pressed) start();
+        if (demo ? over_ms >= DEMO_OVER_MS : over_ms >= OVER_MS && pressed) {
+            start();
+        } else if (!demo && over_ms >= BACK_TO_DEMO_MS) {
+            demo = true;
+            start();
+        }
     } else {
         static uint8_t pending;  // a press between two game steps is not lost
         pending |= pressed;
@@ -141,6 +159,7 @@ static void tick(uint32_t elapsed_ms) {
 static void init(const hh_api_t* api) {
     hh = api;
     if (!hh->load(&best, sizeof best)) best = 0;
+    demo = true;
     start();
 }
 

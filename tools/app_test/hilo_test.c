@@ -25,6 +25,18 @@ int main(void) {
     }
     CHECK(bad == 0, "numbers 1 .. 99, the next never the same (%d bad)", bad);
 
+    // The demo guesses by the odds until it is wrong, saves nothing, starts over
+    CHECK(demo, "it opens with the demo");
+    for (int i = 0; i < 200000 && !over; i++) run(33, 0);
+    CHECK(over, "the demo guesses until it is wrong (a streak of %d)", streak);
+    CHECK(best == 0 && mock_saves == 0, "a demo game saves nothing");
+    run(DEMO_OVER_MS, 0);
+    CHECK(demo && !over && streak == 0, "and starts over");
+    run(10, HH_BTN_A);
+    CHECK(demo, "A does not end the demo (it is the menu's)");
+    run(10, HH_BTN_C);
+    CHECK(!demo && !over && !showing && streak == 0, "C starts a real game, and is no guess");
+
     // Right guesses: the streak grows
     for (int i = 0; i < 12; i++) {
         uint8_t was_next = next;
@@ -49,6 +61,10 @@ int main(void) {
     run(OVER_MS, 0);
     run(10, HH_BTN_C);
     CHECK(!over && streak == 0 && !showing, "a second later, a button starts again (and is no guess)");
+
+    over = true, t_ms = 0;  // a game that just ended
+    run(15000, 0);
+    CHECK(demo, "15 s after a game, the demo comes back");
 
     best = 0;
     init(&mock_api);

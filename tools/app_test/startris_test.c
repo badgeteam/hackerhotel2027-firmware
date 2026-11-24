@@ -20,33 +20,7 @@ static int sorted_key(int32_t c[4][2]) {  // the cell set as a number, order-fre
     return k;
 }
 
-// The old demo's liking for dropping the piece at (r, col): lines cleared,
-// and low, hole-free, even stacks
-static int rate(uint8_t r, int32_t col) {
-    int32_t row = 0;
-    while (fits(r, row + 1, col)) row++;
-    uint16_t w[H];
-    memcpy(w, well, sizeof w);
-    int32_t c[4][2];
-    cells(kind, r, c);
-    for (int i = 0; i < 4; i++) w[row + c[i][0]] |= (uint16_t)(1u << (col + c[i][1]));
-    uint16_t full = full_rows(w);
-    int n = 0;
-    for (int i = 0; i < H; i++) n += full >> i & 1;
-    compact(w, full);
-    int agg = 0, holes = 0, bump = 0, prev = -1;
-    for (int x = 0; x < W; x++) {
-        int top = H;
-        for (int i = 0; i < H; i++)
-            if (w[i] >> x & 1) { top = i; break; }
-        int height = H - top;
-        for (int i = top; i < H; i++) holes += !(w[i] >> x & 1);
-        agg += height;
-        if (prev >= 0) bump += height > prev ? height - prev : prev - height;
-        prev = height;
-    }
-    return 76 * n - 51 * agg - 36 * holes - 18 * bump;
-}
+// rate() is the app's own: the demo places pieces with it
 
 // Plays one piece with the keys: A to the wanted turn, C / D to the column, B
 static void play_piece(void) {
@@ -68,6 +42,19 @@ static void play_piece(void) {
 int main(void) {
     (void)mock_rgb;
     init(&mock_api);
+
+    // The demo: it clears lines by itself, stops trying after 10 .. 20,
+    // saves nothing, and starts over
+    CHECK(demo, "it opens with the demo");
+    for (int i = 0; i < 2000000 && !over; i++) run(33, 0, 0);
+    CHECK(over && lines >= 10 && lines <= 22, "the demo clears %d lines, then fills up", lines);
+    CHECK(best == 0 && mock_saves == 0, "a demo game saves nothing");
+    run(DEMO_OVER_MS, 0, 0);
+    CHECK(demo && !over && lines == 0, "and starts over");
+    run(10, HH_BTN_A, 0);
+    CHECK(demo, "A does not end the demo");
+    run(10, HH_BTN_C, 0);
+    CHECK(!demo && !over && lines == 0, "C starts a real game");
 
     // Four turns bring every piece back; O does not turn
     for (uint8_t k = 0; k < 7; k++) {
@@ -143,6 +130,11 @@ int main(void) {
     run(OVER_MS, 0, 0);
     run(10, HH_BTN_D, 0);
     CHECK(!over && lines == 0, "a second later, a button starts again");
+
+    over = true, over_ms = 0;  // a game that just ended
+    run(15000, 0, 0);
+    CHECK(demo, "15 s after a game, the demo comes back");
+    demo = false;
 
     best = 0;
     init(&mock_api);

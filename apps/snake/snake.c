@@ -1,7 +1,8 @@
 // Snake on the centre grid. C turns left, D turns right; eat the blinking
 // dot. The outline counts the score, dimly up to the best score so far
 // (kept on the badge). After a crash the score shows as a number; A or B
-// starts again.
+// starts again. Until the first button the badge plays a demo, and it goes
+// back to that 15 s after a crash.
 #include "hhapp.h"
 
 #define W HH_GRID_W
@@ -18,6 +19,8 @@ static uint32_t step_ms, wait_ms;
 static uint16_t score;
 static uint16_t best;  // saved with hh->save()
 static bool crashed;
+static bool demo;          // the badge plays by itself
+static uint32_t crashed_ms;  // since the crash
 
 static bool on_grid(int x, int y) { return x >= 0 && x < W && y >= 0 && y < H && hh->grid[y][x] != HH_NONE; }
 
@@ -46,6 +49,7 @@ static void start(void) {
     dx = 0;
     dy = -1;
     turn = 0;
+    crashed_ms = 0;
     step_ms = 220;
     wait_ms = 0;
     score = 0;
@@ -69,7 +73,7 @@ static void step(void) {
     // the tail moves on in the same step, unless the snake grows
     if (!on_grid(x, y) || on_snake(x, y, eats ? 0 : 1)) {
         crashed = true;
-        if (score > best) {
+        if (!demo && score > best) {
             best = score;
             hh->save(&best, sizeof best);
         }
@@ -121,16 +125,45 @@ static void draw(void) {
 static void init(const hh_api_t* api) {
     hh = api;
     if (!hh->load(&best, sizeof best)) best = 0;
+    demo = true;
     start();
+}
+
+// The demo's turn: of straight on, left and right, a move that does not
+// crash and comes closest to the food
+static int8_t demo_turn(void) {
+    int8_t best_turn = 0;
+    int best_d = 1 << 20;
+    static const int8_t turns[3] = {0, -1, 1};
+    for (int k = 0; k < 3; k++) {
+        int ndx = turns[k] < 0 ? dy : turns[k] > 0 ? -dy : dx, ndy = turns[k] < 0 ? -dx : turns[k] > 0 ? dx : dy;
+        int x = body_x[head] + ndx, y = body_y[head] + ndy;
+        if (!on_grid(x, y) || on_snake(x, y, 1)) continue;
+        int d = (x > food_x ? x - food_x : food_x - x) + (y > food_y ? y - food_y : food_y - y);
+        if (d < best_d) best_d = d, best_turn = turns[k];
+    }
+    return best_turn;
 }
 
 static void tick(uint32_t elapsed_ms) {
     uint8_t pressed = hh->pressed();
+    if (demo && (pressed & (HH_BTN_B | HH_BTN_C | HH_BTN_D))) {  // the first button: a real game
+        demo = false;
+        start();
+        pressed = 0;
+    }
     if (crashed) {
-        if (pressed & (HH_BTN_A | HH_BTN_B)) start();
+        crashed_ms += elapsed_ms;
+        if (demo ? crashed_ms >= 2000 : (pressed & (HH_BTN_A | HH_BTN_B)) != 0) {
+            start();
+        } else if (!demo && crashed_ms >= 15000) {  // no button for 15 s: the demo again
+            demo = true;
+            start();
+        }
     } else {
         if (pressed & HH_BTN_C) turn = -1;
         if (pressed & HH_BTN_D) turn = 1;
+        if (demo && wait_ms + elapsed_ms >= step_ms) turn = demo_turn();
         wait_ms += elapsed_ms;
         if (wait_ms >= step_ms) {
             wait_ms -= step_ms;

@@ -30,6 +30,19 @@ int main(void) {
         CHECK(off >= -4 && off <= 4, "arm %d's zone is about a fifth of the way round per arm (%d off)", a, off);
     }
 
+    // The demo: it hits until level 5, then presses late; it saves nothing
+    // and starts over
+    CHECK(demo, "it opens with the demo");
+    for (int i = 0; i < 2000000 && !over; i++) run(33, 0);
+    CHECK(over && hits >= 4 && hits < 30, "the demo reaches level %d, then misses three", hits + 1);
+    CHECK(best == 0 && mock_saves == 0, "a demo game saves nothing");
+    run(DEMO_OVER_MS, 0);
+    CHECK(demo && !over && hits == 0, "and starts over");
+    run(10, HH_BTN_A);
+    CHECK(demo, "A does not end the demo (it is the menu's)");
+    run(10, HH_BTN_D);
+    CHECK(!demo && !over && hits == 0 && lives == LIVES, "D starts a real game, and is no press in it");
+
     // A player who presses as soon as the light is beside the green arm
     for (int i = 0; i < 200000 && hits < 30 && !over; i++) {
         settle();
@@ -66,7 +79,11 @@ int main(void) {
     run(10, HH_BTN_B);
     CHECK(!over && hits == 0 && lives == LIVES, "a second later, a button starts again");
     run(40, HH_BTN_A);
-    CHECK(lives == LIVES && hits == 0, "A does nothing (it is the menu's)");
+    CHECK(lives == LIVES && hits == 0, "A does nothing in a game (it is the menu's)");
+
+    over = true, over_ms = 0;  // a game that just ended
+    run(15000, 0);
+    CHECK(demo, "15 s after a game, the demo comes back");
 
     best = 0;
     init(&mock_api);

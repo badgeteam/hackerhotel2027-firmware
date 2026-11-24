@@ -3,8 +3,10 @@
 // the more lines, the faster the pieces fall. The arms show the next
 // piece's colour and fill with the lines you cleared. When a new piece has
 // no room, the game is over: the grid shows the lines, the outline the
-// best (kept on the badge), and any button starts again. As in the
-// previous firmware's Startris.
+// best (kept on the badge), and any button starts again. Until the first
+// button the badge plays a demo, placing each piece where it scores best,
+// and it goes back to that 15 s after a game. As in the previous firmware's
+// Startris.
 #include "hhapp.h"
 
 #define FRAME_MS 33  // the game steps 30 times a second
@@ -16,6 +18,8 @@
 #define CLEAR_FRAMES 9
 #define OVER_MS 1000
 #define TEXT_Y 4
+#define DEMO_OVER_MS 2000      // a demo game's end shows this long
+#define BACK_TO_DEMO_MS 15000  // after a game, no button this long: the demo
 
 enum { I, O };
 // Each piece's cells in its 3 x 3 box (I: 4 x 4); rotating turns the box
@@ -40,6 +44,10 @@ static uint16_t clearing;  // the rows being cleared, a bit each
 static uint8_t clear_t;
 static uint8_t rep[2];     // steps C / D have been held, for the repeat
 static bool over;
+static bool demo;            // the badge plays by itself
+static uint8_t target_rot;   // where the demo puts this piece
+static int32_t target_col;
+static uint16_t demo_lines;  // after so many lines the demo stops trying
 
 // The piece's cells (row, column) in its box, turned rot times
 static void cells(uint8_t k, uint8_t r, int32_t out[4][2]) {
@@ -99,10 +107,51 @@ static uint8_t deal(void) {
 static void game_over(void) {
     over = true;
     over_ms = 0;
-    if (lines > best) {
+    if (!demo && lines > best) {
         best = lines;
         hh->save(&best, sizeof best);
     }
+}
+
+// How much the demo likes dropping the piece turned r in column col: lines
+// cleared, and a low stack without holes or steps (the previous firmware's
+// weights)
+static int rate(uint8_t r, int32_t col) {
+    int32_t row = 0;
+    while (fits(r, row + 1, col)) row++;
+    uint16_t w[H];
+    for (int i = 0; i < H; i++) w[i] = well[i];
+    int32_t c[4][2];
+    cells(kind, r, c);
+    for (int i = 0; i < 4; i++) w[row + c[i][0]] |= (uint16_t)(1u << (col + c[i][1]));
+    uint16_t full = full_rows(w);
+    int n = 0, agg = 0, holes = 0, bump = 0, prev = -1;
+    for (int i = 0; i < H; i++) n += full >> i & 1;
+    compact(w, full);
+    for (int x = 0; x < W; x++) {
+        int top = H;
+        for (int i = H - 1; i >= 0; i--)
+            if (w[i] >> x & 1) top = i;
+        int height = H - top;
+        for (int i = top; i < H; i++) holes += !(w[i] >> x & 1);
+        agg += height;
+        if (prev >= 0) bump += height > prev ? height - prev : prev - height;
+        prev = height;
+    }
+    return 76 * n - 51 * agg - 36 * holes - 18 * bump;
+}
+
+// The demo's choice for the new piece: the turn and column it likes best
+static void aim(void) {
+    int best_v = -1000000;
+    target_rot = 0;
+    target_col = 3;
+    for (uint8_t r = 0; r < (kind == O ? 1 : 4); r++)
+        for (int32_t col = -2; col < W; col++)
+            if (fits(r, 0, col)) {
+                int v = rate(r, col);
+                if (v > best_v) best_v = v, target_rot = r, target_col = col;
+            }
 }
 
 static void spawn(void) {
@@ -113,12 +162,14 @@ static void spawn(void) {
     pc = 3;
     fall = 0;
     if (!fits(0, 0, 3)) game_over();
+    else if (demo) aim();
 }
 
 static void start(void) {
     for (int i = 0; i < H; i++) well[i] = 0;
     bag = 0;
     lines = 0;
+    demo_lines = (uint16_t)(10 + hh->random() % 11);
     clearing = 0;
     clear_t = 0;
     rep[0] = rep[1] = 0;
@@ -167,6 +218,23 @@ static void step(uint8_t pressed, uint8_t held) {
             spawn();
         }
         return;
+    }
+    if (demo) {
+        // Turn, then move towards where it wants the piece, a step every 4;
+        // when that gets nowhere (or after demo_lines lines), drop
+        pressed = held = 0;
+        if (t % 4 == 0) {
+            uint8_t r0 = rot;
+            int32_t c0 = pc;
+            if (lines < demo_lines) {
+                if (rot != target_rot) rotate();
+                else if (pc != target_col) shift(pc < target_col ? 1 : -1);
+            }
+            if (rot == r0 && pc == c0) {
+                drop();
+                return;
+            }
+        }
     }
     if (pressed & HH_BTN_A) rotate();
     static const uint8_t keys[2] = {HH_BTN_C, HH_BTN_D};
@@ -248,9 +316,19 @@ static void draw(void) {
 
 static void tick(uint32_t elapsed_ms) {
     uint8_t pressed = hh->pressed(), held = hh->held();
+    if (demo && (pressed & (HH_BTN_B | HH_BTN_C | HH_BTN_D))) {  // the first button: a real game
+        demo = false;
+        start();
+        pressed = 0;
+    }
     if (over) {
         over_ms += elapsed_ms;
-        if (over_ms >= OVER_MS && pressed) start();
+        if (demo ? over_ms >= DEMO_OVER_MS : over_ms >= OVER_MS && pressed) {
+            start();
+        } else if (!demo && over_ms >= BACK_TO_DEMO_MS) {
+            demo = true;
+            start();
+        }
     } else {
         static uint8_t pending;  // a press between two game steps is not lost
         pending |= pressed;
@@ -267,6 +345,7 @@ static void tick(uint32_t elapsed_ms) {
 static void init(const hh_api_t* api) {
     hh = api;
     if (!hh->load(&best, sizeof best)) best = 0;
+    demo = true;
     start();
 }
 

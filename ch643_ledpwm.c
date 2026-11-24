@@ -13,13 +13,13 @@ static uint32_t s_row_dma_buf[LED_MATRIX_COLS / 3];
 static volatile uint8_t s_next_row;
 static volatile uint8_t s_last_loaded_row;
 static volatile uint8_t s_global_brightness = 255;
+static volatile uint8_t s_luminance = 0xFF;  // the global brightness, as the luminance PWM's duty
 
-// Applies the global brightness: 255 leaves the value unchanged
-// A pixel value to PWM duty: gamma first (the values are brightness as a
-// screen shows it, the LEDs are linear), then the global brightness
-static inline uint8_t scale(uint8_t value) {
-    return (uint8_t)(((unsigned)layout_gamma[value] * (s_global_brightness + 1u)) >> 8);
-}
+// A pixel value to PWM duty: gamma (the values are brightness as a screen
+// shows it, the LEDs are linear). The global brightness is not in here: it
+// goes to the luminance PWM (s_luminance), which dims the whole word, so
+// the duty keeps its 8 bits and dim values do not round down to 0 (#16).
+static inline uint8_t scale(uint8_t value) { return layout_gamma[value]; }
 
 static void gpio_set_mode(GPIO_TypeDef* port, unsigned pin, GPIO_CFGLR_PIN_MODE_Typedef mode) {
     __IO uint32_t* cfg;
@@ -67,7 +67,7 @@ static void ledpwm_load_row(unsigned row) {
         uint8_t red = scale(s_brightness[row][g]);
         uint8_t green = scale(s_brightness[row][g + LED_MATRIX_COLS / 3]);
         uint8_t blue = scale(s_brightness[row][g + 2 * (LED_MATRIX_COLS / 3)]);
-        uint32_t word = 0xFFu;          // luminance = full
+        uint32_t word = s_luminance;    // luminance: the global brightness
         word |= (uint32_t)red << 8;     // red byte
         word |= (uint32_t)green << 16;  // green byte
         word |= (uint32_t)blue << 24;   // blue byte
@@ -136,8 +136,12 @@ void LEDMatrix_Show(void) {
     }
 }
 
+// The luminance PWM has 6 bits here (LEDPWM_INTEN_CYC(2)): 64 steps, and
+// 64 or more is full. Brightness b gives b / 4 steps (the levels 8 .. 128
+// give 2 .. 32), at least 1 unless b is 0.
 void LEDMatrix_SetBrightness(uint8_t brightness) {
     s_global_brightness = brightness;
+    s_luminance = brightness >= 252 ? 0xFF : brightness ? (uint8_t)(brightness >> 2 ? brightness >> 2 : 1) : 0;
 }
 
 uint8_t LEDMatrix_GetBrightness(void) {

@@ -23,11 +23,11 @@ earn its place. This is how the space is split, and what uses it now:
 
 | Memory | Size | Use | In use now |
 |---|---|---|---|
-| Flash | 30 KB | firmware | 17.9 KB |
+| Flash | 30 KB | firmware | 21.5 KB |
 | Flash | 31 KB | item store: animations and apps | what you store |
 | Flash | 1 KB | persistent record: name, brightness, boot item, app data | 2 × 512 B |
-| RAM | 8 KB | firmware data and stack | 3.8 KB data, the rest is stack |
-| RAM | 12 KB | the app that runs (its code and data) | snake: 1.4 KB code + 0.6 KB data |
+| RAM | 8 KB | firmware data and stack | 3.9 KB data, the rest is stack |
+| RAM | 12 KB | the app that runs (its code and data); while an animation plays, the animation decoder | snake: 1.4 KB code + 0.6 KB data; the decoder 3.5 KB |
 
 How we juggle space and usability:
 
@@ -51,9 +51,12 @@ How we juggle space and usability:
   ([#17](https://github.com/badgeteam/hackerhotel2027-firmware/issues/17), [#18](https://github.com/badgeteam/hackerhotel2027-firmware/issues/18)). The price: one app runs at a time, in at
   most 12 KB, code and data together.
 - **Animations are the big users of the store.** The web interface
-  compresses them (LA03, `docs/ANIMATION_FORMAT.md`) and shows the size
-  before you store one. Fewer brightness levels, fewer frames or a lower
-  frame rate make an animation smaller.
+  compresses them (LA04, `docs/ANIMATION_FORMAT.md`) and shows the size
+  before you store one. LA04 makes them two to four times smaller than
+  its predecessor (video about 1.3 times). For that the firmware spends
+  3 KB more flash on the decoder, and the decoder borrows the app RAM
+  while an animation plays, because no app runs then. Fewer brightness
+  levels, fewer frames or a lower frame rate make an animation smaller.
 - **The store works in 256-byte flash pages.** Every item takes whole
   pages, plus a 32-byte header. The web interface shows what each item
   takes.
@@ -257,11 +260,11 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | | |
 |---|---|
 | `apps/README.md` | write and build an app (`apps/hhapp.h` is the interface) |
-| `docs/ANIMATION_FORMAT.md` | the `.ledanim` format, LA03 and LA02 |
+| `docs/ANIMATION_FORMAT.md` | the `.ledanim` animation format, LA04 |
 | `docs/LEDPWM_MATRIX.md` | how the LEDs are wired, and the slot numbers |
 | `webusb_protocol.h` | the USB protocol |
 | `tools/badge.py` | the item store, the name, run and stop, from the command line (needs pyusb) |
 | `tools/deploy_webui.sh` | publishes `webui/` of the current commit to a web server |
-| `tools/gen_layout.py` | makes `layout.c` and `webui/layout_data.js` from `webui/board_data.js` |
+| `tools/gen_layout.py` | makes `layout.c`, `la04_tables.h` and `webui/layout_data.js` from `webui/board_data.js` |
 | `tools/codec_test/run.sh` | checks that the web interface and the firmware decode animations the same way |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

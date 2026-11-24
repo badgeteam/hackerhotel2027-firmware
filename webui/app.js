@@ -748,10 +748,7 @@ playBtn.addEventListener('click', () => {
 });
 
 // --- Flash storage (compressed .ledanim export/import) ---------------------------------------------------
-// Compression format/rationale: docs/ANIMATION_FORMAT.md, codec in
-// compression.js. No firmware support for reading this back from flash
-// yet (see that doc) -- this is purely the browser-side half, so there's
-// a known format ready once that firmware feature exists.
+// The LA04 format: docs/ANIMATION_FORMAT.md, the codec in compression.js.
 
 const compressionQuantSelect = document.getElementById('compression-quant');
 const compressionStatsEl = document.getElementById('compression-stats');
@@ -770,25 +767,99 @@ function formatBytes(n) {
 	return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`;
 }
 
-function refreshCompressionStats() {
+// compressPattern() can take seconds, so it runs in a worker
+// (compression_worker.js); without workers (a page opened from a file) it
+// runs here. The last few results are kept: the same frames, fps and
+// brightness levels give the same file.
+let compressWorker = null;
+try {
+	compressWorker = new Worker('compression_worker.js');
+} catch (e) {
+	compressWorker = null;
+}
+const compressJobs = new Map(); // job id -> {resolve, reject}
+let compressJobId = 0;
+if (compressWorker) {
+	compressWorker.onmessage = (ev) => {
+		const job = compressJobs.get(ev.data.id);
+		compressJobs.delete(ev.data.id);
+		if (ev.data.error) job.reject(new Error(ev.data.error));
+		else job.resolve(ev.data.bytes);
+	};
+	compressWorker.onerror = (ev) => {
+		ev.preventDefault();
+		compressWorker = null; // no worker after all: compress here from now on
+		for (const job of compressJobs.values()) job.reject(new Error(ev.message || 'the compression worker failed'));
+		compressJobs.clear();
+	};
+}
+
+function patternKey(pattern, quantBits) {
+	let h = 0x811c9dc5; // FNV-1a over every value
+	for (const frame of pattern.frames) for (const v of frame) h = Math.imul(h ^ v, 0x01000193);
+	return `${quantBits}/${pattern.fps}/${pattern.frames.length}/${h >>> 0}`;
+}
+
+const compressCache = new Map(); // patternKey -> Promise of the bytes
+function compressAsync(pattern, quantBits) {
+	const key = patternKey(pattern, quantBits);
+	if (compressCache.has(key)) return compressCache.get(key);
+	const snapshot = { fps: pattern.fps, frames: pattern.frames }; // postMessage copies it
+	const frozen = compressWorker ? null : { fps: pattern.fps, frames: pattern.frames.map((f) => f.slice()) };
+	const job = compressWorker
+		? new Promise((resolve, reject) => {
+			const id = ++compressJobId;
+			compressJobs.set(id, { resolve, reject });
+			compressWorker.postMessage({ id, pattern: snapshot, quantBits });
+		})
+		: new Promise((resolve) => setTimeout(resolve, 0)).then(() => compressPattern(frozen, { quantBits }));
+	compressCache.set(key, job);
+	job.catch(() => compressCache.delete(key));
+	while (compressCache.size > 8) compressCache.delete(compressCache.keys().next().value);
+	return job;
+}
+
+// The size line: one compression at a time; edits made meanwhile are
+// compressed when it is done (only the last one)
+let statsBusy = false, statsAgain = false;
+async function refreshCompressionStats() {
 	if (!activePattern) return;
-	const quantBits = Number(compressionQuantSelect.value);
-	const budgetBytes = patternBudgetBytes();
-	const rawBytes = activePattern.frames.length * MATRIX_ROWS * MATRIX_COLS;
-	let compressedBytes;
-	try {
-		compressedBytes = compressPattern(activePattern, { quantBits }).byteLength;
-	} catch (e) {
-		compressionStatsEl.textContent = `Can't estimate: ${e.message}`;
+	if (statsBusy) {
+		statsAgain = true;
 		return;
 	}
+	statsBusy = true;
+	const pattern = activePattern;
+	const frameCount = pattern.frames.length;
+	const quantBits = Number(compressionQuantSelect.value);
+	const rawBytes = frameCount * MATRIX_ROWS * MATRIX_COLS;
+	const pending = compressAsync(pattern, quantBits);
+	const slow = setTimeout(() => (compressionStatsEl.textContent = `${frameCount} frames: compressing...`), 150);
+	let compressedBytes = null, error = null;
+	try {
+		compressedBytes = (await pending).byteLength;
+	} catch (e) {
+		error = e;
+	}
+	clearTimeout(slow);
+	statsBusy = false;
+	if (statsAgain) {
+		statsAgain = false;
+		refreshCompressionStats();
+		return;
+	}
+	if (error) {
+		compressionStatsEl.textContent = `Can't estimate: ${error.message}`;
+		return;
+	}
+	const budgetBytes = patternBudgetBytes();
 	const pct = rawBytes ? Math.round((100 * compressedBytes) / rawBytes) : 0;
 	const fits = compressedBytes <= budgetBytes;
 	const overBy = compressedBytes - budgetBytes;
 	compressionStatsEl.textContent = fits
-		? `${activePattern.frames.length} frames: ${formatBytes(compressedBytes)} compressed ` +
+		? `${frameCount} frames: ${formatBytes(compressedBytes)} compressed ` +
 		  `(${pct}% of ${formatBytes(rawBytes)} raw) -- fits the ${formatBytes(budgetBytes)} budget.`
-		: `${activePattern.frames.length} frames: ${formatBytes(compressedBytes)} compressed ` +
+		: `${frameCount} frames: ${formatBytes(compressedBytes)} compressed ` +
 		  `(${pct}% of ${formatBytes(rawBytes)} raw) -- ${formatBytes(overBy)} over the ` +
 		  `${formatBytes(budgetBytes)} budget. Lower the brightness levels, trim frames, or drop the fps.`;
 	compressionStatsEl.classList.toggle('stats-over-budget', !fits);
@@ -796,11 +867,12 @@ function refreshCompressionStats() {
 
 compressionQuantSelect.addEventListener('change', refreshCompressionStats);
 
-document.getElementById('export-compressed-btn').addEventListener('click', () => {
+document.getElementById('export-compressed-btn').addEventListener('click', async () => {
 	const quantBits = Number(compressionQuantSelect.value);
+	const name = activePattern.name;
 	let bytes;
 	try {
-		bytes = compressPattern(activePattern, { quantBits });
+		bytes = await compressAsync(activePattern, quantBits);
 	} catch (e) {
 		alert(`Couldn't compress this pattern: ${e.message}`);
 		return;
@@ -808,7 +880,7 @@ document.getElementById('export-compressed-btn').addEventListener('click', () =>
 	const blob = new Blob([bytes], { type: 'application/octet-stream' });
 	const a = document.createElement('a');
 	a.href = URL.createObjectURL(blob);
-	a.download = `${activePattern.name.replace(/[^\w-]+/g, '_') || 'pattern'}.ledanim`;
+	a.download = `${name.replace(/[^\w-]+/g, '_') || 'pattern'}.ledanim`;
 	a.click();
 	URL.revokeObjectURL(a.href);
 });
@@ -821,15 +893,19 @@ document.getElementById('upload-pattern-btn').addEventListener('click', async ()
 		return;
 	}
 	const quantBits = Number(compressionQuantSelect.value);
-	const budgetBytes = patternBudgetBytes();
+	const name = activePattern.name.toUpperCase() || 'PATTERN';
+	uploadPatternStatusEl.textContent = 'Compressing...';
 	let bytes;
 	try {
-		bytes = compressPattern(activePattern, { quantBits });
+		bytes = await compressAsync(activePattern, quantBits);
 	} catch (e) {
+		uploadPatternStatusEl.textContent = '';
 		alert(`Couldn't compress this pattern: ${e.message}`);
 		return;
 	}
+	const budgetBytes = patternBudgetBytes();
 	if (bytes.length > budgetBytes) {
+		uploadPatternStatusEl.textContent = '';
 		alert(
 			`Compressed pattern is ${formatBytes(bytes.length)}, over the ` +
 			`${formatBytes(budgetBytes)} budget -- lower the brightness levels, ` +
@@ -840,7 +916,7 @@ document.getElementById('upload-pattern-btn').addEventListener('click', async ()
 	handOverBadge();
 	uploadPatternStatusEl.textContent = `Uploading ${formatBytes(bytes.length)}...`;
 	try {
-		await device.uploadPattern(bytes, activePattern.name.toUpperCase() || 'PATTERN');
+		await device.uploadPattern(bytes, name);
 		uploadPatternStatusEl.textContent =
 			`Stored (${formatBytes(bytes.length)}) and playing -- will autoplay on every boot from now on.`;
 		refreshStore();
@@ -988,7 +1064,7 @@ document.getElementById('store-add-input').addEventListener('change', async (ev)
 	}
 	const bytes = new Uint8Array(await file.arrayBuffer());
 	const magic = new TextDecoder().decode(bytes.subarray(0, 4));
-	const type = magic === 'HHAP' ? ITEM_TYPE.APP : magic === 'LA03' || magic === 'LA02' ? ITEM_TYPE.ANIMATION : 0;
+	const type = magic === 'HHAP' ? ITEM_TYPE.APP : magic === 'LA04' ? ITEM_TYPE.ANIMATION : 0;
 	if (!type) {
 		alert(`${file.name} is not an app (.hhapp) or an animation (.ledanim).`);
 		return;

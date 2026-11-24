@@ -61,7 +61,7 @@ class Badge:
 def type_of(path, data):
     if data[:4] == b"HHAP":
         return 2
-    if data[:4] in (b"LA03", b"LA02"):
+    if data[:4] == b"LA04":
         return 1
     sys.exit("%s: not a .hhapp or .ledanim" % path)
 

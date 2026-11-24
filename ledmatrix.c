@@ -72,8 +72,7 @@ static void run_item(uint8_t index) {
     if (!item) return;
     g_running_item = index;
     if (item->type == STORE_TYPE_ANIMATION) {
-        PatternPlayer_Start(Store_Payload(item));
-        g_app_mode = APP_MODE_FLASH_PATTERN;
+        if (PatternPlayer_Start(Store_Payload(item), item->length)) g_app_mode = APP_MODE_FLASH_PATTERN;
     } else if (item->type == STORE_TYPE_APP && AppHost_Start(Store_Payload(item), item->length, item->name)) {
         g_app_mode = APP_MODE_APP;
     }
@@ -100,9 +99,6 @@ int main(void) {
         buttons_ignore_held();  // that press is not a command
     } else if (Store_BootItem() != STORE_NONE) {
         run_item(Store_BootItem());
-    } else if (Store_LegacyPattern()) {  // stored by the firmware before the item store
-        PatternPlayer_Start(Store_LegacyPattern());
-        g_app_mode = APP_MODE_FLASH_PATTERN;
     }
 
     uint32_t last_tick = funSysTick32();

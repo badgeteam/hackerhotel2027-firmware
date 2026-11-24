@@ -1,5 +1,7 @@
-// LA03 round trip: compresses test patterns with webui/compression.js,
-// decodes them again, and checks the frames. With an output directory it
+// LA04 round trip: compresses test patterns with webui/compression.js,
+// decodes them again, and checks the frames: at q = 1, 2, 4 exactly the
+// quantized values; at q = 8 values with the same PWM duty (LAYOUT_GAMMA),
+// which the encoder may pick instead. With an output directory it
 // also writes each pattern as NAME.ledanim and the frames the decoder must
 // produce as NAME.frames (raw bytes, 384 per frame), for player_test.c.
 //
@@ -10,11 +12,11 @@ const path = require('path');
 const vm = require('vm');
 
 const webui = path.join(__dirname, '..', '..', 'webui');
-const ctx = { MATRIX_ROWS: 16, MATRIX_COLS: 24, console };
+const ctx = { console };
 vm.createContext(ctx);
 for (const f of ['layout_data.js', 'compression.js']) vm.runInContext(fs.readFileSync(path.join(webui, f), 'utf8'), ctx, { filename: f });
-const { compressPattern, decompressPattern, quantize, dequantize, LAYOUT_GRID } = vm.runInContext(
-	'({compressPattern, decompressPattern, quantize, dequantize, LAYOUT_GRID})', ctx);
+const { compressPattern, decompressPattern, quantize, dequantize, LAYOUT_GRID, LAYOUT_ORDER, LAYOUT_GAMMA } = vm.runInContext(
+	'({compressPattern, decompressPattern, quantize, dequantize, LAYOUT_GRID, LAYOUT_ORDER, LAYOUT_GAMMA})', ctx);
 
 let seed = 1;
 const rand = (n) => ((seed = (seed * 1103515245 + 12345) >>> 0) >>> 8) % n;
@@ -53,6 +55,20 @@ function patterns() {
 		sparkle.push(f.slice());
 	}
 	out.sparkle = sparkle;
+	// the outline turning, the RGB LEDs fading, a soft gradient on the grid
+	const ring = [];
+	for (let t = 0; t < 50; t++) {
+		const f = blank();
+		LAYOUT_ORDER.forEach((slot, p) => {
+			if (p < 208) f[slot] = (p * 3 + t * 5) % 256;
+			else if (p < 279) f[slot] = (p - 208 + t) % 71 < 10 ? 255 : 20;
+			else f[slot] = Math.round(127 + 127 * Math.sin(t / 6 + p));
+		});
+		ring.push(f);
+	}
+	out.ring = ring;
+	// held frames: the same frame several times in a row
+	out.held = [blank(), blank(), ...Array(7).fill(sparkle[10]), ...Array(3).fill(sparkle[20]), blank()];
 	return out;
 }
 
@@ -64,12 +80,13 @@ for (const [name, frames] of Object.entries(patterns())) {
 		const bytes = compressPattern({ fps: 10, frames }, { quantBits: q });
 		const back = decompressPattern(bytes);
 		const want = frames.map((fr) => fr.map((v) => dequantize(quantize(v, q), q)));
-		const ok = back.frames.length === want.length && back.frames.every((fr, i) => fr.every((v, j) => v === want[i][j]));
+		const same = q === 8 ? (a, b) => LAYOUT_GAMMA[a] === LAYOUT_GAMMA[b] : (a, b) => a === b;
+		const ok = back.frames.length === want.length && back.frames.every((fr, i) => fr.every((v, j) => same(v, want[i][j])));
 		if (!ok) failures++;
 		console.log(`${ok ? 'ok  ' : 'FAIL'} ${name} q=${q}: ${frames.length} frames, ${bytes.length} bytes`);
 		if (outDir) {
 			fs.writeFileSync(path.join(outDir, `${name}-q${q}.ledanim`), bytes);
-			fs.writeFileSync(path.join(outDir, `${name}-q${q}.frames`), Buffer.from(want.flat()));
+			fs.writeFileSync(path.join(outDir, `${name}-q${q}.frames`), Buffer.from(back.frames.flat()));
 		}
 	}
 }

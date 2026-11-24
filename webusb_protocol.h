@@ -1,4 +1,5 @@
 #pragma once
+#include <stdbool.h>
 #include <stdint.h>
 
 // WebUSB control protocol for the LED matrix: vendor interface, bulk OUT
@@ -39,6 +40,11 @@
 //   0x11 PATTERN_CHUNK  .ledanim bytes...      = ITEM_CHUNK
 //   0x12 PATTERN_COMMIT                        = ITEM_COMMIT
 //
+//   Firmware updates (from the web interface, through the boot ROM)
+//   0x40 BOOT_ROM                              reply, then reboot into the USB boot ROM
+//                                              (as button C), to flash new firmware
+//   0x41 FW_INFO                               the reply carries the firmware's identity
+//
 //   0xFF QUERY                                 no effect, just the status reply
 // Anything else is ignored (but still gets a status reply).
 //
@@ -51,6 +57,8 @@
 //   after ITEM_INFO, if [2] is 0:
 //   [8] type  [9..12] length (little-endian)  [13..32] name (NUL-padded)
 //   after NAME_GET: [8..39] the owner's name (NUL-padded) -- 40 bytes
+//   after FW_INFO: [8..55] "HH27-STARFISH-FW S<store layout> <git commit>"
+//   (NUL-padded) -- 56 bytes
 
 #define APP_MODE_CUSTOM 1         // showing whatever the host (or the firmware) last wrote
 #define APP_MODE_FLASH_PATTERN 2  // playing an animation from the store on repeat
@@ -73,6 +81,12 @@ void WebUSB_HandleCommand(void);
 // Call once per main loop tick, after WebUSB_HandleCommand() and after
 // starting a requested item: sends the reply, once the endpoint is free.
 void WebUSB_Poll(void);
+
+#define FW_INFO_LEN 48
+
+// True once the host asked for BOOT_ROM and has its reply: the main loop
+// then reboots into the boot ROM. Call every pass with the elapsed time.
+bool WebUSB_BootRomDue(uint32_t elapsed_ms);
 
 // The item the host asked to start (ITEM_COMMIT, ITEM_RUN), once;
 // STORE_NONE if none. The main loop starts it.

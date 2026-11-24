@@ -29,7 +29,18 @@
 #define CMD_ITEM_DELETE 0x27
 #define CMD_NAME_GET 0x30
 #define CMD_NAME_SET 0x31
+#define CMD_BOOT_ROM 0x40
+#define CMD_FW_INFO 0x41
 #define CMD_QUERY 0xFF
+
+#ifndef FW_VERSION
+#define FW_VERSION "dev"  // the Makefile sets the git commit
+#endif
+// What FW_INFO returns, and a marker the web interface looks for in a .bin
+// before it flashes it: only badge firmware has it. S1 is the item store's
+// layout (flash_pages.h, store.h, persist.h); a firmware with another
+// layout would not read the stored items, so it gets another number.
+static const char s_fw_info[FW_INFO_LEN] = "HH27-STARFISH-FW S1 " FW_VERSION;
 
 #define FRAME_PIXELS (LED_MATRIX_ROWS * LED_MATRIX_COLS)
 
@@ -41,6 +52,9 @@ static volatile bool s_reply_pending;
 static volatile uint8_t s_result;      // of the last command, for the reply
 static volatile uint8_t s_info_item;   // ITEM_INFO asked about this item
 static volatile bool s_name_reply;     // NAME_GET: the reply carries the name
+static volatile bool s_fw_reply;       // FW_INFO: the reply carries s_fw_info
+static volatile bool s_boot_request;   // BOOT_ROM: reboot once the reply is out
+static uint32_t s_boot_wait_ms;
 static volatile uint8_t s_run_request = STORE_NONE;
 
 static void commit(void) {
@@ -92,6 +106,7 @@ static void handle_command(const uint8_t* data, int len) {
     s_result = STORE_OK;
     s_info_item = STORE_NONE;
     s_name_reply = false;
+    s_fw_reply = false;
 
     switch (data[0]) {
         case CMD_SET_PIXEL:
@@ -185,6 +200,15 @@ static void handle_command(const uint8_t* data, int len) {
             s_name_reply = true;
             break;
 
+        case CMD_BOOT_ROM:
+            s_boot_request = true;
+            s_boot_wait_ms = 0;
+            break;
+
+        case CMD_FW_INFO:
+            s_fw_reply = true;
+            break;
+
         case CMD_NAME_SET:
             Persist_SetName((const char*)&data[1], (unsigned)(len - 1));
             s_name_reply = true;
@@ -273,9 +297,24 @@ void WebUSB_Poll(void) {
         memset(&buffer[8], 0, PERSIST_NAME_LEN);
         memcpy(&buffer[8], Persist_Name(), strlen(Persist_Name()));
         len = 8 + PERSIST_NAME_LEN;
+    } else if (s_fw_reply) {
+        memcpy(&buffer[8], s_fw_info, FW_INFO_LEN);
+        len = 8 + FW_INFO_LEN;
     }
     USBFS_SendEndpoint(USB_EP_TX, len);
     s_reply_pending = false;
+}
+
+bool WebUSB_BootRomDue(uint32_t elapsed_ms) {
+    if (!s_boot_request) return false;
+    s_boot_wait_ms += elapsed_ms;
+#ifndef HH_EMU
+    bool reply_out = !s_reply_pending && !FSUSBCTX.USBFS_Endp_Busy[USB_EP_TX];
+#else
+    bool reply_out = !s_reply_pending;
+#endif
+    // once the host has the reply, or after 200 ms if it does not read it
+    return reply_out || s_boot_wait_ms >= 200;
 }
 
 uint8_t WebUSB_TakeRunRequest(void) {

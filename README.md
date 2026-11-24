@@ -197,6 +197,12 @@ It deploys the committed `webui/` of the current commit, and the page
 shows that commit in its footer. When a badge's firmware is older than
 the page expects, the page says so next to the badge's status.
 
+The **Firmware** panel flashes new firmware: the firmware built from the
+page's own commit, or a `.bin` you pick. The items, the name and the
+settings stay. `docs/FIRMWARE_UPDATE.md` describes how it works. Served
+from this checkout, the panel flashes what `make webui-firmware` copied to
+`webui/firmware/`.
+
 Only one program at a time can have the badge open. Click
 **Disconnect** before you use `tools/badge.py`.
 
@@ -262,9 +268,11 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `apps/README.md` | write and build an app (`apps/hhapp.h` is the interface) |
 | `docs/ANIMATION_FORMAT.md` | the `.ledanim` animation format, LA04 |
 | `docs/LEDPWM_MATRIX.md` | how the LEDs are wired, and the slot numbers |
+| `docs/FIRMWARE_UPDATE.md` | the firmware update from the web interface, and the boot ROM's protocol |
 | `webusb_protocol.h` | the USB protocol |
 | `tools/badge.py` | the item store, the name, run and stop, from the command line (needs pyusb) |
 | `tools/deploy_webui.sh` | publishes `webui/` of the current commit to a web server |
 | `tools/gen_layout.py` | makes `layout.c`, `la04_tables.h` and `webui/layout_data.js` from `webui/board_data.js` |
 | `tools/codec_test/run.sh` | checks that the web interface and the firmware decode animations the same way |
+| `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

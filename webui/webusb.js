@@ -25,6 +25,8 @@ const CMD = {
 	ITEM_DELETE: 0x27,
 	NAME_GET: 0x30,
 	NAME_SET: 0x31,
+	BOOT_ROM: 0x40,
+	FW_INFO: 0x41,
 	QUERY: 0xff,
 };
 
@@ -169,7 +171,11 @@ class LedMatrixDevice extends EventTarget {
 					api: d.getUint8(7),
 				});
 			}
-			if (d.byteLength === 40) {
+			if (d.byteLength === 56) {
+				const info = new Uint8Array(d.buffer, d.byteOffset + 8, 48);
+				const end = info.indexOf(0);
+				status.firmware = new TextDecoder().decode(end < 0 ? info : info.subarray(0, end));
+			} else if (d.byteLength === 40) {
 				const name = new Uint8Array(d.buffer, d.byteOffset + 8, 32);
 				const end = name.indexOf(0);
 				status.name = new TextDecoder().decode(end < 0 ? name : name.subarray(0, end));
@@ -268,6 +274,22 @@ class LedMatrixDevice extends EventTarget {
 
 	eraseStore() {
 		return this._send([CMD.STORE_ERASE]);
+	}
+
+	// The firmware's identity, "HH27-STARFISH-FW S1 <commit>" (webusb_protocol.h
+	// FW_INFO); null from firmware that does not know the command. Throws if
+	// no reply came: _send turns a USB error into no reply, and that must not
+	// read as old firmware.
+	async firmwareInfo() {
+		const status = await this._send([CMD.FW_INFO]);
+		if (!status) throw new Error('the badge did not answer FW_INFO');
+		return status.firmware !== undefined ? status.firmware : null;
+	}
+
+	// Reboots the badge into its USB boot ROM (as UPDATE in the badge's menu), to flash new
+	// firmware. The badge disconnects right after the reply.
+	rebootToBootRom() {
+		return this._send([CMD.BOOT_ROM]);
 	}
 
 	// The owner's name, kept on the badge for apps (persist.h)

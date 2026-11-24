@@ -55,7 +55,7 @@ static void restore_leds(void) {
 
 static bool item_runs(void) { return g_app_mode == APP_MODE_FLASH_PATTERN || g_app_mode == APP_MODE_APP; }
 
-// Into the USB boot ROM (UPDATE in the menu),
+// Into the USB boot ROM (UPDATE in the menu, or BOOT_ROM from the web interface),
 // writing a pending change to the persistent record first
 static void enter_boot_rom(void) {
     AppHost_Stop();
@@ -121,6 +121,8 @@ int main(void) {
         // keep what the host, the app or the buttons changed
         Persist_SetBrightness(LEDMatrix_GetBrightness());
         Persist_Flush(elapsed_ms);
+
+        if (WebUSB_BootRomDue(elapsed_ms)) enter_boot_rom();
 
         uint8_t buttons = buttons_poll();
         uint8_t held = buttons_down();

@@ -1,6 +1,7 @@
 # Builds the firmware and the apps, and runs every test, on each pull
 # request and on main: tools/*/run.sh, the emulator's RV32 interpreter test
-# and the web flasher's test. The toolchain is Ubuntu's, as ch32fun's own CI
+# and the web flasher's test. It also checks that the layout tables are
+# what tools/gen_layout.py makes from webui/board_data.js. The toolchain is Ubuntu's, as ch32fun's own CI
 # uses.
 name: Tests
 
@@ -26,6 +27,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Layout tables match the board data
+        run: |
+          python3 tools/gen_layout.py
+          git diff --exit-code -- layout.c la04_tables.h webui/layout_data.js
 
       - name: Firmware
         run: |

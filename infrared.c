@@ -16,6 +16,7 @@
 #define NEC_REPEAT_TIMEOUT_MS 250  // repeats arrive every 108ms while a button is held
 
 static bool s_initialized;
+static volatile bool s_loopback;  // decode our own transmission too (the factory test)
 
 // ---- Transmit ----
 
@@ -111,6 +112,10 @@ bool infrared_send_shot(uint16_t bits) {
     IrFrame_Shot(&s_tx_frame, bits);
     tx_start();
     return true;
+}
+
+void infrared_set_loopback(bool on) {
+    s_loopback = on;
 }
 
 bool infrared_tx_busy(void) {
@@ -220,7 +225,7 @@ void EXTI25_16_IRQHandler(void) {
         s_raw[s_raw_head] = (uint16_t)((ended_mark ? 0x8000u : 0) | (us < 0x7FFF ? us : 0x7FFF));
         s_raw_head = next;
     }
-    if (s_tx_busy) {
+    if (s_tx_busy && !s_loopback) {
         IrRx_Reset(&s_rx);  // ignore our own transmission
         return;
     }

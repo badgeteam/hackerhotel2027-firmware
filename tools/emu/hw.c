@@ -39,6 +39,7 @@
 #include "emu_usb.h"
 #include "infrared.h"
 #include "pattern_player.h"
+#include "power.h"
 #include "standby.h"
 #include "webusb_protocol.h"
 
@@ -225,6 +226,14 @@ static void ir_received(uint16_t address, uint8_t command) {
 static infrared_packet_t s_ir_packets[3];
 static unsigned s_ir_packet_head, s_ir_packet_tail;
 
+// power.h: the emulated badge is on USB, not charging
+void Power_Init(void) {}
+bool Power_Usb(void) { return true; }
+bool Power_Charging(void) { return false; }
+
+static bool s_ir_loopback;  // infrared_set_loopback: our own packets come back
+static void ir_packet_received(const uint8_t* p, int n);
+void infrared_set_loopback(bool on) { s_ir_loopback = on; }
 bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length) {
     if (!s_ir_on || infrared_tx_busy() || length > IR_PACKET_DATA_MAX) return false;
     uint8_t p[2 + IR_PACKET_DATA_MAX] = {type, length};
@@ -235,6 +244,7 @@ bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length) {
     unsigned bits = 8 * (length + 3u);
     s_ir_busy_until = now_us() + 6750 + bits * 1124 + ones * 1125 + 562;
     out_hex('P', p, 2u + length);
+    if (s_ir_loopback) ir_packet_received(p, 2 + length);
     return true;
 }
 bool infrared_send_shot(uint16_t bits) {  // the emulator has no shots yet: nobody hears it

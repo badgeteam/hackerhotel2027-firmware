@@ -32,6 +32,10 @@ void Persist_SetBrightness(uint8_t brightness);
 uint8_t Persist_Keys(void);
 void Persist_SetKeys(uint8_t keys);
 
+// Whether the factory test (factory.h) has passed on this badge
+bool Persist_FactoryPassed(void);
+void Persist_SetFactoryPassed(bool passed);
+
 const char* Persist_Name(void);
 void Persist_SetName(const char* name, unsigned len);
 

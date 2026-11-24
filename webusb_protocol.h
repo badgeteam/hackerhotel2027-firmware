@@ -92,3 +92,5 @@ bool WebUSB_BootRomDue(uint32_t elapsed_ms);
 // The item the host asked to start (ITEM_COMMIT, ITEM_RUN), once;
 // STORE_NONE if none. The main loop starts it.
 uint8_t WebUSB_TakeRunRequest(void);
+// The host asked for the factory test (once per request)
+bool WebUSB_TakeFactoryRequest(void);

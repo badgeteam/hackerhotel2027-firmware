@@ -1,5 +1,7 @@
 #include "infrared.h"
 #include "ch32fun.h"
+#include <string.h>
+#include "ir_codec.h"
 
 #define IR_TX_PIN 21  // PB21: IR LED cathode (anode to VCC via R32), low = LED on
 #define IR_RX_PIN 19  // PB19: IR receiver output (10k pull-up R27), low = carrier present
@@ -11,36 +13,30 @@
 #define IR_CARRIER_DUTY (IR_CARRIER_PERIOD / 3)
 #define US_TO_CARRIER_PERIODS(us) (((us) * IR_CARRIER_HZ + 500000) / 1000000)
 
-// NEC timings in microseconds
-#define NEC_LEADER_MARK 9000
-#define SAMSUNG_LEADER_MARK 4500  // Samsung32: NEC with a short leader, address sent twice
-#define NEC_LEADER_SPACE 4500
-#define NEC_REPEAT_SPACE 2250
-#define NEC_BIT_MARK 562
-#define NEC_ZERO_SPACE 562
-#define NEC_ONE_SPACE 1687
 #define NEC_REPEAT_TIMEOUT_MS 250  // repeats arrive every 108ms while a button is held
 
 static bool s_initialized;
 
 // ---- Transmit ----
 
-// Alternating mark/space durations in carrier periods, starting with a mark
-static uint16_t s_tx_segments[2 + 2 * 32 + 1];
-static uint8_t s_tx_count;
-// Segment and the periods left in it (including itself) of the last period
-// written to the CH1CVR preload register
-static uint8_t s_tx_index;
+// The frame going out (ir_codec.h), and where in it: the segment (mark or
+// space) and the carrier periods left in it (including this one) of the
+// last period written to the CH1CVR preload register
+static ir_frame_t s_tx_frame;
+static uint16_t s_tx_count;
+static uint16_t s_tx_index;
 static uint16_t s_tx_remaining;
 static volatile bool s_tx_busy;
 
-static volatile uint8_t s_rx_state;  // forward: reset when our own transmission ends
+static ir_rx_t s_rx;  // forward: reset when our own transmission ends
 
 static void pb_set_mode(unsigned pin, GPIO_CFGLR_PIN_MODE_Typedef mode) {
     __IO uint32_t* cfg = pin < 8 ? &GPIOB->CFGLR : pin < 16 ? &GPIOB->CFGHR : &GPIOB->CFGXR;
     unsigned shift = 4 * (pin & 7);
     *cfg = (*cfg & ~(0xFu << shift)) | ((uint32_t)mode << shift);
 }
+
+static uint16_t segment_periods(uint16_t i) { return (uint16_t)US_TO_CARRIER_PERIODS((uint32_t)IrFrame_SegmentUs(&s_tx_frame, i)); }
 
 // CH1CVR is preloaded, so each value takes effect for exactly one whole carrier
 // period, starting at the next update event
@@ -50,15 +46,17 @@ static void tx_schedule_next_period(void) {
             TIM2->CH1CVR = 0;  // done: carrier off after the final mark
             return;
         }
-        s_tx_remaining = s_tx_segments[s_tx_index];
+        s_tx_remaining = segment_periods(s_tx_index);
     }
     TIM2->CH1CVR = (s_tx_index & 1) ? 0 : IR_CARRIER_DUTY;
 }
 
+// Sends s_tx_frame
 static void tx_start(void) {
     s_tx_busy = true;
+    s_tx_count = IrFrame_Segments(&s_tx_frame);
     s_tx_index = 0;
-    s_tx_remaining = s_tx_segments[0];
+    s_tx_remaining = segment_periods(0);
 
     TIM2->CH1CVR = IR_CARRIER_DUTY;  // first period of the leader mark
     TIM2->SWEVGR = TIM_UG;           // restart the period and latch it now
@@ -75,7 +73,7 @@ void TIM2_IRQHandler(void) {
         // The carrier-off period has started: stop, output stays inactive (LED off)
         TIM2->CTLR1 &= ~TIM_CEN;
         TIM2->DMAINTENR &= ~TIM_UIE;
-        s_rx_state = 0;  // discard whatever the receiver picked up from our own LED
+        IrRx_Reset(&s_rx);  // discard whatever the receiver picked up from our own LED
         s_tx_busy = false;
         return;
     }
@@ -84,16 +82,7 @@ void TIM2_IRQHandler(void) {
 
 bool infrared_send_nec_raw(uint32_t data) {
     if (!s_initialized || s_tx_busy) return false;
-    uint8_t n = 0;
-    s_tx_segments[n++] = US_TO_CARRIER_PERIODS(NEC_LEADER_MARK);
-    s_tx_segments[n++] = US_TO_CARRIER_PERIODS(NEC_LEADER_SPACE);
-    for (unsigned bit = 0; bit < 32; bit++) {
-        s_tx_segments[n++] = US_TO_CARRIER_PERIODS(NEC_BIT_MARK);
-        s_tx_segments[n++] =
-            ((data >> bit) & 1) ? US_TO_CARRIER_PERIODS(NEC_ONE_SPACE) : US_TO_CARRIER_PERIODS(NEC_ZERO_SPACE);
-    }
-    s_tx_segments[n++] = US_TO_CARRIER_PERIODS(NEC_BIT_MARK);  // stop mark
-    s_tx_count = n;
+    IrFrame_Nec(&s_tx_frame, data);
     tx_start();
     return true;
 }
@@ -106,10 +95,13 @@ bool infrared_send_nec(uint16_t address, uint8_t command) {
 
 bool infrared_send_nec_repeat(void) {
     if (!s_initialized || s_tx_busy) return false;
-    s_tx_segments[0] = US_TO_CARRIER_PERIODS(NEC_LEADER_MARK);
-    s_tx_segments[1] = US_TO_CARRIER_PERIODS(NEC_REPEAT_SPACE);
-    s_tx_segments[2] = US_TO_CARRIER_PERIODS(NEC_BIT_MARK);
-    s_tx_count = 3;
+    IrFrame_NecRepeat(&s_tx_frame);
+    tx_start();
+    return true;
+}
+
+bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length) {
+    if (!s_initialized || s_tx_busy || !IrFrame_Packet(&s_tx_frame, type, data, length)) return false;
     tx_start();
     return true;
 }
@@ -120,30 +112,18 @@ bool infrared_tx_busy(void) {
 
 // ---- Receive ----
 
-enum {
-    RX_IDLE = 0,       // waiting for a mark to start
-    RX_LEADER_MARK,    // in a mark that may be a 9ms (NEC) or 4.5ms (Samsung) leader
-    RX_LEADER_SPACE,   // after the leader: 4.5ms (frame) or 2.25ms (repeat)
-    RX_BIT_MARK,       // in a 562us bit mark
-    RX_BIT_SPACE,      // after a bit mark: 562us (0) or 1687us (1)
-    RX_REPEAT_MARK,    // in the final mark of a repeat code
-    RX_STOP_MARK,      // in the final mark of a frame
-};
-
 #define RX_QUEUE_SIZE 8  // power of two
 static infrared_nec_message_t s_rx_queue[RX_QUEUE_SIZE];
 static volatile uint8_t s_rx_head, s_rx_tail;
 
+#define RX_PACKETS 4  // power of two; holds RX_PACKETS - 1
+static infrared_packet_t s_rx_packets[RX_PACKETS];
+static volatile uint8_t s_rx_packet_head, s_rx_packet_tail;
+
 static uint32_t s_rx_last_edge;
-static uint32_t s_rx_bits;
-static uint8_t s_rx_bit_count;
 static infrared_nec_message_t s_rx_last_message;
 static uint32_t s_rx_last_message_time;
 static bool s_rx_last_message_valid;
-
-static bool in_range(uint32_t us, uint32_t nominal) {
-    return us > nominal * 6 / 10 && us < nominal * 14 / 10;
-}
 
 static void rx_push(const infrared_nec_message_t* message, uint32_t now) {
     s_rx_last_message = *message;
@@ -157,12 +137,12 @@ static void rx_push(const infrared_nec_message_t* message, uint32_t now) {
 }
 
 static void rx_frame_done(uint32_t now) {
-    uint8_t address = s_rx_bits, address_inv = s_rx_bits >> 8;
-    uint8_t command = s_rx_bits >> 16, command_inv = s_rx_bits >> 24;
+    uint8_t address = s_rx.bytes[0], address_inv = s_rx.bytes[1];
+    uint8_t command = s_rx.bytes[2], command_inv = s_rx.bytes[3];
     if ((uint8_t)(command ^ command_inv) != 0xFF) return;
 
     infrared_nec_message_t message = {
-        .address = (uint8_t)(address ^ address_inv) == 0xFF ? address : (uint16_t)(s_rx_bits & 0xFFFF),
+        .address = (uint8_t)(address ^ address_inv) == 0xFF ? address : (uint16_t)(address | address_inv << 8),
         .command = command,
         .repeat = false,
     };
@@ -176,52 +156,14 @@ static void rx_repeat_done(uint32_t now) {
     rx_push(&message, now);
 }
 
-// mark_started: a falling edge (the interval that just ended was a space),
-// otherwise a rising edge (the interval that just ended was a mark)
-static void rx_edge(bool mark_started, uint32_t us, uint32_t now) {
-    if (mark_started) {
-        switch (s_rx_state) {
-            case RX_LEADER_SPACE:
-                if (in_range(us, NEC_LEADER_SPACE)) {
-                    s_rx_bits = 0;
-                    s_rx_bit_count = 0;
-                    s_rx_state = RX_BIT_MARK;
-                    return;
-                }
-                if (in_range(us, NEC_REPEAT_SPACE)) {
-                    s_rx_state = RX_REPEAT_MARK;
-                    return;
-                }
-                break;
-            case RX_BIT_SPACE:
-                if (in_range(us, NEC_ZERO_SPACE) || in_range(us, NEC_ONE_SPACE)) {
-                    if (us > (NEC_ZERO_SPACE + NEC_ONE_SPACE) / 2) s_rx_bits |= 1u << s_rx_bit_count;
-                    if (++s_rx_bit_count == 32) {
-                        rx_frame_done(now);
-                        s_rx_state = RX_STOP_MARK;
-                    } else {
-                        s_rx_state = RX_BIT_MARK;
-                    }
-                    return;
-                }
-                break;
-        }
-        // Anything unexpected: this mark could be the start of a new leader
-        s_rx_state = RX_LEADER_MARK;
-    } else {
-        switch (s_rx_state) {
-            case RX_LEADER_MARK:
-                s_rx_state = in_range(us, NEC_LEADER_MARK) || in_range(us, SAMSUNG_LEADER_MARK) ? RX_LEADER_SPACE : RX_IDLE;
-                return;
-            case RX_BIT_MARK:
-                s_rx_state = in_range(us, NEC_BIT_MARK) ? RX_BIT_SPACE : RX_IDLE;
-                return;
-            case RX_REPEAT_MARK:
-                if (in_range(us, NEC_BIT_MARK)) rx_repeat_done(now);
-                break;
-        }
-        s_rx_state = RX_IDLE;
-    }
+static void rx_packet_done(void) {
+    uint8_t next = (s_rx_packet_head + 1) & (RX_PACKETS - 1);
+    if (next == s_rx_packet_tail) return;  // full, drop
+    infrared_packet_t* p = &s_rx_packets[s_rx_packet_head];
+    p->type = s_rx.bytes[0];
+    p->length = s_rx.bytes[1];
+    memcpy(p->data, &s_rx.bytes[2], p->length);
+    s_rx_packet_head = next;
 }
 
 // Only EXTI line 19 is used as an interrupt in lines 16-25 (the buttons use
@@ -232,21 +174,34 @@ void EXTI25_16_IRQHandler(void) {
     if (!(EXTI->INTFR & IR_RX_LINE)) return;
     EXTI->INTFR = IR_RX_LINE;
 
-    bool mark = !(GPIOB->INDR & IR_RX_LINE);
+    // low = carrier: a mark starts now, so the interval that ended was a space
+    bool ended_mark = GPIOB->INDR & IR_RX_LINE;
     uint32_t us = (now - s_rx_last_edge) / DELAY_US_TIME;
     s_rx_last_edge = now;
 
     if (s_tx_busy) {
-        s_rx_state = RX_IDLE;  // ignore our own transmission
+        IrRx_Reset(&s_rx);  // ignore our own transmission
         return;
     }
-    rx_edge(mark, us, now);
+    switch (IrRx_Interval(&s_rx, ended_mark, us)) {
+        case IR_RX_NEC: rx_frame_done(now); break;
+        case IR_RX_NEC_REPEAT: rx_repeat_done(now); break;
+        case IR_RX_PACKET: rx_packet_done(); break;
+        default: break;
+    }
 }
 
 bool infrared_receive(infrared_nec_message_t* message) {
     if (s_rx_tail == s_rx_head) return false;
     *message = s_rx_queue[s_rx_tail];
     s_rx_tail = (s_rx_tail + 1) & (RX_QUEUE_SIZE - 1);
+    return true;
+}
+
+bool infrared_receive_packet(infrared_packet_t* packet) {
+    if (s_rx_packet_tail == s_rx_packet_head) return false;
+    *packet = s_rx_packets[s_rx_packet_tail];
+    s_rx_packet_tail = (s_rx_packet_tail + 1) & (RX_PACKETS - 1);
     return true;
 }
 
@@ -277,7 +232,7 @@ void infrared_init(void) {
     // RX: both edges of the receiver output on EXTI line 19
     pb_set_mode(IR_RX_PIN, GPIO_CFGLR_IN_FLOAT);  // external pull-up
     AFIO->EXTICR2 = (AFIO->EXTICR2 & ~AFIO_EXTICR2_EXTI19) | AFIO_EXTICR2_EXTI19_PB;
-    s_rx_state = RX_IDLE;
+    IrRx_Reset(&s_rx);
     s_rx_last_edge = SysTick->CNTL;
     EXTI->RTENR |= IR_RX_LINE;
     EXTI->FTENR |= IR_RX_LINE;

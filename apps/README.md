@@ -74,6 +74,14 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   scrolling easy. It returns the width; `text_width(text)` gives the same
   without drawing. Each character takes 6 columns (`HH_FONT_ADVANCE`). The grid is 17 wide, so about 3
   characters fit at a time. Snake uses it to show the score.
+- **Infrared.** `ir_send()` and `ir_receive()` send and get NEC frames,
+  as a remote control sends. `ir_send_packet(type, data, length)` and
+  `ir_receive_packet()` send and get packets from badge to badge: a type
+  byte and up to 32 data bytes, with a CRC on air. A packet with 10 data
+  bytes takes 0.2 s. Nothing confirms that a packet arrived: let the
+  other badge answer, and send again if no answer comes. Types `'H'` and
+  `'R'` are the name swap: while an app runs, it gets those too. In the
+  emulator, the badges on one PC share the infrared.
 - **Buttons.** `pressed()` gives the buttons that went down since the last
   tick, and `held()` gives the buttons that are down now. The bits are
   `HH_BTN_A`..`HH_BTN_D`, by the silkscreen letters.
@@ -105,8 +113,9 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 ## Limits
 
 - **API version.** An app does not start on firmware with an older
-  `HH_API_VERSION` than the one it was built against (4: the helpers, 3:
-  `polar`, 2: the text calls); update the badge first. `tools/badge.py list` prints the firmware's version ("app API").
+  `HH_API_VERSION` than the one it was built against (5: the infrared
+  packets, 4: the helpers, 3: `polar`, 2: the text calls); update the
+  badge first. `tools/badge.py list` prints the firmware's version ("app API").
 
 - **Size.** The image and its `.bss` together must fit in 12 KB of RAM
   (`HH_APP_RAM_SIZE`). The store holds 31 KB for all items together, each

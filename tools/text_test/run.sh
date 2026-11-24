@@ -8,4 +8,4 @@ out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 node "$here/text_item_test.js" "$out"
 make -s -C "$root/tools/emu"
-python3 "$here/emu_text_test.py" "$root/tools/emu/build/hh27-emu" "$out"
+python3 "$here/emu_text_test.py" "$out"

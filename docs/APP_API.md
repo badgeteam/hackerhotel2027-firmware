@@ -35,6 +35,7 @@ badge is older than the page.
 | 2 | `draw_text`, `text_width` |
 | 3 | `polar` |
 | 4 | `set_rgb`, `set_linear`, `sin8`, `hsv`, `isqrt`, `atan8`, `draw_number`, `step_brightness`; `HH_CENTER` for `draw_text` |
+| 5 | `ir_send_packet`, `ir_receive_packet` |
 
 | Member | Version |
 |---|---|
@@ -173,6 +174,40 @@ NEC), `.command` and `.repeat` (an NEC repeat code: the sender holds its
 button). Samsung TV remotes come in as 16-bit addresses with both bytes the
 same (0x0707 for a TV); a held Samsung key repeats the whole frame. See
 `apps/eye` for a remote's keys.
+
+### Packets, badge to badge (5)
+
+| Member | |
+|---|---|
+| `bool ir_send_packet(uint8_t type, const void *data, uint8_t length)` | Sends a packet: a type and up to `HH_IR_PACKET_MAX` (32) bytes. False while the previous packet or NEC frame still goes out, or if `length` is too long. |
+| `bool ir_receive_packet(hh_ir_packet_t *packet)` | False when none came in. |
+
+`hh_ir_packet_t` has `.type`, `.length` and `.data[HH_IR_PACKET_MAX]`. A
+CRC on air makes sure that what arrives is what was sent; a damaged packet
+is dropped. The firmware keeps up to 3 packets that came in, so read them
+every tick.
+
+A packet takes 6.75 ms + 1.1 to 2.2 ms per bit, 8 × (length + 3) bits:
+0.2 s for 10 bytes, 0.65 s at most. Nothing confirms that a packet
+arrived: answer each packet, and send again (after a random wait, so two badges do not keep
+colliding) when no answer comes.
+
+Pick a type of your own for your app's packets. `'H'` and `'R'` are SAY
+HI's name swap: outside apps the firmware answers them; while an app runs,
+the app gets them like any other.
+
+```c
+// Ping: B sends, any badge that hears it lights up
+static void tick(uint32_t elapsed_ms) {
+    if (hh->pressed() & HH_BTN_B) hh->ir_send_packet('P', "ping", 4);
+    hh_ir_packet_t p;
+    while (hh->ir_receive_packet(&p))
+        if (p.type == 'P') hh->set_rgb(0, 0, 255, 0);
+}
+```
+
+On air, a packet is NEC-coded bits after a 4.5 ms mark and a 2.25 ms space
+(see `ir_codec.h`), so it is never taken for a remote's frame.
 
 ## System
 

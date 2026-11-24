@@ -16,8 +16,9 @@
 #define TEXT_Y 4                 // the label's top row
 #define KEY_NEXT HH_BTN_D
 
-// The menu's entries: the name tag, the store's items, then the settings
-enum { ENTRY_NAMETAG, ENTRY_ITEM, ENTRY_EDIT, ENTRY_BRIGHTNESS, ENTRY_KEYS, ENTRY_SLEEP, ENTRY_UPDATE };
+// The menu's entries: the name tag, SAY HI, the store's items, then the settings
+enum { ENTRY_NAMETAG, ENTRY_SAY_HI, ENTRY_ITEM, ENTRY_EDIT, ENTRY_BRIGHTNESS, ENTRY_KEYS, ENTRY_SLEEP, ENTRY_UPDATE };
+#define ENTRIES_BEFORE_ITEMS 2
 #define ENTRIES_AFTER_ITEMS 5
 
 // The characters of the name editor, in the order previous / next step
@@ -43,16 +44,16 @@ static uint8_t s_pos;                 // the editor's position
 static uint8_t key_prev(void) { return Persist_Keys() == MENU_KEYS_VERTICAL ? HH_BTN_B : HH_BTN_C; }
 static uint8_t key_back(void) { return Persist_Keys() == MENU_KEYS_VERTICAL ? HH_BTN_C : HH_BTN_B; }
 
-static unsigned entry_count(void) { return 1u + Store_Count() + ENTRIES_AFTER_ITEMS; }
+static unsigned entry_count(void) { return ENTRIES_BEFORE_ITEMS + Store_Count() + ENTRIES_AFTER_ITEMS; }
 
 static int entry_kind(unsigned e, uint8_t* item) {
     unsigned items = Store_Count();
-    if (e == 0) return ENTRY_NAMETAG;
-    if (e <= items) {
-        *item = (uint8_t)(e - 1);
+    if (e < ENTRIES_BEFORE_ITEMS) return (int)e;  // ENTRY_NAMETAG, ENTRY_SAY_HI
+    if (e < ENTRIES_BEFORE_ITEMS + items) {
+        *item = (uint8_t)(e - ENTRIES_BEFORE_ITEMS);
         return ENTRY_ITEM;
     }
-    return ENTRY_EDIT + (int)(e - items - 1);
+    return ENTRY_EDIT + (int)(e - ENTRIES_BEFORE_ITEMS - items);
 }
 
 // Tap (1) or hold (2) of A, or nothing (0)
@@ -145,6 +146,7 @@ static void draw_menu(void) {
     const store_item_t* it = kind == ENTRY_ITEM ? Store_Item(item) : NULL;
     switch (kind) {
         case ENTRY_NAMETAG: copy_label(label, "NAME TAG", sizeof label - 1); break;
+        case ENTRY_SAY_HI: copy_label(label, "SAY HI", sizeof label - 1); break;
         case ENTRY_ITEM: copy_label(label, it ? it->name : "?", STORE_NAME_LEN); break;
         case ENTRY_EDIT: copy_label(label, "EDIT NAME", sizeof label - 1); break;
         case ENTRY_BRIGHTNESS: copy_label(label, "BRIGHTNESS", sizeof label - 1); break;
@@ -156,9 +158,9 @@ static void draw_menu(void) {
     }
     Text_DrawLabel(label, TEXT_Y, s_shown_ms, 255);
     outline(s_cursor, s_cursor + 1, entry_count());
-    // The arms show the group: the name tag orange, animations purple,
-    // texts blue, apps green, the badge's settings white
-    if (kind == ENTRY_NAMETAG)
+    // The arms show the group: the name tag and SAY HI orange, animations
+    // purple, texts blue, apps green, the badge's settings white
+    if (kind == ENTRY_NAMETAG || kind == ENTRY_SAY_HI)
         arms(255, 110, 0);
     else if (kind == ENTRY_ITEM && it && it->type == STORE_TYPE_ANIMATION)
         arms(150, 0, 255);
@@ -210,7 +212,7 @@ static void edit_char(int dir) {
 
 void Menu_Open(uint8_t current) {
     s_editing = false;
-    s_cursor = current < Store_Count() ? 1u + current : 0;
+    s_cursor = current < Store_Count() ? ENTRIES_BEFORE_ITEMS + current : 0;
     s_shown_ms = s_idle_ms = 0;
     s_frame_ms = FRAME_MS;
     s_a_ignore = true;  // A is still down from the hold that opened the menu
@@ -248,6 +250,7 @@ menu_result_t Menu_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held, uint
         if (a == 1) {
             switch (entry_kind(s_cursor, item)) {
                 case ENTRY_NAMETAG: return MENU_NAMETAG;
+                case ENTRY_SAY_HI: return MENU_SAY_HI;
                 case ENTRY_ITEM: return MENU_RUN;
                 case ENTRY_EDIT: start_editor(); break;
                 case ENTRY_BRIGHTNESS:  // the next level, from the top back to the lowest

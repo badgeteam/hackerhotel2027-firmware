@@ -166,16 +166,24 @@ class IrRoom:
         s.setblocking(False)
 
     def send(self, address, command):
-        self.sock.sendto(self.me + bytes([address & 0xFF, address >> 8, command]), IR_ADDR)
+        self.sock.sendto(self.me + b"I" + bytes([address & 0xFF, address >> 8, command]), IR_ADDR)
+
+    def send_packet(self, packet):
+        self.sock.sendto(self.me + b"P" + packet, IR_ADDR)
 
     def received(self):
+        """("i <address> <command>" or "p <hex>") lines for hh27-emu"""
         while True:
             try:
                 data = self.sock.recv(64)
             except BlockingIOError:
                 return
-            if data[:4] != self.me and len(data) == 7:
-                yield data[4] | data[5] << 8, data[6]
+            if data[:4] == self.me:
+                continue
+            if data[4:5] == b"I" and len(data) == 8:
+                yield "i %d %d" % (data[5] | data[6] << 8, data[7])
+            elif data[4:5] == b"P":
+                yield "p " + data[5:].hex()
 
 
 class App:
@@ -288,9 +296,11 @@ class App:
             elif kind == "I" and self.room:
                 a, cmd = map(int, rest.split())
                 self.room.send(a, cmd)
+            elif kind == "P" and self.room:
+                self.room.send_packet(bytes.fromhex(rest))
         if self.room and self.badge:
-            for a, cmd in self.room.received():
-                self.badge.send("i %d %d" % (a, cmd))
+            for line in self.room.received():
+                self.badge.send(line)
         self.root.after(15, self.tick)
 
     def draw(self, frame):

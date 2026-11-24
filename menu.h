@@ -1,6 +1,6 @@
 #pragma once
-// The menu on the badge (hold A): every stored item by name, the name tag,
-// and the badge's own settings; and the name editor (EDIT NAME).
+// The menu on the badge (hold A): the name tag, SAY HI, every stored item
+// by name, and the badge's own settings; and the name editor (EDIT NAME).
 //
 // While it is open, what ran before is paused: an app gets no ticks, an
 // animation does not advance. The main loop calls Menu_Tick() instead, and
@@ -18,6 +18,7 @@ typedef enum {
     MENU_KEEP,     // closed: go on with what ran before
     MENU_RUN,      // closed: start store item *item
     MENU_NAMETAG,  // closed: show the name tag
+    MENU_SAY_HI,   // closed: swap names over infrared (greet.h), then go on with what ran before
     MENU_SLEEP,    // closed: standby, then go on with what ran before
     MENU_UPDATE,   // closed: into the USB boot ROM
 } menu_result_t;

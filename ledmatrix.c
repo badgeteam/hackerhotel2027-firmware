@@ -6,6 +6,7 @@
 #include "ch32fun.h"
 #include "ch643_ledpwm.h"
 #include "debug_output.h"
+#include "greet.h"
 #include "infrared.h"
 #include "app_host.h"
 #include "menu.h"
@@ -113,6 +114,7 @@ int main(void) {
     uint32_t hold_ms = 0;   // how long A has been down
     uint8_t last_mode = 0;  // to start the name tag when it comes on
     bool menu_open = false;
+    bool greeting = false;  // greet.h has the LEDs; what they showed before is saved
     uint8_t menu_mode = 0, menu_item = STORE_NONE;  // what ran when it opened
 
     while (1) {
@@ -153,6 +155,9 @@ int main(void) {
                     g_app_mode = APP_MODE_NAMETAG;
                 } else if (r == MENU_UPDATE) {
                     enter_boot_rom();
+                } else if (r == MENU_SAY_HI) {  // what ran goes on after the greeting
+                    restore_leds();
+                    Greet_SayHi();
                 } else {  // KEEP or SLEEP: what ran goes on, as it was
                     restore_leds();
                     if (r == MENU_SLEEP) {
@@ -168,6 +173,11 @@ int main(void) {
         // Hold A: the menu, also from an app (which gets the press of A too)
         hold_ms = held & HH_BTN_A ? hold_ms + elapsed_ms : 0;
         if (hold_ms >= (g_app_mode == APP_MODE_APP ? MENU_HOLD_APP_MS : MENU_HOLD_MS)) {
+            if (greeting) {  // the menu puts back what showed before the greeting
+                Greet_Cancel();
+                restore_leds();
+                greeting = false;
+            }
             save_leds();
             menu_mode = g_app_mode;
             menu_item = g_running_item;
@@ -185,6 +195,28 @@ int main(void) {
                 g_app_mode = APP_MODE_NAMETAG;
                 buttons_ignore_held();
             }
+            Delay_Ms(TICK_MS);
+            continue;
+        }
+
+        // Outside apps: the name swap (greet.h). While it shows, what ran
+        // before waits; B, C or D ends it.
+        bool greets = Greet_Tick(elapsed_ms);
+        if (greets && (buttons & (HH_BTN_B | HH_BTN_C | HH_BTN_D))) {
+            Greet_Cancel();
+            greets = false;
+            buttons = 0;  // that press is only for ending the greeting
+        }
+        if (greets != greeting) {
+            if (greets)
+                save_leds();
+            else
+                restore_leds();
+            greeting = greets;
+        }
+        if (greeting) {
+            Greet_Draw();
+            last_mode = g_app_mode;
             Delay_Ms(TICK_MS);
             continue;
         }

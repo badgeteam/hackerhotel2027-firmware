@@ -11,6 +11,8 @@
 //   F <brightness> <384 values, hex>     b <buttons held, hex: bit 0 A, 1 C, 2 B, 3 D>
 //   U <reply, hex>                       u <USB packet, hex>
 //   I <address> <command>  (IR sent)     i <address> <command>  (IR received)
+//   P <packet, hex>  (IR packet sent)    p <packet, hex>  (IR packet received)
+//                    a packet: type, length, data (no CRC)
 //   S 1 / S 0  (standby on / off)
 //   L <text>   (the firmware's log)
 //   B          (jumped to the boot ROM; the program then exits)
@@ -218,6 +220,36 @@ static void ir_received(uint16_t address, uint8_t command) {
     s_ir_queue[s_ir_head++ % 16] = (infrared_nec_message_t){address, command, false};
 }
 
+// Packets: as long on air as on the badge (ir_codec.h), and the receiver
+// keeps 3, as infrared.c does
+static infrared_packet_t s_ir_packets[3];
+static unsigned s_ir_packet_head, s_ir_packet_tail;
+
+bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length) {
+    if (!s_ir_on || infrared_tx_busy() || length > IR_PACKET_DATA_MAX) return false;
+    uint8_t p[2 + IR_PACKET_DATA_MAX] = {type, length};
+    memcpy(p + 2, data, length);
+    unsigned ones = 0;
+    for (unsigned i = 0; i < 2u + length; i++) ones += (unsigned)__builtin_popcount(p[i]);
+    ones += 4;  // about half the CRC's bits
+    unsigned bits = 8 * (length + 3u);
+    s_ir_busy_until = now_us() + 6750 + bits * 1124 + ones * 1125 + 562;
+    out_hex('P', p, 2u + length);
+    return true;
+}
+bool infrared_receive_packet(infrared_packet_t* packet) {
+    if (s_ir_packet_tail == s_ir_packet_head) return false;
+    *packet = s_ir_packets[s_ir_packet_tail++ % 3];
+    return true;
+}
+static void ir_packet_received(const uint8_t* p, int n) {
+    if (!s_ir_on || n < 2 || p[1] > IR_PACKET_DATA_MAX || n != 2 + p[1] || s_ir_packet_head - s_ir_packet_tail >= 3) return;
+    infrared_packet_t* q = &s_ir_packets[s_ir_packet_head++ % 3];
+    q->type = p[0];
+    q->length = p[1];
+    memcpy(q->data, p + 2, p[1]);
+}
+
 // --- Standby and the boot ROM ----------------------------------------------------
 
 void standby(void) {
@@ -318,6 +350,9 @@ static void* reader(void* arg) {
             uint8_t p[64];
             int n = hex_bytes(line + 2, p, sizeof p);
             if (n > 0) WebUSBBulkDataOut(p, n);
+        } else if (line[0] == 'p') {
+            uint8_t p[2 + IR_PACKET_DATA_MAX];
+            ir_packet_received(p, hex_bytes(line + 2, p, sizeof p));
         } else if (line[0] == 'i') {
             unsigned a, c;
             if (sscanf(line + 2, "%u %u", &a, &c) == 2) ir_received((uint16_t)a, (uint8_t)c);

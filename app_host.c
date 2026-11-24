@@ -52,6 +52,19 @@ static bool api_ir_receive(hh_ir_t* message) {
     return true;
 }
 
+static bool api_ir_send_packet(uint8_t type, const void* data, uint8_t length) {
+    return infrared_send_packet(type, (const uint8_t*)data, length);
+}
+
+static bool api_ir_receive_packet(hh_ir_packet_t* packet) {
+    infrared_packet_t p;
+    if (!infrared_receive_packet(&p)) return false;
+    packet->type = p.type;
+    packet->length = p.length;
+    memcpy(packet->data, p.data, p.length);
+    return true;
+}
+
 static void api_standby(void) {
     standby();
     buttons_ignore_held();  // the press that woke us is not a press for the app
@@ -125,7 +138,10 @@ static const hh_api_t s_api = {
     .atan8 = AppUtil_Atan8,
     .draw_number = api_draw_number,
     .step_brightness = api_step_brightness,
+    .ir_send_packet = api_ir_send_packet,
+    .ir_receive_packet = api_ir_receive_packet,
 };
+_Static_assert(HH_IR_PACKET_MAX == IR_PACKET_DATA_MAX, "hhapp.h and infrared.h agree on the packet size");
 
 static bool in_image(uint32_t addr, uint32_t load_end) {
     return addr >= HH_APP_RAM_BASE + sizeof(hh_app_header_t) && addr < load_end;

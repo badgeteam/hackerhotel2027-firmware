@@ -59,10 +59,18 @@ for the web interface.
 
 ## Brightness
 
-A cell holds a value from 0 to 255. Each time the driver loads a row, it
-converts each value for the PWM in two steps:
+A cell holds a value from 0 to 255. The LEDPWM peripheral has two PWMs
+in each word: a luminance PWM (the word's first byte, 6 bits here:
+`LEDPWM_INTEN_CYC(2)`) that dims the whole word, and the 8-bit duty of
+each pin. The driver uses them like this:
 
-1. **Gamma 2.2.** The values are brightness as a screen shows it, and the
-   LEDs are linear.
-2. **Global brightness.** Buttons B and D set it, and the badge keeps it
-   when it is powered off (`persist.c`).
+1. **Gamma 2.2, into the duty.** The values are brightness as a screen
+   shows it, and the LEDs are linear. Any value above 0 gets a duty of at
+   least 1, so the faintest values glow.
+2. **Global brightness, into the luminance.** Buttons B and D set it, and
+   the badge keeps it when it is powered off (`persist.c`). Brightness b
+   gives b / 4 of the 64 luminance steps (255: full).
+
+Because the global brightness does not scale the 8-bit duty, dim values
+keep their place at low brightness. When the driver scaled the duty, a
+value below 95 went dark at brightness 8 (#16).

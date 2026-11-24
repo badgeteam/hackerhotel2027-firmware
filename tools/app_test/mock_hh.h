@@ -25,14 +25,22 @@ static char mock_text[64];  // the last text drawn
 static void m_set(uint16_t s, uint8_t v) { if (s < HH_SLOTS) mock_leds[s] = v; }
 static uint8_t m_get(uint16_t s) { return s < HH_SLOTS ? mock_leds[s] : 0; }
 static void m_clear(void) { memset(mock_leds, 0, sizeof mock_leds); }
-static void m_set_brightness(uint8_t b) { (void)b; }
-static uint8_t m_brightness(void) { return 255; }
+static uint8_t mock_brightness = 255;
+static void m_set_brightness(uint8_t b) { mock_brightness = b; }
+static uint8_t m_brightness(void) { return mock_brightness; }
 static uint8_t m_pressed(void) { return mock_pressed_now; }
 static uint8_t m_held(void) { return mock_pressed_now; }
 static uint32_t m_millis(void) { return mock_ms; }
 static uint32_t m_random(void) { return (mock_seed = mock_seed * 1103515245u + 12345u) >> 8; }
 static bool m_ir_send(uint16_t a, uint8_t c) { (void)a, (void)c; return true; }
-static bool m_ir_receive(hh_ir_t* m) { (void)m; return false; }
+static hh_ir_t mock_ir;       // the next IR message, if mock_ir_pending
+static bool mock_ir_pending;
+static bool m_ir_receive(hh_ir_t* m) {
+    if (!mock_ir_pending) return false;
+    *m = mock_ir;
+    mock_ir_pending = false;
+    return true;
+}
 static void m_standby(void) {}
 static void m_exit(void) {}
 static void m_print(const char* t) { (void)t; }

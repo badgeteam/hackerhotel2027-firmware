@@ -4,6 +4,10 @@
 
 // NEC infrared remote protocol, sent with the IR LED (D315, cathode on PB21)
 // and received with the 38kHz IR receiver module (S1, output on PB19).
+// Received too: Samsung32 (Samsung TV remotes), NEC with a 4.5ms leader
+// mark and the address byte sent twice; it arrives as 16-bit extended NEC,
+// address 0x0707 for a Samsung TV. A held Samsung button repeats the whole
+// frame, so it never sets `repeat`.
 //
 // Uses TIM2 (38kHz carrier, remapped to PB21) and EXTI line 19.
 

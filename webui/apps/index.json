@@ -15,6 +15,13 @@
    "description": "Star Chase: a light runs round the outline. Press B, C or D when it is beside the arm that shows green. Every hit makes the light faster, up to a limit; three misses and the game is over. The grid shows the level, the dots below it the lives left. After the end, any button starts again; the best level is kept on the badge. Until the first button the badge plays a demo, and it goes back to that 15 s after a game. As in the previous firmware's Star Chase."
   },
   {
+   "name": "EYE",
+   "file": "eye.hhapp",
+   "bytes": 7528,
+   "api": 2,
+   "description": "One big eye: the centre grid is the eyeball, the RGB LEDs on the arms its lashes. It looks around, blinks, and now and then opens its pupil wide to search and tightens it to focus. Every 30 to 60 s it has a mood: a wink, an eye roll, dizzy, sleepy, suspicious, angry, surprised, hypnotised, crying, crazy or laughing. B: a mood now; D / C: brighter / dimmer (the outline shows the level). A Samsung TV remote: Vol+ / Vol- the same, and a mood: 3 wink, 4 eye roll, 5 dizzy, 6 sleepy, 7 suspicious, 8 angry, 9 surprised, 0 hypnotised, red crazy, blue crying, yellow laughing, green one at random; and 1 or 2: it falls in love, which it never does by itself."
+  },
+  {
    "name": "FLAPPY",
    "file": "flappy.hhapp",
    "bytes": 1512,

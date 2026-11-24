@@ -39,7 +39,7 @@ const WCHISP = Object.freeze({
 });
 
 class WchIspError extends Error {
-	// code: short machine-readable reason, see the README for the list
+	// code: short machine-readable reason, docs/FIRMWARE_UPDATE.md lists them
 	constructor(message, code, details = {}) {
 		super(message);
 		this.name = 'WchIspError';

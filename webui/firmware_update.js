@@ -31,7 +31,7 @@ const fwFileInput = document.getElementById('fw-file-input');
 
 let fwBundled = null; // {image, commit, date} from firmware/ on this site
 let fwChosen = null; // {image, name} from a file the user picked
-let fwBadge = undefined; // the badge's FW_INFO text; null: too old to say
+let fwBadge = undefined; // the badge's FW_INFO text; null: too old to say; false: no answer
 let fwBusy = false;
 let fwWaitingForRom = false; // the chooser is open: keep the badge in the boot ROM
 
@@ -74,6 +74,7 @@ function renderFirmware() {
 	if (!device.connected) fwBadgeEl.textContent = 'Badge: connect it to see its firmware.';
 	else if (device.emulator) fwBadgeEl.textContent = 'Badge: the emulator (no firmware update).';
 	else if (fwBadge === null) fwBadgeEl.textContent = 'Badge: older firmware (it does not report its version).';
+	else if (fwBadge === false) fwBadgeEl.textContent = 'Badge: it did not say which firmware it runs; reload the page to ask again.';
 	else if (badgeId) {
 		const same = fwBundled && badgeId.version === fwBundled.commit;
 		fwBadgeEl.textContent = `Badge: ${badgeId.version}${same ? ' -- up to date' : fwBundled ? ' -- an update is available' : ''}`;
@@ -85,15 +86,27 @@ function renderFirmware() {
 	else fwUpdateBtn.title = '';
 }
 
+// Asks the badge which firmware it runs. Right after the badge restarts
+// (a firmware update) the first question can get no answer, so it asks up
+// to three times. Only an answer without the version means old firmware.
+let fwAsking = 0; // the newest question; an older one that ends late is ignored
 async function refreshBadgeFirmware() {
+	const asking = ++fwAsking;
 	fwBadge = undefined;
 	renderFirmware();
 	if (!device.connected || device.emulator) return;
-	try {
-		fwBadge = await device.firmwareInfo();
-	} catch (e) {
-		fwBadge = null;
+	let info = false;
+	for (let attempt = 0; attempt < 3 && info === false; attempt++) {
+		if (attempt) await new Promise((resolve) => setTimeout(resolve, 500));
+		if (asking !== fwAsking || !device.connected) return;
+		try {
+			info = await device.firmwareInfo();
+		} catch (e) {
+			/* no answer: ask again */
+		}
 	}
+	if (asking !== fwAsking) return;
+	fwBadge = info;
 	renderFirmware();
 }
 
@@ -126,7 +139,7 @@ async function flash(image, label) {
 		if (viaBadge) device.rebootToBootRom().catch(() => {});
 		setStatus(viaBadge
 			? 'The badge goes into its boot ROM. In the box that opens, pick the "Unknown device from QinHeng Electronics" and click Connect.'
-			: 'Press C on the badge (leave a running app first: hold A + C). In the box that opens, pick the "Unknown device from QinHeng Electronics" and click Connect.');
+			: 'On the badge, hold A for the menu, press C to reach UPDATE, and tap A. In the box that opens, pick the "Unknown device from QinHeng Electronics" and click Connect.');
 		// No await before this line: Chrome opens the chooser only within the click
 		rom = await navigator.usb.requestDevice({ filters: WchIsp.filters });
 	} catch (e) {

@@ -277,13 +277,16 @@ class LedMatrixDevice extends EventTarget {
 	}
 
 	// The firmware's identity, "HH27-STARFISH-FW S1 <commit>" (webusb_protocol.h
-	// FW_INFO); null from firmware that does not know the command.
+	// FW_INFO); null from firmware that does not know the command. Throws if
+	// no reply came: _send turns a USB error into no reply, and that must not
+	// read as old firmware.
 	async firmwareInfo() {
 		const status = await this._send([CMD.FW_INFO]);
-		return status && status.firmware !== undefined ? status.firmware : null;
+		if (!status) throw new Error('the badge did not answer FW_INFO');
+		return status.firmware !== undefined ? status.firmware : null;
 	}
 
-	// Reboots the badge into its USB boot ROM (as button C), to flash new
+	// Reboots the badge into its USB boot ROM (as UPDATE in the badge's menu), to flash new
 	// firmware. The badge disconnects right after the reply.
 	rebootToBootRom() {
 		return this._send([CMD.BOOT_ROM]);

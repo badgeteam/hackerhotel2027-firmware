@@ -7,13 +7,24 @@ void IrFrame_Nec(ir_frame_t* f, uint32_t data) {
     f->leader_mark = IR_NEC_LEADER_MARK;
     f->leader_space = IR_NEC_LEADER_SPACE;
     f->bits = 32;
+    f->jvc = 0;
     for (int i = 0; i < 4; i++) f->bytes[i] = (uint8_t)(data >> (8 * i));
+}
+
+void IrFrame_Shot(ir_frame_t* f, uint16_t bits) {
+    f->leader_mark = IR_SHOT_LEADER_MARK;
+    f->leader_space = IR_SHOT_LEADER_SPACE;
+    f->bits = 16;
+    f->jvc = 1;
+    f->bytes[0] = (uint8_t)bits;
+    f->bytes[1] = (uint8_t)(bits >> 8);
 }
 
 void IrFrame_NecRepeat(ir_frame_t* f) {
     f->leader_mark = IR_NEC_LEADER_MARK;
     f->leader_space = IR_NEC_REPEAT_SPACE;
     f->bits = 0;
+    f->jvc = 0;
 }
 
 uint8_t Ir_Crc8(const uint8_t* p, unsigned n) {
@@ -34,6 +45,7 @@ bool IrFrame_Packet(ir_frame_t* f, uint8_t type, const uint8_t* data, uint8_t le
     if (length) memcpy(&f->bytes[2], data, length);
     f->bytes[2 + length] = Ir_Crc8(f->bytes, 2u + length);
     f->bits = (uint16_t)(8 * (length + 3));
+    f->jvc = 0;
     return true;
 }
 
@@ -43,9 +55,11 @@ uint16_t IrFrame_SegmentUs(const ir_frame_t* f, uint16_t i) {
     if (i == 0) return f->leader_mark;
     if (i == 1) return f->leader_space;
     i -= 2;
-    if (!(i & 1)) return IR_BIT_MARK;  // a bit's mark, or the stop mark
+    if (!(i & 1)) return f->jvc ? IR_SHOT_BIT_MARK : IR_BIT_MARK;  // a bit's mark, or the stop mark
     unsigned bit = i / 2;
-    return (f->bytes[bit / 8] >> (bit % 8)) & 1 ? IR_ONE_SPACE : IR_ZERO_SPACE;
+    bool one = (f->bytes[bit / 8] >> (bit % 8)) & 1;
+    if (f->jvc) return one ? IR_SHOT_ONE_SPACE : IR_SHOT_ZERO_SPACE;
+    return one ? IR_ONE_SPACE : IR_ZERO_SPACE;
 }
 
 // ---- Receiving ----
@@ -118,6 +132,7 @@ ir_rx_event_t IrRx_Interval(ir_rx_t* rx, bool mark, uint32_t us) {
             return IR_RX_NOTHING;
 
         case RX_BIT_SPACE: {
+            if (!mark && rx->bits == 16 && us >= IR_SHOT_SILENCE_US) return IrRx_Silence(rx, us);
             if (mark || !bit_space(us)) break;
             unsigned bit = rx->bits++;
             if (bit % 8 == 0) rx->bytes[bit / 8] = 0;
@@ -148,4 +163,38 @@ ir_rx_event_t IrRx_Interval(ir_rx_t* rx, bool mark, uint32_t us) {
     // Out of step: this interval may be the start of a new leader
     rx->state = RX_IDLE;
     return mark ? IrRx_Interval(rx, mark, us) : IR_RX_NOTHING;
+}
+
+ir_rx_event_t IrRx_Silence(ir_rx_t* rx, uint32_t us) {
+    // after the 16th bit's space came its stop mark (or the 17th bit's
+    // mark), and since then nothing
+    if (rx->state != RX_BIT_SPACE || rx->packet || rx->bits != 16 || us < IR_SHOT_SILENCE_US) return IR_RX_NOTHING;
+    rx->state = RX_IDLE;
+    return IR_RX_SHOT;
+}
+
+// ---- Shots ----
+
+uint8_t IrShot_Crc(uint16_t bits) {
+    unsigned d[12];
+    for (int i = 0; i < 12; i++) d[i] = bits >> i & 1;
+    unsigned c0 = d[11] ^ d[10] ^ d[9] ^ d[8] ^ d[6] ^ d[4] ^ d[3] ^ d[0];
+    unsigned c1 = d[8] ^ d[7] ^ d[6] ^ d[5] ^ d[3] ^ d[1] ^ d[0] ^ 1;
+    unsigned c2 = d[9] ^ d[8] ^ d[7] ^ d[6] ^ d[4] ^ d[2] ^ d[1] ^ 1;
+    unsigned c3 = d[10] ^ d[9] ^ d[8] ^ d[7] ^ d[5] ^ d[3] ^ d[2];
+    return (uint8_t)(c0 | c1 << 1 | c2 << 2 | c3 << 3);
+}
+
+bool IrShot_Decode(uint16_t bits, ir_shot_t* shot) {
+    if (IrShot_Crc(bits) != bits >> 12) return false;
+    shot->team = bits & 7;
+    shot->trigger = bits >> 3 & 1;
+    shot->command = bits >> 4 & 15;
+    shot->parameter = bits >> 8 & 15;
+    return true;
+}
+
+uint16_t IrShot_Encode(const ir_shot_t* shot) {
+    uint16_t bits = (uint16_t)((shot->team & 7) | (shot->trigger & 1) << 3 | (shot->command & 15) << 4 | (shot->parameter & 15) << 8);
+    return (uint16_t)(bits | IrShot_Crc(bits) << 12);
 }

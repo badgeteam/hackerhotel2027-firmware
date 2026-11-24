@@ -106,6 +106,13 @@ bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length) {
     return true;
 }
 
+bool infrared_send_shot(uint16_t bits) {
+    if (!s_initialized || s_tx_busy) return false;
+    IrFrame_Shot(&s_tx_frame, bits);
+    tx_start();
+    return true;
+}
+
 bool infrared_tx_busy(void) {
     return s_tx_busy;
 }
@@ -166,6 +173,18 @@ static void rx_packet_done(void) {
     s_rx_packet_head = next;
 }
 
+// Shots (16-bit frames, ir_codec.h) as they came in, CRC not yet checked
+#define RX_SHOTS 8  // power of two; holds RX_SHOTS - 1
+static uint16_t s_rx_shots[RX_SHOTS];
+static volatile uint8_t s_rx_shot_head, s_rx_shot_tail;
+
+static void rx_shot_done(void) {
+    uint8_t next = (s_rx_shot_head + 1) & (RX_SHOTS - 1);
+    if (next == s_rx_shot_tail) return;  // full, drop
+    s_rx_shots[s_rx_shot_head] = (uint16_t)(s_rx.bytes[0] | s_rx.bytes[1] << 8);
+    s_rx_shot_head = next;
+}
+
 // Every mark and space as it came in, for looking at what other devices
 // send (tools/badge.py irlog): bit 15 set for a mark, the rest the length
 // in us (at most 32767)
@@ -195,19 +214,21 @@ void EXTI25_16_IRQHandler(void) {
     uint32_t us = (now - s_rx_last_edge) / DELAY_US_TIME;
     s_rx_last_edge = now;
 
-    if (s_tx_busy) {
-        IrRx_Reset(&s_rx);  // ignore our own transmission
-        return;
-    }
+    // the raw log takes our own transmission too, if the receiver sees it
     uint8_t next = (uint8_t)((s_raw_head + 1) & (RAW_LOG - 1));
     if (next != s_raw_tail) {  // full: the newest are dropped
         s_raw[s_raw_head] = (uint16_t)((ended_mark ? 0x8000u : 0) | (us < 0x7FFF ? us : 0x7FFF));
         s_raw_head = next;
     }
+    if (s_tx_busy) {
+        IrRx_Reset(&s_rx);  // ignore our own transmission
+        return;
+    }
     switch (IrRx_Interval(&s_rx, ended_mark, us)) {
         case IR_RX_NEC: rx_frame_done(now); break;
         case IR_RX_NEC_REPEAT: rx_repeat_done(now); break;
         case IR_RX_PACKET: rx_packet_done(); break;
+        case IR_RX_SHOT: rx_shot_done(); break;
         default: break;
     }
 }
@@ -224,6 +245,22 @@ bool infrared_receive_packet(infrared_packet_t* packet) {
     *packet = s_rx_packets[s_rx_packet_tail];
     s_rx_packet_tail = (s_rx_packet_tail + 1) & (RX_PACKETS - 1);
     return true;
+}
+
+bool infrared_receive_shot(ir_shot_t* shot) {
+    if (!s_initialized) return false;
+    // A shot ends in silence, with no edge after it: look whether the line
+    // has been quiet long enough (with the edge interrupt held off)
+    NVIC_DisableIRQ(EXTI25_16_IRQn);
+    uint32_t quiet_us = (SysTick->CNTL - s_rx_last_edge) / DELAY_US_TIME;
+    if (IrRx_Silence(&s_rx, quiet_us) == IR_RX_SHOT) rx_shot_done();
+    NVIC_EnableIRQ(EXTI25_16_IRQn);
+    while (s_rx_shot_tail != s_rx_shot_head) {
+        uint16_t bits = s_rx_shots[s_rx_shot_tail];
+        s_rx_shot_tail = (s_rx_shot_tail + 1) & (RX_SHOTS - 1);
+        if (IrShot_Decode(bits, shot)) return true;  // a bad CRC: the next one
+    }
+    return false;
 }
 
 // ---- Init ----

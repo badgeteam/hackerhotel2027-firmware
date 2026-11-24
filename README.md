@@ -282,6 +282,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/deploy_webui.sh` | publishes `webui/` of the current commit to a web server |
 | `tools/gen_layout.py` | makes `layout.c`, `la04_tables.h` and `webui/layout_data.js` from `webui/board_data.js` |
 | `tools/codec_test/run.sh` | checks that the web interface and the firmware decode animations the same way |
+| `tools/app_test/run.sh` | checks the apps: game rules on the PC (`mock_hh.h` stands in for the firmware), then every app in the emulator with random buttons |
 | `tools/text_test/run.sh` | checks text items: the web interface's payloads, played on the emulator |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

@@ -43,6 +43,13 @@
    "description": "Sparkles on the grid and the outline, a rainbow turning round the arms. B: more sparkles, D: fewer."
   },
   {
+   "name": "STARTRIS",
+   "file": "startris.hhapp",
+   "bytes": 2544,
+   "api": 2,
+   "description": "Startris: a 9-wide, 14-deep well in the middle of the octagon. C / D move the piece (hold to repeat), tap A to rotate, B drops it. Full rows clear; the more lines, the faster the pieces fall. The arms show the next piece's colour and fill with the lines you cleared. When a new piece has no room, the game is over: the grid shows the lines, the outline the best (kept on the badge), and any button starts again. As in the previous firmware's Startris."
+  },
+  {
    "name": "WHACK",
    "file": "whack.hhapp",
    "bytes": 1048,

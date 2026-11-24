@@ -17,9 +17,9 @@
   {
    "name": "EYE",
    "file": "eye.hhapp",
-   "bytes": 4816,
+   "bytes": 7052,
    "api": 2,
-   "description": "One big eye: the centre grid is the eyeball, the RGB LEDs on the arms its lashes. It looks around, blinks, and now and then opens its pupil wide to search and tightens it to focus. Every 30 to 60 s it has a mood: a wink, an eye roll, dizzy, sleepy, suspicious, angry or surprised. B: a mood now."
+   "description": "One big eye: the centre grid is the eyeball, the RGB LEDs on the arms its lashes. It looks around, blinks, and now and then opens its pupil wide to search and tightens it to focus. Every 30 to 60 s it has a mood: a wink, an eye roll, dizzy, sleepy, suspicious, angry, surprised, hypnotised, crying, crazy or laughing. B: a mood now. Press 1 or 2 on a Samsung TV remote and it falls in love."
   },
   {
    "name": "FLAPPY",

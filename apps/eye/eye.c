@@ -1,7 +1,9 @@
 // One big eye: the centre grid is the eyeball, the RGB LEDs on the arms its
 // lashes. It looks around, blinks, and now and then opens its pupil wide to
 // search and tightens it to focus. Every 30 to 60 s it has a mood: a wink,
-// an eye roll, dizzy, sleepy, suspicious, angry or surprised. B: a mood now.
+// an eye roll, dizzy, sleepy, suspicious, angry, surprised, hypnotised,
+// crying, crazy or laughing. B: a mood now. Press 1 or 2 on a Samsung TV
+// remote and it falls in love.
 #include "hhapp.h"
 
 // The eye thinks in frames: 30 a second, stepped from the 5 ms ticks
@@ -27,6 +29,11 @@
 #define MOOD_RAMP 12
 // Sleepy: the startle, in frames into the mood
 #define WAKE (10 * FPS)
+// Crying: tears at once at most
+#define TEARS 3
+// Samsung TV remote (Samsung32): the commands of 1 and 2
+#define SAMSUNG_KEY_1 0x04
+#define SAMSUNG_KEY_2 0x05
 
 typedef enum {
     MOOD_NONE,
@@ -37,11 +44,20 @@ typedef enum {
     MOOD_SUSPICIOUS,  // a squint, the gaze slides slowly side to side, amber lashes
     MOOD_ANGRY,       // the upper lid frowns into a V, pinpoint pupil, trembling, red lashes
     MOOD_SURPRISED,   // frozen on you, wide-eyed, white lashes; then a double blink
+    MOOD_HYPNO,       // a spiral turning in a big iris, dazed lids, purple waves out the lashes
+    MOOD_CRYING,      // sad lids, looking down, tears falling, blue tears running down the lower arms
+    MOOD_CRAZY,       // the pupil twitches and jumps, the lids out of step, the lashes flicker
+    MOOD_LAUGHING,    // the eye squeezed into a bobbing ^, golden lashes bouncing
+    MOOD_LOVE,        // a beating heart for a pupil, pink lashes: only from a Samsung remote
     MOOD_COUNT
 } mood_t;
 
+// The moods it picks by itself: all but love
+#define MOOD_PICKS (MOOD_LOVE - 1)
+
 static const uint16_t mood_frames[MOOD_COUNT] = {
-    0, FPS, 5 * FPS / 2, 4 * FPS, 12 * FPS, 7 * FPS, 5 * FPS, 5 * FPS / 2,
+    0,           FPS,     5 * FPS / 2, 4 * FPS, 12 * FPS, 7 * FPS, 5 * FPS,
+    5 * FPS / 2, 6 * FPS, 7 * FPS,     4 * FPS, 4 * FPS,  6 * FPS,
 };
 
 typedef struct {
@@ -50,7 +66,8 @@ typedef struct {
 
 // The lids this frame, each 0 ..= 256: how far open (a blink), the upper lid
 // lowered, the lower lid raised; the upper lid slanted (its right end this
-// much lower, in 1/16 cell), and frowning (its middle this much lower)
+// much lower, in 1/16 cell), and frowning (its middle this much lower;
+// negative: sad, the middle higher)
 typedef struct {
     int open, droop, raise, tilt, vee;
 } lids_t;
@@ -90,6 +107,9 @@ static uint32_t mt;         // frames into the mood
 static uint32_t next_mood;  // frames until the next mood
 static uint32_t t;          // frames since the start
 static uint32_t acc;        // ms * FPS towards the next frame
+static int lid_low[HH_GRID_W];  // the lower lid's edge per column, as last drawn
+static uint8_t tear_c[TEARS];   // a tear's column + 1; 0 = no tear
+static int tear_y[TEARS], tear_v[TEARS];  // its height, and its speed in 1/4
 
 // ---------------------------------------------------------------- helpers
 
@@ -108,6 +128,29 @@ static uint8_t scale(uint8_t a, uint8_t b) { return (uint8_t)((a * b + 255) >> 8
 
 // A phase that turns per_s / 256 turns a second, at frame f
 static uint8_t phase(uint32_t f, uint32_t per_s) { return (uint8_t)(f * per_s / FPS); }
+
+static int isqrt(int n) {
+    int r = 0;
+    for (int b = 1 << 16; b; b >>= 2) {
+        if (n >= r + b) {
+            n -= r + b;
+            r = (r >> 1) + b;
+        } else {
+            r >>= 1;
+        }
+    }
+    return r;
+}
+
+// The angle of (x, y) in 1/256 turn, 0 = right, 64 = down; to a few units
+static uint8_t atan8(int y, int x) {
+    int ax = iabs(x), ay = iabs(y);
+    if (!ax && !ay) return 0;
+    int a = ax >= ay ? 32 * ay / ax : 64 - 32 * ax / ay;
+    if (x < 0) a = 128 - a;
+    if (y < 0) a = 256 - a;
+    return (uint8_t)a;
+}
 
 static rgb_t scaled(rgb_t c, uint8_t v) { return (rgb_t){scale(c.r, v), scale(c.g, v), scale(c.b, v)}; }
 
@@ -150,14 +193,16 @@ static void start(mood_t m) {
         case MOOD_SUSPICIOUS: pupil_to = PUPIL_FOCUS - 5; break;
         case MOOD_ANGRY: pupil_to = PUPIL_FOCUS - 8; break;
         case MOOD_SURPRISED: pupil_to = PUPIL_FOCUS - 9; break;
+        case MOOD_HYPNO: pupil_to = PUPIL_FOCUS - 4; break;
+        case MOOD_CRYING: pupil_to = PUPIL_WIDE - 8; break;  // big and watery
         default: pupil_to = PUPIL_FOCUS; break;
     }
 }
 
-// A mood at random, never the one before
+// A mood at random, never the one before, never love
 static mood_t pick(void) {
-    mood_t m = (mood_t)(1 + rnd8() % (MOOD_COUNT - 1));
-    if (m == last) m = (mood_t)(m % (MOOD_COUNT - 1) + 1);
+    mood_t m = (mood_t)(1 + rnd8() % MOOD_PICKS);
+    if (m == last) m = (mood_t)(m % MOOD_PICKS + 1);
     return m;
 }
 
@@ -166,6 +211,12 @@ static int amount(void) {
     uint32_t left = sat_sub(mood_frames[mood], mt);
     uint32_t a = (mt < left ? mt : left) * 256 / MOOD_RAMP;
     return a > 256 ? 256 : (int)a;
+}
+
+// Love: a heartbeat, lub-dub, 0 ..= 256, a little over once a second
+static int beat(void) {
+    int p = (int)(mt % 27);
+    return p < 4 ? 256 - p * 64 : p >= 7 && p < 11 ? 192 - (p - 7) * 48 : 0;
 }
 
 // No mood: jumps, blinks, now and then a wide pupil, and the next mood
@@ -217,8 +268,6 @@ static void wander(void) {
 static void act(void) {
     int m = (int)mt;
     switch (mood) {
-        case MOOD_WINK:
-        case MOOD_SURPRISED: tx = ty = 0; break;  // at you
         case MOOD_ANGRY:  // trembles
             tx = (m * 7 % 5 - 2) * 2;
             ty = (m * 3 % 5 - 2) * 2;
@@ -243,13 +292,30 @@ static void act(void) {
             tx = (mt / (2 * FPS)) % 2 == 0 ? -52 : 52;
             ty = 6;
             break;
-        default: break;
+        case MOOD_CRYING:  // looks down; the tears well up at the lower lid
+            tx = 0, ty = 24;
+            if (m > MOOD_RAMP && mt + FPS < mood_frames[MOOD_CRYING] && rnd8() < 16) {
+                for (int i = 0; i < TEARS; i++) {
+                    if (tear_c[i]) continue;
+                    int c = 5 + rnd8() % 7;
+                    tear_c[i] = (uint8_t)(c + 1);
+                    tear_y[i] = lid_low[c];
+                    tear_v[i] = 0;
+                    break;
+                }
+            }
+            break;
+        case MOOD_CRAZY:  // twitches: jumps, and the pupil pumps
+            if (rnd8() < 90) circle(rnd8(), rnd8() % 64, &tx, &ty);
+            if (rnd8() < 50) pupil_to = 10 + rnd8() % 40;
+            break;
+        default: tx = ty = 0; break;  // at you
     }
     if (++mt >= mood_frames[mood]) {
-        if (mood == MOOD_DIZZY) {
-            next_blink = 0;  // shakes it off
-        } else if (mood == MOOD_SURPRISED) {
-            next_blink = 0;  // can't believe it
+        if (mood == MOOD_DIZZY || mood == MOOD_CRYING) {
+            next_blink = 0;  // shakes it off; blinks the tears away
+        } else if (mood == MOOD_SURPRISED || mood == MOOD_CRAZY) {
+            next_blink = 0;  // can't believe it; snaps out of it
             again = true;
         } else {
             next_blink = FPS + hh->random() % (2 * FPS);
@@ -276,6 +342,12 @@ static void step(void) {
     // the pupil: a quarter of the way each frame, at least one step
     int d = pupil_to - pupil;
     pupil += iabs(d) < 4 ? sgn(d) : d / 4;
+    // tears fall on, also when the crying is over
+    for (int i = 0; i < TEARS; i++) {
+        if (!tear_c[i]) continue;
+        tear_y[i] += tear_v[i]++ / 4;
+        if (tear_y[i] > 9 * CELL) tear_c[i] = 0;
+    }
 }
 
 // How far open the lids are for a blink, 0 (shut) ..= 256
@@ -327,6 +399,22 @@ static lids_t lids(void) {
             l.raise = 110 * a / 256;
             l.vee = 90 * a / 256;
             break;
+        case MOOD_HYPNO:  // dazed
+            l.droop = 70 * a / 256;
+            l.raise = 30 * a / 256;
+            break;
+        case MOOD_CRYING:  // sad: the middle of the upper lid up, the corners down
+            l.droop = 50 * a / 256;
+            l.raise = 160 * a / 256;
+            l.vee = -60 * a / 256;
+            break;
+        case MOOD_CRAZY:  // the lids out of step
+            l.droop = (60 + wob(23, 60)) * a / 256;
+            l.raise = (60 + wob(17, 60)) * a / 256;
+            l.tilt = wob(13, 40) * a / 256;
+            break;
+        case MOOD_LAUGHING: l.open = l.open * (256 - a) / 256; break;  // shut, for the ^
+        case MOOD_LOVE: l.droop = 50 * a / 256; break;  // dreamy
         default: break;
     }
     return l;
@@ -351,6 +439,22 @@ static rgb_t lash(rgb_t usual, const hh_rgb_t* l, uint8_t v, int ou) {
         case MOOD_SUSPICIOUS: return mix(usual, hsv(20, 255, v), a);
         case MOOD_ANGRY: return mix(usual, hsv(0, 255, scale(v, 110 + scale(145, sin8((uint8_t)(mt * 16))))), a);
         case MOOD_SURPRISED: return mix(usual, white, (uint8_t)(255 - imin((int)mt * 255 / 45, 255)));
+        case MOOD_HYPNO: {  // purple waves running out along the arms
+            uint8_t w = (uint8_t)(mt * 12 - l->rank * 36);
+            return mix(usual, hsv((uint8_t)(195 + (sin8(w) >> 3)), 255, scale(v, 70 + scale(185, sin8(w)))), a);
+        }
+        case MOOD_CRYING: {  // blue; on the lower arms, tears run down to the tips
+            rgb_t c = hsv(150, 210, scale(v, 90));
+            if ((l->arm == 2 || l->arm == 3) && (mt / 3 + l->arm * 4) % 9 == l->rank)
+                c = (rgb_t){scale(v, 140), scale(v, 190), v};
+            return mix(usual, c, a);
+        }
+        case MOOD_CRAZY: return mix(usual, rnd8() < 60 ? (rgb_t){0, 0, 0} : hsv(rnd8(), 255, v), a);
+        case MOOD_LAUGHING: {
+            uint8_t b = scale(v, 140 + scale(115, sin8((uint8_t)(mt * 22 + l->rank * 24))));
+            return mix(usual, hsv((uint8_t)(36 + l->rank * 3), 230, b), a);
+        }
+        case MOOD_LOVE: return mix(usual, hsv(235, 170, scale(v, (uint8_t)(110 + beat() * 145 / 256))), a);
         default: return usual;
     }
 }
@@ -359,14 +463,31 @@ static rgb_t lash(rgb_t usual, const hh_rgb_t* l, uint8_t v, int ou) {
 
 static void draw(void) {
     lids_t ld = lids();
+    int a = amount();
     int ou = ld.open * (256 - ld.droop) / 256;  // upper lid open
     int ol = ld.open * (256 - ld.raise) / 256;  // lower lid open
     // focused, the pupil breathes: +-1/8 cell, about once a second
     int p = focus == 0 ? pupil + (sin8(phase(t, 230)) - 128) / 64 : pupil;
     int p2 = p * p;
-    // wide-eyed: a smaller iris shows more white
-    int ir = mood == MOOD_SURPRISED ? IRIS - 22 * amount() / 256 : IRIS;
+    // wide-eyed: a smaller iris shows more white; hypnotised: a bigger one
+    int ir = mood == MOOD_SURPRISED ? IRIS - 22 * a / 256 : mood == MOOD_HYPNO ? IRIS + 26 * a / 256 : IRIS;
     int ir2 = ir * ir;
+    // in love: the iris and pupil give way to a heart of this size, beating
+    int heart = mood == MOOD_LOVE ? (56 + beat() * 8 / 256) * a / 256 : 0;
+    int fade = 256 - (mood == MOOD_LOVE ? a : 0);
+    // laughing: the ^ bobs up and down
+    int bob = (sin8((uint8_t)(mt * 22)) - 128) / 12;
+
+    // the lids depend on the column only: where they meet, and how far apart
+    int up[HH_GRID_W];
+    for (int c = 0; c < HH_GRID_W; c++) {
+        int x = c * CELL - 8 * CELL;
+        int k = 256 - x * x * 256 / LID_R2;
+        int meet = CELL + CELL * 3 / 2 * k / 256;
+        up[c] = meet - LID_UP * ou / 256 * k / 256 + gy / 3 * ou / 256  // follows the gaze
+                + ld.tilt * x / (8 * CELL) + ld.vee * (k - 160) / 96;   // vee: 0 at the sides
+        lid_low[c] = meet + LID_DOWN * ol / 256 * k / 256;
+    }
 
     hh->clear();
     for (int r = 0; r < HH_GRID_H; r++) {
@@ -374,40 +495,66 @@ static void draw(void) {
             uint16_t slot = hh->grid[r][c];
             if (slot == HH_NONE) continue;
             int x = c * CELL - 8 * CELL, y = r * CELL - 15 * CELL / 2;
-
-            // the lids: where they meet, and how far apart they are here
-            int k = 256 - x * x * 256 / LID_R2;
-            int meet = CELL + CELL * 3 / 2 * k / 256;
-            int up = meet - LID_UP * ou / 256 * k / 256 + gy / 3 * ou / 256  // follows the gaze
-                     + ld.tilt * x / (8 * CELL) + ld.vee * (k - 160) / 96;   // vee: 0 at the sides
-            int down = meet + LID_DOWN * ol / 256 * k / 256;
-            int vis = imin(clamp(y - up + 8, 0, 16), clamp(down - y + 8, 0, 16));
+            int vis = imin(clamp(y - up[c] + 8, 0, 16), clamp(lid_low[c] - y + 8, 0, 16));
 
             // the ball, darker towards the rim
             int sclera = imax(210 - (x * x + y * y) * 130 / (136 * 136), 60);
             int dx = x - gx, dy = y - gy, d2 = dx * dx + dy * dy;
             // iris: a dark ring at its edge, lighter towards the pupil
             int iris = 25 + clamp(60 * (ir2 - d2) / (ir2 - p2), 0, 60);
-            int in_iris = clamp(8 - (d2 - ir2) / (2 * ir), 0, 16);
-            int in_pupil = clamp(8 - (d2 - p2) / (2 * p), 0, 16);
+            int in_iris = clamp(8 - (d2 - ir2) / (2 * ir), 0, 16) * fade / 256;
+            int in_pupil = clamp(8 - (d2 - p2) / (2 * p), 0, 16) * fade / 256;
+            if (mood == MOOD_HYPNO && in_iris) {
+                // a two-armed spiral, turning
+                int sp = sin8((uint8_t)(isqrt(d2) * 6 + atan8(dy, dx) * 2 - (int)mt * 12)) > 128 ? 230 : 15;
+                iris += (sp - iris) * a / 256;
+            }
             int v = (sclera * (16 - in_iris) + iris * in_iris) / 16 * (16 - in_pupil) / 16;
             // the catch light, up and left of the pupil's centre
             int hx = dx + 20, hy = dy + 20, h2 = hx * hx + hy * hy;
             if (h2 < 14 * 14) v = imax(v, 255 - h2 * 255 / (14 * 14));
+            if (heart > 8) {
+                // two lobes and a point, in 1/64 of the heart's half width
+                int X = dx * 64 / heart, Y = dy * 64 / heart;
+                int l1 = (X - 30) * (X - 30) + (Y + 16) * (Y + 16), l2 = (X + 30) * (X + 30) + (Y + 16) * (Y + 16);
+                if (l1 < 34 * 34 || l2 < 34 * 34 || (Y > -16 && iabs(X) * 76 < (60 - Y) * 64)) v = 12;
+            }
             v = v * vis / 16;
             // a heavy or shut lid: its edge as a faint line
-            if (ou < 128) v = imax(v, imax(16 - iabs(y - imin(up, down)), 0) * (128 - ou) * 110 / (16 * 128));
+            if (ou < 128 && mood != MOOD_LAUGHING)
+                v = imax(v, imax(16 - iabs(y - imin(up[c], lid_low[c])), 0) * (128 - ou) * 110 / (16 * 128));
+            if (mood == MOOD_LAUGHING) v = v * (256 - a) / 256;  // the shut eye gives way to the ^
+            if (mood == MOOD_LAUGHING && iabs(x) < 7 * CELL) {
+                // the ^: an arch, highest in the middle, thinner at its ends
+                int d = iabs(y - (-20 + bob + x * x / 200));
+                if (d < 14) v = imax(v, (255 - d * 255 / 14) * imin(7 * CELL - iabs(x), 16) / 16 * a / 256);
+            }
             hh->set(slot, (uint8_t)v);
+        }
+    }
+
+    // tears: a bright drop with a short trail
+    for (int i = 0; i < TEARS; i++) {
+        if (!tear_c[i]) continue;
+        int c = tear_c[i] - 1;
+        for (int r = 0; r < HH_GRID_H; r++) {
+            int d = tear_y[i] - (r * CELL - 15 * CELL / 2);
+            int v = d >= -10 && d <= 10 ? 255 - iabs(d) * 12 : d > 10 && d < 40 ? (40 - d) * 4 : 0;
+            uint16_t slot = hh->grid[r][c];
+            if (v && slot != HH_NONE) hh->set(slot, (uint8_t)imax(hh->get(slot), v));
         }
     }
 
     // lashes: upper ones on the top three arms, lower ones on the bottom two;
     // they fold in with the lids and spring out again
     uint8_t hue = phase(t, 8);
+    int lu = ou, ll = ol;
+    if (mood == MOOD_LAUGHING) lu = ll = imax(ou, (150 + (sin8((uint8_t)(mt * 22)) - 128) * 3 / 4) * a / 256);
     for (int i = 0; i < HH_RGB_COUNT; i++) {
         const hh_rgb_t* l = &hh->rgb[i];
         bool upper = l->arm == 0 || l->arm == 1 || l->arm == 4;
-        int len = upper ? 2 * 256 + 5 * ou : 2 * 256 + 2 * ol;  // ranks, 1/256
+        int len = upper ? 2 * 256 + 5 * lu : 2 * 256 + 2 * ll;  // ranks, 1/256
+        if (mood == MOOD_CRYING && !upper) len = imax(len, 7 * a);  // all the way, for the tears
         uint8_t cover = (uint8_t)clamp(len - l->rank * 256, 0, 255);
         if (!cover) continue;
         uint8_t v = scale((uint8_t)(255 - l->rank * 22), cover);
@@ -435,6 +582,17 @@ static void tick(uint32_t elapsed_ms) {
         blink = 0;
         focus = 0;
         start(pick());
+    }
+    // a Samsung TV remote sends its address byte twice (plain NEC: with its
+    // inverse, so never a 16-bit address with both bytes the same)
+    hh_ir_t ir;
+    while (hh->ir_receive(&ir)) {
+        bool samsung = ir.address > 0xFF && (ir.address >> 8) == (ir.address & 0xFF);
+        if (samsung && (ir.command == SAMSUNG_KEY_1 || ir.command == SAMSUNG_KEY_2) && mood != MOOD_LOVE) {
+            blink = 0;
+            focus = 0;
+            start(MOOD_LOVE);
+        }
     }
     acc += elapsed_ms * FPS;
     if (acc < 1000) return;

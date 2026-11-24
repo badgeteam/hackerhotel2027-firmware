@@ -31,6 +31,7 @@ static int row(int r) {
 
 static const char* const names[MOOD_COUNT] = {
     "none", "wink", "roll", "dizzy", "sleepy", "suspicious", "angry", "surprised",
+    "hypnotised", "crying", "crazy", "laughing", "love",
 };
 
 static void check_mood(mood_t m) {
@@ -40,6 +41,8 @@ static void check_mood(mood_t m) {
     start(m);
     int shut = 0, squint = 0, white = 0, frown = 0, red = 0, frames = 0;
     bool hue_seen[8] = {false};
+    int turning = 0, tears = 0, laugh = 0, heart = 0, blue = 0, pink = 0, pmin = 99, pmax = 0;
+    static uint8_t before[HH_SLOTS];
     while (mood != MOOD_NONE && frames < 20 * FPS) {
         step(), t++, draw();
         frames++;
@@ -59,6 +62,24 @@ static void check_mood(mood_t m) {
         hue_seen[(c[0] > c[1]) | (c[1] > c[2]) << 1 | (c[2] > c[0]) << 2] = true;
         if (px(4, 8) == 0 && px(4, 2) > 0) frown++;  // the upper lid lower in the middle than at the side
         if (c[0] > 60 && c[1] < c[0] / 4 && c[2] < c[0] / 4) red++;
+        if (c[0] > c[1] + 30 && c[2] > c[1] + 30) pink++;
+        int diff = 0;
+        for (int r = 3; r < 13; r++)
+            for (int k = 3; k < 14; k++)
+                if (layout_grid[r][k] != HH_NONE) diff += iabs(mock_leds[layout_grid[r][k]] - before[layout_grid[r][k]]);
+        memcpy(before, mock_leds, sizeof before);
+        if (diff > 1500) turning++;
+        for (int r = 12; r < HH_GRID_H; r++)
+            for (int k = 5; k < 12; k++)
+                if (lid_low[k] < 100 && px(r, k) > 150) tears++, r = HH_GRID_H, k = 12;
+        if (imax(px(6, 8), px(7, 8)) > 150 && px(10, 8) < 30) laugh++;  // the top of the ^ (it bobs), dark below
+        if (px(5, 8) > px(5, 6) + 60 && px(7, 8) < 30) heart++;  // the notch between the lobes, a dark middle
+        for (int i = 0; i < HH_RGB_COUNT; i++) {
+            uint8_t q[3];
+            mock_rgb(i, q);
+            if (layout_rgb[i].arm == 2 && layout_rgb[i].rank == 4 && q[2] > q[0] + 30 && q[2] > q[1]) blue++;
+        }
+        pmin = imin(pmin, pupil), pmax = imax(pmax, pupil);
     }
     int hues = 0;
     for (int i = 0; i < 8; i++) hues += hue_seen[i];
@@ -71,6 +92,11 @@ static void check_mood(mood_t m) {
         case MOOD_ROLL: CHECK(shut == 0, "roll: never shut (%d)", shut); break;
         case MOOD_ANGRY: CHECK(frown >= 100 && red >= 100, "angry: frown %d, red %d", frown, red); break;
         case MOOD_SURPRISED: CHECK(white >= 20 && shut == 0, "surprised: flash %d, shut %d", white, shut); break;
+        case MOOD_HYPNO: CHECK(turning >= 100 && shut == 0, "hypnotised: the spiral turns in %d frames", turning); break;
+        case MOOD_CRYING: CHECK(tears >= 20 && blue >= 60, "crying: tears in %d frames, blue lower arm %d", tears, blue); break;
+        case MOOD_CRAZY: CHECK(pmax - pmin >= 20 && turning >= 40, "crazy: pupil %d..%d, twitching %d", pmin, pmax, turning); break;
+        case MOOD_LAUGHING: CHECK(laugh >= 60, "laughing: the ^ in %d frames", laugh); break;
+        case MOOD_LOVE: CHECK(heart >= 60 && pink >= 60, "love: a heart in %d frames, pink %d", heart, pink); break;
         default: break;
     }
 }
@@ -93,6 +119,27 @@ int main(void) {
     CHECK(c[0] + c[1] + c[2] > 100, "the lashes are lit");
 
     for (int m = 1; m < MOOD_COUNT; m++) check_mood((mood_t)m);
+
+    // love: only from 1 or 2 on a Samsung TV remote
+    reset();
+    struct { uint16_t address; uint8_t command; bool love; const char* what; } ir[] = {
+        {0x0010, 4, false, "NEC 0x10, 4"},   {0x0000, 5, false, "NEC 0x00, 5"}, {0x1234, 4, false, "extended NEC 0x1234"},
+        {0x0707, 6, false, "Samsung 3"},     {0x0707, 4, true, "Samsung 1"},    {0x0707, 5, true, "Samsung 2"},
+    };
+    for (unsigned i = 0; i < sizeof ir / sizeof ir[0]; i++) {
+        reset();
+        mock_ir = (hh_ir_t){ir[i].address, ir[i].command, 0};
+        mock_ir_pending = true;
+        run(5, 0);
+        CHECK((mood == MOOD_LOVE) == ir[i].love, "%s: %s", ir[i].what, ir[i].love ? "love" : "no love");
+    }
+    reset();
+    bool never = true;
+    for (int i = 0; i < 300; i++) {
+        run(5, HH_BTN_B);
+        if (mood == MOOD_LOVE) never = false;
+    }
+    CHECK(never, "B never picks love");
 
     // B: a mood now, never the same one twice in a row
     reset();

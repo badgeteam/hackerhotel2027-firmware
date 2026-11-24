@@ -13,6 +13,7 @@
 
 // NEC timings in microseconds
 #define NEC_LEADER_MARK 9000
+#define SAMSUNG_LEADER_MARK 4500  // Samsung32: NEC with a short leader, address sent twice
 #define NEC_LEADER_SPACE 4500
 #define NEC_REPEAT_SPACE 2250
 #define NEC_BIT_MARK 562
@@ -121,7 +122,7 @@ bool infrared_tx_busy(void) {
 
 enum {
     RX_IDLE = 0,       // waiting for a mark to start
-    RX_LEADER_MARK,    // in a mark that may be a 9ms leader
+    RX_LEADER_MARK,    // in a mark that may be a 9ms (NEC) or 4.5ms (Samsung) leader
     RX_LEADER_SPACE,   // after the leader: 4.5ms (frame) or 2.25ms (repeat)
     RX_BIT_MARK,       // in a 562us bit mark
     RX_BIT_SPACE,      // after a bit mark: 562us (0) or 1687us (1)
@@ -210,7 +211,7 @@ static void rx_edge(bool mark_started, uint32_t us, uint32_t now) {
     } else {
         switch (s_rx_state) {
             case RX_LEADER_MARK:
-                s_rx_state = in_range(us, NEC_LEADER_MARK) ? RX_LEADER_SPACE : RX_IDLE;
+                s_rx_state = in_range(us, NEC_LEADER_MARK) || in_range(us, SAMSUNG_LEADER_MARK) ? RX_LEADER_SPACE : RX_IDLE;
                 return;
             case RX_BIT_MARK:
                 s_rx_state = in_range(us, NEC_BIT_MARK) ? RX_BIT_SPACE : RX_IDLE;

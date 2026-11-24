@@ -98,7 +98,8 @@ typedef struct {
     uint32_t (*random)(void);
 
     // Infrared (NEC). A frame takes about 68 ms; send() returns false while
-    // the previous one is still going out.
+    // the previous one is still going out. Samsung TV remotes come in too,
+    // as 16-bit addresses with both bytes the same (0x0707 for a TV).
     bool (*ir_send)(uint16_t address, uint8_t command);
     bool (*ir_receive)(hh_ir_t *message);  // false when nothing came in
 

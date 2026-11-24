@@ -9,6 +9,8 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
   tools/badge.py stop                      stop the running animation or app
   tools/badge.py delete INDEX              remove one item; the items after it move down one
   tools/badge.py erase                     erase every item (the name and app data stay)
+  tools/badge.py recommended               erase, then install the recommended app set
+                                           (webui/apps/index.json; make -C apps webui)
   tools/badge.py name [TEXT]               show or set the owner's name
   tools/badge.py irlog [--seconds N]       print the infrared marks and spaces the badge
                                            receives, frame by frame (Ctrl-C to stop)
@@ -171,6 +173,7 @@ def main():
     d = sub.add_parser("delete")
     d.add_argument("index", type=int)
     sub.add_parser("erase")
+    sub.add_parser("recommended")
     n = sub.add_parser("name")
     n.add_argument("text", nargs="?")
     sh = sub.add_parser("shoot")
@@ -213,6 +216,22 @@ def main():
         badge.check(badge.send(0x27, args.index, timeout=10000), "delete")
     elif args.cmd == "erase":
         badge.send(0x20, timeout=10000)
+    elif args.cmd == "recommended":
+        here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "webui", "apps")
+        import json
+        index = json.load(open(os.path.join(here, "index.json")))
+        files = {a["name"]: a["file"] for a in index["apps"]}
+        names = index.get("recommended", [])
+        if not names:
+            sys.exit("index.json has no recommended set (make -C apps webui)")
+        blobs = [(n, open(os.path.join(here, files[n]), "rb").read()) for n in names]  # all read first
+        badge.send(0x20, timeout=10000)
+        for k, (n, data) in enumerate(blobs):
+            badge.check(badge.send(0x21, 2, *n.encode()[:20], timeout=10000), "begin")
+            for off in range(0, len(data), 60):
+                badge.check(badge.send(0x22, *data[off:off + 60]), "write")
+            s = badge.check(badge.send(0x23), "commit")
+            print("%2d/%d  %-10s %5d bytes, %d bytes free" % (k + 1, len(blobs), n, len(data), s["free"]))
     elif args.cmd == "name":
         s = badge.send(0x31, *args.text.encode()[:32]) if args.text is not None else badge.send(0x30)
         print("name: %r" % s["name"])

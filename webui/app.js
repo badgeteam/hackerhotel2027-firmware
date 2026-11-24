@@ -1137,7 +1137,8 @@ async function addToBadge(type, name, bytes, replace = null) {
 // by `make -C apps webui`) ---------------------------------------------------
 
 // var, not let: renderStore() may run before this part of the file has
-var appLibrary = []; // [{name, file, bytes, api, description}]
+var appLibrary = []; // [{name, file, bytes, api, description, recommended}]
+var appRecommended = []; // the names of the recommended set, in install order (apps/recommended.txt)
 
 function renderAppLibrary() {
 	const appLibraryEl = document.getElementById('app-library');
@@ -1153,7 +1154,7 @@ function renderAppLibrary() {
 		name.title = app.description;
 		const meta = document.createElement('span');
 		meta.className = 'store-meta';
-		meta.textContent = `App \u00b7 ${formatBytes(storeItemBytes({ length: app.bytes }))}`;
+		meta.textContent = `App \u00b7 ${formatBytes(storeItemBytes({ length: app.bytes }))}${app.recommended ? ' \u00b7 recommended' : ''}`;
 		meta.title = app.description;
 		label.append(name, meta);
 
@@ -1185,12 +1186,68 @@ function renderAppLibrary() {
 		appLibraryEl.appendChild(li);
 	}
 	if (!appLibrary.length) appLibraryEl.innerHTML = '<li class="hint">No apps found (make -C apps webui).</li>';
+	renderRecommended();
 }
+
+// The recommended set: erase the badge, then install the apps it ships with
+function renderRecommended() {
+	const btn = document.getElementById('app-recommended-btn');
+	const hint = document.getElementById('app-recommended-hint');
+	const apps = appRecommended.map((n) => appLibrary.find((a) => a.name === n)).filter(Boolean);
+	const bytes = apps.reduce((sum, a) => sum + storeItemBytes({ length: a.bytes }), 0);
+	const api = storeStatus && storeStatus.api;
+	const needs = Math.max(0, ...apps.map((a) => a.api));
+	btn.disabled = !apps.length || !device.connected || (api !== undefined && api < needs);
+	btn.title = !device.connected
+		? 'Connect to the badge first'
+		: api !== undefined && api < needs
+			? `Needs firmware with app API ${needs}; the badge has ${api}. Update the firmware first.`
+			: 'Erases the badge, then installs these apps';
+	hint.textContent = apps.length
+		? `${apps.length} apps, ${formatBytes(bytes)}: ${apps.map((a) => a.name).join(', ')}. Erases the badge first.`
+		: '';
+}
+
+async function installRecommended() {
+	if (!device.connected) {
+		alert('Connect to a device first.');
+		return;
+	}
+	const apps = appRecommended.map((n) => appLibrary.find((a) => a.name === n)).filter(Boolean);
+	if (!confirm(`Erase every app, animation and text on the badge, then install the recommended set (${apps.length} apps)?\n\nYour name and the apps' saved data (high scores) stay.`)) return;
+	handOverBadge();
+	storeBusy = true;
+	try {
+		// every download first, so a failed one erases nothing
+		const files = [];
+		for (const app of apps) {
+			const r = await fetch(`apps/${app.file}`, { cache: 'no-store' });
+			if (!r.ok) throw new Error(`${app.name}: ${r.status} ${r.statusText}`);
+			files.push([app, new Uint8Array(await r.arrayBuffer())]);
+		}
+		storeStatusEl.textContent = 'Erasing the badge';
+		await device.eraseStore();
+		for (let i = 0; i < files.length; i++) {
+			const [app, bytes] = files[i];
+			await device.storeItem(ITEM_TYPE.APP, app.name, bytes, (sent, total) => {
+				storeStatusEl.textContent = `Installing ${i + 1} of ${files.length}, ${app.name}: ${Math.round((100 * sent) / total)}%`;
+			});
+		}
+	} catch (e) {
+		alert(`The recommended set did not install completely: ${e.message}`);
+	} finally {
+		storeBusy = false;
+	}
+	await refreshStore();
+}
+
+document.getElementById('app-recommended-btn').addEventListener('click', installRecommended);
 
 fetch('apps/index.json', { cache: 'no-store' })
 	.then((r) => (r.ok ? r.json() : { apps: [] }))
 	.then((index) => {
 		appLibrary = index.apps || [];
+		appRecommended = index.recommended || [];
 		renderAppLibrary();
 	})
 	.catch(() => renderAppLibrary());

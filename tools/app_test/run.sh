@@ -26,3 +26,4 @@ cc -std=gnu11 -Wall -Wextra -O1 -fsanitize=address,undefined -I"$root" -I"$root/
 make -s -C "$root/apps" clean all >/dev/null  # only the apps of this checkout
 make -s -C "$root/tools/emu"
 python3 "$here/emu_smoke.py" "$root/tools/emu/build/hh27-emu" "$root"/apps/build/*.hhapp
+python3 "$here/recommended_test.py"

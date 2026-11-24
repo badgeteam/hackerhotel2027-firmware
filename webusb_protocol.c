@@ -8,6 +8,7 @@
 #else
 #include "fsusb.h"  // includes fsusb.c itself, so only include it in this file
 #endif
+#include "infrared.h"
 #include "persist.h"
 #include "store.h"
 #include "apps/hhapp.h"
@@ -31,6 +32,7 @@
 #define CMD_NAME_SET 0x31
 #define CMD_BOOT_ROM 0x40
 #define CMD_FW_INFO 0x41
+#define CMD_IR_RAW 0x50  // reply: count, then that many marks / spaces (infrared_raw_read)
 #define CMD_QUERY 0xFF
 
 #ifndef FW_VERSION
@@ -53,6 +55,7 @@ static volatile uint8_t s_result;      // of the last command, for the reply
 static volatile uint8_t s_info_item;   // ITEM_INFO asked about this item
 static volatile bool s_name_reply;     // NAME_GET: the reply carries the name
 static volatile bool s_fw_reply;       // FW_INFO: the reply carries s_fw_info
+static volatile bool s_ir_raw_reply;   // IR_RAW: the reply carries the IR log
 static volatile bool s_boot_request;   // BOOT_ROM: reboot once the reply is out
 static uint32_t s_boot_wait_ms;
 static volatile uint8_t s_run_request = STORE_NONE;
@@ -107,6 +110,7 @@ static void handle_command(const uint8_t* data, int len) {
     s_info_item = STORE_NONE;
     s_name_reply = false;
     s_fw_reply = false;
+    s_ir_raw_reply = false;
 
     switch (data[0]) {
         case CMD_SET_PIXEL:
@@ -209,6 +213,10 @@ static void handle_command(const uint8_t* data, int len) {
             s_fw_reply = true;
             break;
 
+        case CMD_IR_RAW:
+            s_ir_raw_reply = true;
+            break;
+
         case CMD_NAME_SET:
             Persist_SetName((const char*)&data[1], (unsigned)(len - 1));
             s_name_reply = true;
@@ -300,6 +308,12 @@ void WebUSB_Poll(void) {
     } else if (s_fw_reply) {
         memcpy(&buffer[8], s_fw_info, FW_INFO_LEN);
         len = 8 + FW_INFO_LEN;
+    } else if (s_ir_raw_reply) {
+        uint16_t raw[27];  // 8 + 1 + 2 * 27 = 63 bytes
+        unsigned n = infrared_raw_read(raw, 27);
+        buffer[8] = (uint8_t)n;
+        for (unsigned i = 0; i < n; i++) buffer[9 + 2 * i] = (uint8_t)raw[i], buffer[10 + 2 * i] = (uint8_t)(raw[i] >> 8);
+        len = 9 + 2 * (int)n;
     }
     USBFS_SendEndpoint(USB_EP_TX, len);
     s_reply_pending = false;

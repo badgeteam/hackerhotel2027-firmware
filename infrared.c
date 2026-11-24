@@ -166,6 +166,22 @@ static void rx_packet_done(void) {
     s_rx_packet_head = next;
 }
 
+// Every mark and space as it came in, for looking at what other devices
+// send (tools/badge.py irlog): bit 15 set for a mark, the rest the length
+// in us (at most 32767)
+#define RAW_LOG 128  // power of two
+static uint16_t s_raw[RAW_LOG];
+static volatile uint8_t s_raw_head, s_raw_tail;
+
+unsigned infrared_raw_read(uint16_t* out, unsigned max) {
+    unsigned n = 0;
+    while (n < max && s_raw_tail != s_raw_head) {
+        out[n++] = s_raw[s_raw_tail];
+        s_raw_tail = (uint8_t)((s_raw_tail + 1) & (RAW_LOG - 1));
+    }
+    return n;
+}
+
 // Only EXTI line 19 is used as an interrupt in lines 16-25 (the buttons use
 // lines 18/20 as wake-up events only, see standby.c)
 void EXTI25_16_IRQHandler(void) __attribute__((interrupt));
@@ -182,6 +198,11 @@ void EXTI25_16_IRQHandler(void) {
     if (s_tx_busy) {
         IrRx_Reset(&s_rx);  // ignore our own transmission
         return;
+    }
+    uint8_t next = (uint8_t)((s_raw_head + 1) & (RAW_LOG - 1));
+    if (next != s_raw_tail) {  // full: the newest are dropped
+        s_raw[s_raw_head] = (uint16_t)((ended_mark ? 0x8000u : 0) | (us < 0x7FFF ? us : 0x7FFF));
+        s_raw_head = next;
     }
     switch (IrRx_Interval(&s_rx, ended_mark, us)) {
         case IR_RX_NEC: rx_frame_done(now); break;

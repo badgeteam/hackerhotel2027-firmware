@@ -8,11 +8,32 @@
    "description": "Breakout: five rows of bricks on top, a 3-wide paddle near the bottom, and the octagon's angled walls to bounce off. C / D move the paddle (hold to keep moving); where the ball hits the paddle steers it. Clear all the bricks for a new wave, a little faster. 3 lives, shown blue on the top arms; the score fills the arms orange. After the last life, any button starts again. As in the previous firmware's breakout."
   },
   {
+   "name": "CHASE",
+   "file": "chase.hhapp",
+   "bytes": 1568,
+   "api": 2,
+   "description": "Star Chase: a light runs round the outline. Press B, C or D when it is beside the arm that shows green. Every hit makes the light faster, up to a limit; three misses and the game is over. The grid shows the level, the dots below it the lives left. After the end, any button starts again; the best level is kept on the badge. As in the previous firmware's Star Chase."
+  },
+  {
    "name": "FLAPPY",
    "file": "flappy.hhapp",
    "bytes": 1292,
    "api": 2,
    "description": "Flappy: one button. B, C or D flaps; fly through the gaps in the pipes. The bird waits until the first flap. Hitting a pipe or the edge of the grid ends the game; the arms fill gold with the pipes you passed, and after the end the grid shows the score, the outline the best. As in the previous firmware's flappy."
+  },
+  {
+   "name": "HILO",
+   "file": "hilo.hhapp",
+   "bytes": 1024,
+   "api": 2,
+   "description": "Higher or lower: a number from 1 to 99. Will the next one be higher (D) or lower (C)? The arm next to D blinks green for higher, the arm next to C orange for lower. A right guess adds one to the streak, which fills the outline; a wrong one ends the game. After the end, any button starts again; the longest streak is kept on the badge. As in the previous firmware's Higher Lower."
+  },
+  {
+   "name": "MAZE",
+   "file": "maze.hhapp",
+   "bytes": 2252,
+   "api": 2,
+   "description": "Maze: you stay in the middle of the grid and the maze moves around you; only the walls close by are lit. The buttons are a diamond round the badge's corners: A up, B right, D down, C left (B, C, D repeat when held; A steps once a tap, since holding A opens the menu). The arm that points most towards the exit, in the far corner, lights blue, and the outline shows the time left. Five mazes, from 5 x 5 to 13 x 13 cells, with 15 s for the first and 8 s more for each next one; an arm's sides turn green for each maze solved. After the end, any button starts again; the most mazes solved are kept on the badge. As in the previous firmware's maze."
   },
   {
    "name": "PONG",

@@ -6,7 +6,7 @@ here=$(dirname "$0")
 root="$here/../.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
-for t in simon whack breakout flappy pong startris; do
+for t in simon whack breakout flappy pong startris chase maze hilo; do
     cc -std=gnu11 -Wall -Wextra -O1 -fsanitize=address,undefined -I"$root" -I"$root/apps" \
         -o "$out/$t" "$here/${t}_test.c" "$root/layout.c"
     "$out/$t"

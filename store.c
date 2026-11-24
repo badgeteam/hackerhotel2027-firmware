@@ -2,6 +2,7 @@
 #include <string.h>
 #include "app_host.h"
 #include "flash_pages.h"
+#include "nametag.h"
 #include "persist.h"
 
 #define ITEMS_SIZE STORE_ITEMS_SIZE
@@ -101,7 +102,7 @@ int Store_Delete(uint8_t index) {
 
 int Store_Begin(uint8_t type, const char* name, unsigned name_len) {
     s_writing = false;
-    if (type != STORE_TYPE_ANIMATION && type != STORE_TYPE_APP) return STORE_ERR_ARGS;
+    if (type != STORE_TYPE_ANIMATION && type != STORE_TYPE_APP && type != STORE_TYPE_TEXT) return STORE_ERR_ARGS;
     s_start = end_offset();
     if (s_start >= ITEMS_SIZE) return STORE_ERR_FULL;
     for (uint32_t off = s_start; off < ITEMS_SIZE; off += FLASH_PAGE_SIZE) FlashPages_Erase(STORE_FLASH_BASE + off);
@@ -139,6 +140,7 @@ int Store_Write(const uint8_t* data, unsigned len) {
 
 static bool payload_valid(uint8_t type, const uint8_t* payload, uint32_t length) {
     if (type == STORE_TYPE_ANIMATION) return length >= 8 && memcmp(payload, "LA04", 4) == 0;
+    if (type == STORE_TYPE_TEXT) return TextItem_Check(payload, length);
     return length >= sizeof(hh_app_header_t) && AppHost_Check((const hh_app_header_t*)payload, length);
 }
 
@@ -150,7 +152,7 @@ int Store_Commit(uint8_t* index) {
     store_item_t* h = (store_item_t*)s_first;
     h->magic = STORE_ITEM_MAGIC;
     h->length = s_received;
-    // The app header is 24 bytes, so it is always in the first page
+    // The app header (24 bytes) and the text header (8) are always in the first page
     if (!payload_valid(h->type, Store_Payload(h), s_received)) return STORE_ERR_INVALID;
 
     uint32_t end = sizeof(store_item_t) + s_received;

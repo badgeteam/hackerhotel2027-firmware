@@ -3,7 +3,8 @@
 interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
 
   tools/badge.py list                      the items, which one runs, which one boots
-  tools/badge.py add FILE [NAME]           store a .hhapp or .ledanim; it starts at once
+  tools/badge.py add FILE [NAME]           store a .hhapp, .ledanim or .txt; it starts at once
+                                           (.txt: --speed COLUMNS_PER_S, --plain)
   tools/badge.py run INDEX [--boot]        start an item (--boot: also at power-on)
   tools/badge.py stop                      stop the running animation or app
   tools/badge.py delete INDEX              remove one item; the items after it move down one
@@ -12,17 +13,19 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
 """
 import argparse
 import os
+import re
 import struct
 import sys
+import unicodedata
 
 import usb.core
 import usb.util
 
 VID, PID = 0x1209, 0xD643
 EP_OUT, EP_IN = 0x02, 0x81
-TYPES = {1: "animation", 2: "app"}
-MODES = {1: "custom", 2: "animation", 3: "app", 4: "name tag"}
-ERRORS = {1: "bad command or index", 2: "the store is full", 3: "no such item", 4: "not a valid animation or app"}
+TYPES = {1: "animation", 2: "app", 3: "text"}
+MODES = {1: "custom", 2: "animation or text", 3: "app", 4: "name tag"}
+ERRORS = {1: "bad command or index", 2: "the store is full", 3: "no such item", 4: "not a valid animation, app or text"}
 NONE = 0xFF
 
 
@@ -63,7 +66,23 @@ def type_of(path, data):
         return 2
     if data[:4] == b"LA04":
         return 1
-    sys.exit("%s: not a .hhapp or .ledanim" % path)
+    sys.exit("%s: not a .hhapp, .ledanim or .txt" % path)
+
+
+def text_item(text, speed, plain):
+    """A text item (nametag.h), as webui/text_item.js makes it, in short:
+    accents dropped, a line break as two spaces, other non-ASCII as '?'"""
+    out = []
+    for ch in unicodedata.normalize("NFKD", text):
+        if unicodedata.combining(ch) or ch == "\r":
+            continue
+        out.append("  " if ch == "\n" else " " if ch == "\t" else ch if " " <= ch <= "~" else "?")
+    ascii = re.sub(" {2,}", "  ", "".join(out)).strip()
+    if not ascii:
+        sys.exit("the text is empty")
+    if not 1 <= speed <= 60:
+        sys.exit("--speed: 1 to 60 columns per second")
+    return b"HHT1" + bytes([speed, 1 if plain else 0, 0, 0]) + ascii.encode("ascii")
 
 
 def main():
@@ -73,6 +92,8 @@ def main():
     a = sub.add_parser("add")
     a.add_argument("file")
     a.add_argument("name", nargs="?")
+    a.add_argument("--speed", type=int, default=10, help="a .txt: columns per second when it scrolls (1..60)")
+    a.add_argument("--plain", action="store_true", help="a .txt: only the text, no colours on the arms")
     r = sub.add_parser("run")
     r.add_argument("index", type=int)
     r.add_argument("--boot", action="store_true")
@@ -88,7 +109,11 @@ def main():
     if args.cmd == "add":
         data = open(args.file, "rb").read()
         name = (args.name or os.path.splitext(os.path.basename(args.file))[0]).upper().encode()[:20]
-        badge.check(badge.send(0x21, type_of(args.file, data), *name, timeout=10000), "begin")
+        if args.file.lower().endswith(".txt"):
+            data, kind = text_item(data.decode("utf-8", "replace"), args.speed, args.plain), 3
+        else:
+            kind = type_of(args.file, data)
+        badge.check(badge.send(0x21, kind, *name, timeout=10000), "begin")
         for off in range(0, len(data), 60):
             badge.check(badge.send(0x22, *data[off:off + 60]), "write")
         s = badge.check(badge.send(0x23), "commit")

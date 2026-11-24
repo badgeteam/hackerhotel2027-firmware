@@ -31,8 +31,8 @@ const CMD = {
 };
 
 // Item types in the store (STORE_TYPE_* in store.h)
-const ITEM_TYPE = { ANIMATION: 1, APP: 2 };
-const ITEM_TYPE_NAMES = { 1: 'Animation', 2: 'App' };
+const ITEM_TYPE = { ANIMATION: 1, APP: 2, TEXT: 3 };
+const ITEM_TYPE_NAMES = { 1: 'Animation', 2: 'App', 3: 'Text' };
 const NO_ITEM = 0xff;
 
 // The firmware's app API version (HH_API_VERSION in apps/hhapp.h) that this
@@ -45,10 +45,15 @@ const STORE_ERRORS = {
 	1: 'bad command or index',
 	2: 'not enough room left on the badge -- erase the store first',
 	3: 'no such item',
-	4: 'not a valid animation or app',
+	4: 'not a valid animation, app or text',
 };
 
-class StoreError extends Error {}
+class StoreError extends Error {
+	constructor(message, result) {
+		super(message);
+		this.result = result; // STORE_ERR_*, or undefined: no reply
+	}
+}
 
 class LedMatrixDevice extends EventTarget {
 	constructor() {
@@ -222,12 +227,12 @@ class LedMatrixDevice extends EventTarget {
 	async _checked(bytes, what) {
 		const status = await this._send(bytes);
 		if (!status) throw new StoreError(`${what}: no reply from the badge`);
-		if (status.result) throw new StoreError(`${what}: ${STORE_ERRORS[status.result] ?? status.result}`);
+		if (status.result) throw new StoreError(`${what}: ${STORE_ERRORS[status.result] ?? status.result}`, status.result);
 		return status;
 	}
 
 	// Adds an item to the badge's store (store.h): type ITEM_TYPE.*, bytes
-	// a .ledanim or .hhapp. The badge starts it at once, and from then on
+	// a .ledanim, a .hhapp or a text item (text_item.js). The badge starts it at once, and from then on
 	// at every boot. ITEM_BEGIN erases the free space before it replies,
 	// which takes a moment. onProgress(sent, total) follows the upload.
 	async storeItem(type, name, bytes, onProgress) {

@@ -1,11 +1,11 @@
 #pragma once
-// The item store: animations and apps, kept in the top 32 KB of the code
+// The item store: animations, apps and texts, kept in the top 32 KB of the code
 // flash (flash_pages.h), so they survive power loss and the boot item can
 // start without a host.
 //
 // Items lie one after the other, each one starting on a 256-byte page: a
-// 32-byte store_item_t header, then the payload (a .ledanim animation or
-// a .hhapp app). The first page with no item header ends the list. The
+// 32-byte store_item_t header, then the payload (a .ledanim animation, a
+// .hhapp app or a text). The first page with no item header ends the list. The
 // last 1 KB of the region is not for items: persist.c keeps the name, the
 // boot item and the apps' data there.
 //
@@ -20,6 +20,7 @@
 #define STORE_ITEM_MAGIC 0x31494848u  // "HHI1"
 #define STORE_TYPE_ANIMATION 1        // .ledanim, webui/compression.js
 #define STORE_TYPE_APP 2              // .hhapp, apps/hhapp.h
+#define STORE_TYPE_TEXT 3             // text, shown in the firmware's font (nametag.h)
 #define STORE_NAME_LEN 20
 #define STORE_NONE 0xFF  // no item
 

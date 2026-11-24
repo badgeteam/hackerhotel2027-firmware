@@ -76,10 +76,11 @@ C bottom left, D bottom right.
 | **Hold A** | the menu, also from an app (hold it for a second there) |
 | **B** / **D** | brighter / dimmer (when no app runs) |
 
-**The menu** lists the name tag, every stored animation and app, and the
-badge's settings. The name of the entry shows on the grid, the outline
-shows where you are in the list, and the arms show the group: orange the
-name tag, purple animations, green apps, white settings.
+**The menu** lists the name tag, every stored animation, text and app,
+and the badge's settings. The name of the entry shows on the grid, the
+outline shows where you are in the list, and the arms show the group:
+orange the name tag, purple animations, blue texts, green apps, white
+settings.
 
 | In the menu | |
 |---|---|
@@ -177,7 +178,7 @@ you can:
 - run an item,
 - choose the boot item (★),
 - delete an item (🗑),
-- add a `.hhapp` or `.ledanim`,
+- add a `.hhapp`, a `.ledanim` or a text (typed, or a `.txt`),
 - add or update an app from the **App library**: the apps in `apps/`,
   built into `webui/apps/` by `make -C apps webui`,
 - stop what runs,
@@ -244,13 +245,20 @@ code built for the PC.
 
 The top 32 KB of flash is the item store (`store.h`):
 
-- animations and apps, one after the other;
+- animations, texts and apps, one after the other;
 - in the last 1 KB, a persistent record (`persist.h`) with the boot item,
   your name, the brightness, and 28 bytes of data for each app (high
   scores and the like).
 
 The record is kept twice, so a power loss while it is written leaves the
 previous copy. **Erase all** removes the items but keeps the record.
+
+A **text** is stored as its characters, one byte each, so the store holds
+about 31 000 of them. The badge shows a text as the name tag shows your
+name: still if it fits, else scrolling. Add one in the web interface (**On
+the badge**, **Add a text**, or a `.txt` file) or with `tools/badge.py add
+FILE.txt`. The badge shows printable ASCII: the web interface drops
+accents, and shows other characters as `?`. The format is in `nametag.h`.
 
 When you delete an item, the items after it move down to fill the gap.
 Keep the badge powered until the delete is done: a power loss during
@@ -274,5 +282,6 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/deploy_webui.sh` | publishes `webui/` of the current commit to a web server |
 | `tools/gen_layout.py` | makes `layout.c`, `la04_tables.h` and `webui/layout_data.js` from `webui/board_data.js` |
 | `tools/codec_test/run.sh` | checks that the web interface and the firmware decode animations the same way |
+| `tools/text_test/run.sh` | checks text items: the web interface's payloads, played on the emulator |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

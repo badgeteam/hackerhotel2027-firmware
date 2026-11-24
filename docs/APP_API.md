@@ -235,7 +235,7 @@ bar's LED strips, which `ir_receive()` gets: command 0x44 red, 0x40 green,
 
 On air a shot is 16 bits with JVC timing (leader 8.4 ms + 4.2 ms), with no
 edge after its stop mark: the firmware takes it as a shot after 4 ms of
-silence. `apps/target` is an example; `tools/badge.py irlog` shows what any
+silence. `apps/banana` is an example; `tools/badge.py irlog` shows what any
 remote or blaster sends.
 
 ## System

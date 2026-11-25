@@ -198,6 +198,14 @@ HI's name swap: outside apps the firmware answers them; while an app runs,
 the app gets them like any other. `apps/four` (4 in a row) uses `'F'`, and is a
 full example: invites, moves, answers and sending again.
 
+`apps/nametag` (NAMETAG) uses `'H'` and `'R'` themselves, so that it
+also swaps names with badges that run no app. After the name it can put a
+NUL and one info byte (`0x10` | the banana team, 15 for none); the
+firmware shows a name only up to the NUL, so a plain badge shows "HI
+ALICE". It also sends an `'R'` nobody asked for every 20 to 60 s, a
+beacon: other NAMETAG badges learn the name from it, and the firmware
+ignores it.
+
 ```c
 // Ping: B sends, any badge that hears it lights up
 static void tick(uint32_t elapsed_ms) {

@@ -30,7 +30,7 @@
    "bytes": 7032,
    "api": 6,
    "description": "One big eye: the centre grid is the eyeball, the RGB LEDs on the arms its lashes. It looks around, blinks, and now and then opens its pupil wide to search and tightens it to focus. Every 30 to 60 s it has a mood: a wink, an eye roll, dizzy, sleepy, suspicious, angry, surprised, hypnotised, crying, crazy or laughing. B: a mood now; D / C: brighter / dimmer (the outline shows the level). A Samsung TV remote: Vol+ / Vol- the same, and a mood: 3 wink, 4 eye roll, 5 dizzy, 6 sleepy, 7 suspicious, 8 angry, 9 surprised, 0 hypnotised, red crazy, blue crying, yellow laughing, green one at random; and 1 or 2: it falls in love, which it never does by itself. A banana: a shot surprises it, a second one soon after makes it angry, and the lashes flash the shooter's team colour; a heal: love; a team: a wink.",
-   "recommended": true
+   "recommended": false
   },
   {
    "name": "FIRE",
@@ -103,6 +103,14 @@
    "api": 6,
    "description": "Maze: you stay in the middle of the grid and the maze moves around you; only the walls close by are lit. The buttons are a diamond round the badge's corners: A up, B right, D down, C left (B, C, D repeat when held; A steps once a tap, since holding A opens the menu). The arm that points most towards the exit, in the far corner, lights blue, and the outline shows the time left. Five mazes, from 5 x 5 to 13 x 13 cells, with 15 s for the first and 8 s more for each next one; an arm's sides turn green for each maze solved. After the end, any button starts again; the most mazes solved are kept on the badge. Until the first button the badge walks the mazes itself, a hand on the right-hand wall, and it goes back to that 15 s after a game. As in the previous firmware's maze.",
    "recommended": false
+  },
+  {
+   "name": "NAMETAG",
+   "file": "nametag.hhapp",
+   "bytes": 7720,
+   "api": 6,
+   "description": "The name tag, with all the extras. Your name in 7 styles: rainbow, fire, matrix, wave, starfield, glitch, typewriter (B / D, remembered). The Hacker Hotel 2025 banana game built in: a hit rings out in the shooter's colour and counts, a banana's team colours the arms. Badge friends: badges near each other swap names by infrared by themselves, count the hackers you met (kept over power-off, approximate past ~50), and the dots going round show who is nearby. C: who is here? Hold C and press B / D for brightness.",
+   "recommended": true
   },
   {
    "name": "PONG",
@@ -181,6 +189,6 @@
   "HOTEL",
   "GALAXY",
   "RIPPLE",
-  "EYE"
+  "NAMETAG"
  ]
 }

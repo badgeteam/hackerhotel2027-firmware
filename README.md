@@ -332,6 +332,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/ir_test/run.sh` | checks the infrared codec with a model of the receiver, and the name swap on two emulators |
 | `tools/board_test/run.sh` | checks that `tools/extract_board_data.py` makes the committed `webui/board_data.js` from the board (SKIP without it) |
 | `tools/nametag_test/run.sh` | checks how the name tag shows banana shots, on the emulator |
+| `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge, banana shots, on emulators |
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, the text on the grid |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

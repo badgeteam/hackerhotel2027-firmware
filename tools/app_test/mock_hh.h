@@ -2,7 +2,9 @@
 // on the PC: include this, then the app's .c file. The LEDs are an array,
 // the buttons and the clock are set by the test, load / save keep the data
 // in memory, and the layout tables are the badge's (layout.c, linked in).
-// Text is drawn into the LEDs by the firmware's own font.c.
+// Text is drawn into the LEDs by the firmware's own font.c. IR packets go
+// in with mock_packet() and are logged in mock_sent[]; shots queue with
+// mock_shot_push(); print() goes to mock_log.
 //
 // The overdraw check: with MOCK_OVERDRAW=1 in the environment, the mock
 // keeps the pixels of every text drawn in a tick, and mock_tick_end() (the
@@ -12,6 +14,11 @@
 // and at exit the report lists them with the call that drew over them.
 // MOCK_OVERDRAW=all also lists, without failing, the pixels the octagon's
 // corners or the grid's edges clip and the text's gaps lit afterwards.
+// A text used as a mask is not checked: the pixels of a text that the app
+// read back with get() and then wiped with clear(), in the same tick, were
+// never shown (the name tag draws its text at 255, reads it back, clears,
+// and its style shades every pixel from that). A get() alone, or a clear()
+// alone, still counts as drawing over the text.
 #pragma once
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,15 +38,28 @@ static uint8_t mock_data[HH_APP_DATA_MAX];
 static unsigned mock_data_len;
 static unsigned mock_saves;
 static char mock_text[64];  // the last text drawn
+static unsigned mock_calls;  // set, get and draw_text calls, for a per-frame budget
+static bool mock_save_fail;  // save() fails, as with the store's data slots full
+static char mock_name[HH_NAME_MAX + 1];  // the owner's name (name())
+static char mock_log[512];   // what print() printed, as much as fits
 
 static void od_wrote(uint16_t s, const void* pc, const char* how);  // the overdraw report, below
+static void od_read(uint16_t s);
+static void od_cleared(void);
 #define OD_PC __builtin_extract_return_addr(__builtin_return_address(0))
 static void m_set(uint16_t s, uint8_t v) {
+    mock_calls++;
     if (s < HH_SLOTS) mock_leds[s] = v, od_wrote(s, OD_PC, "set");
 }
-static uint8_t m_get(uint16_t s) { return s < HH_SLOTS ? mock_leds[s] : 0; }
+static uint8_t m_get(uint16_t s) {
+    mock_calls++;
+    if (s >= HH_SLOTS) return 0;
+    od_read(s);
+    return mock_leds[s];
+}
 static void m_clear(void) {
     memset(mock_leds, 0, sizeof mock_leds);
+    od_cleared();  // a text read back first was a mask: forgotten
     for (uint16_t i = 0; i < HH_SLOTS; i++) od_wrote(i, OD_PC, "clear");
 }
 static uint8_t mock_brightness = 255;
@@ -61,8 +81,11 @@ static bool m_ir_receive(hh_ir_t* m) {
 }
 static void m_standby(void) {}
 static void m_exit(void) {}
-static void m_print(const char* t) { (void)t; }
-static const char* m_name(void) { return ""; }
+static void m_print(const char* t) {
+    size_t n = strlen(mock_log);
+    snprintf(mock_log + n, sizeof mock_log - n, "%s", t);
+}
+static const char* m_name(void) { return mock_name; }
 static void m_set_name(const char* n) { (void)n; }
 static bool m_load(void* d, unsigned n) {
     if (!mock_data_len || n > mock_data_len) return false;
@@ -70,7 +93,7 @@ static bool m_load(void* d, unsigned n) {
     return true;
 }
 static bool m_save(const void* d, unsigned n) {
-    if (n > HH_APP_DATA_MAX) return false;
+    if (n > HH_APP_DATA_MAX || mock_save_fail) return false;
     memcpy(mock_data, d, n);
     mock_data_len = n;
     mock_saves++;
@@ -97,6 +120,7 @@ static int od_texts;
 static uint8_t od_owner[HH_SLOTS];  // the last text that lit the slot this tick, + 1
 static uint8_t od_gap[HH_SLOTS];    // an unlit pixel of a glyph's 5 x 8 box: the text, + 1
 static uint8_t od_value[HH_SLOTS];
+static bool od_seen[HH_SLOTS];      // a text pixel the app read back with get() since it was lit
 static const void* od_writer[HH_SLOTS];  // what changed it after the text: a return address
 static const char* od_how[HH_SLOTS];     // and through which call
 static unsigned long od_ticks;
@@ -113,6 +137,21 @@ static bool od_enabled(void) {
 static void mock_text_pixel(uint16_t slot, uint8_t v) {
     if (!od_drawing) return;
     od_owner[slot] = (uint8_t)od_drawing, od_gap[slot] = 0, od_value[slot] = v, od_writer[slot] = 0, od_how[slot] = 0;
+    od_seen[slot] = false;
+}
+// get() of a text pixel: the app may be using the text as a mask
+static void od_read(uint16_t s) {
+    if (od_on > 0 && od_owner[s]) od_seen[s] = true;
+}
+// clear() after a get(): the pixels read back were a mask, never shown, so
+// they are no longer checked; nor are the gaps of the texts they belong to
+static void od_cleared(void) {
+    if (od_on <= 0) return;
+    bool mask[OD_TEXTS] = {0};
+    for (uint16_t s = 0; s < HH_SLOTS; s++)
+        if (od_owner[s] && od_seen[s]) mask[od_owner[s] - 1] = true, od_owner[s] = 0, od_seen[s] = false;
+    for (uint16_t s = 0; s < HH_SLOTS; s++)
+        if (od_gap[s] && mask[od_gap[s] - 1]) od_gap[s] = 0;
 }
 // A write by the app (set, clear, set_rgb, set_linear) after a text
 static void od_wrote(uint16_t s, const void* pc, const char* how) {
@@ -213,6 +252,7 @@ static void od_report(void) {
 
 static int m_text_width(const char* t) { return Text_Width(t); }
 static int m_draw_text(int x, int y, const char* t, uint8_t v) {  // x is a column here, not HH_CENTER
+    mock_calls++;
     snprintf(mock_text, sizeof mock_text, "%s", t);
     if (!od_enabled()) return Text_Draw(x, y, t, v);
     // Pixels the octagon's corners or the grid's edges take away
@@ -236,7 +276,7 @@ static int m_draw_text(int x, int y, const char* t, uint8_t v) {  // x is a colu
                     corner[row][col] = 1, n_corner++;
                 }
             }
-    for (int kind = 1; kind <= 2; kind++) {
+    for (int kind = 1; kind <= 2 && od_on > 1; kind++) {  // listed only for MOCK_OVERDRAW=all: a scrolling text would fill the table
         if (!(kind == 1 ? n_corner : n_off)) continue;
         od_find_t* f = od_find(kind, t, x, y, v, 0, 0);
         if (!f) continue;
@@ -291,6 +331,7 @@ __attribute__((unused)) static void mock_tick_end(void) {
         }
     memset(od_owner, 0, sizeof od_owner);
     memset(od_gap, 0, sizeof od_gap);
+    memset(od_seen, 0, sizeof od_seen);
     od_texts = 0;
 }
 static void m_set_rgb(int i, uint8_t r, uint8_t g, uint8_t b) {
@@ -320,10 +361,56 @@ static int m_step_brightness(int dir) {  // as menu.c
 
 static hh_ir_shot_t mock_shot;  // the next shot, if mock_shot_pending
 static bool mock_shot_pending;
+static hh_ir_shot_t mock_shotq[4];  // more shots, after mock_shot (mock_shot_push)
+static unsigned mock_shotq_n;
+__attribute__((unused)) static void mock_shot_push(hh_ir_shot_t s) {
+    if (mock_shotq_n < 4) mock_shotq[mock_shotq_n++] = s;
+}
 static bool m_ir_receive_shot(hh_ir_shot_t* s) {
-    if (!mock_shot_pending) return false;
-    *s = mock_shot;
-    mock_shot_pending = false;
+    if (mock_shot_pending) {
+        *s = mock_shot;
+        mock_shot_pending = false;
+        return true;
+    }
+    if (!mock_shotq_n) return false;
+    *s = mock_shotq[0];
+    memmove(mock_shotq, mock_shotq + 1, --mock_shotq_n * sizeof *mock_shotq);
+    return true;
+}
+
+// IR packets that came in (mock_packet), 3 at most as in the firmware
+static hh_ir_packet_t mock_in[3];
+static unsigned mock_in_n;
+__attribute__((unused)) static bool mock_packet(uint8_t type, const void* d, uint8_t n) {
+    if (mock_in_n >= 3 || n > HH_IR_PACKET_MAX) return false;
+    hh_ir_packet_t* p = &mock_in[mock_in_n++];
+    p->type = type, p->length = n;
+    memcpy(p->data, d, n);
+    return true;
+}
+static bool m_ir_receive_packet(hh_ir_packet_t* p) {
+    if (!mock_in_n) return false;
+    *p = mock_in[0];
+    memmove(mock_in, mock_in + 1, --mock_in_n * sizeof *mock_in);
+    return true;
+}
+
+// IR packets the app sent: the first 64 and when (mock_ms); mock_sent_n
+// counts them all. While mock_tx_busy, send fails as when the transmitter
+// is busy.
+static hh_ir_packet_t mock_sent[64];
+static uint32_t mock_sent_ms[64];
+static unsigned mock_sent_n;
+static bool mock_tx_busy;
+static bool m_ir_send_packet(uint8_t type, const void* d, uint8_t n) {
+    if (mock_tx_busy || n > HH_IR_PACKET_MAX) return false;
+    if (mock_sent_n < 64) {
+        hh_ir_packet_t* p = &mock_sent[mock_sent_n];
+        p->type = type, p->length = n;
+        memcpy(p->data, d, n);
+        mock_sent_ms[mock_sent_n] = mock_ms;
+    }
+    mock_sent_n++;
     return true;
 }
 
@@ -335,9 +422,6 @@ static bool m_ir_send_shot(const hh_ir_shot_t* s) {
     return true;
 }
 
-static bool m_ir_send_packet(uint8_t type, const void* d, uint8_t n) { (void)type, (void)d, (void)n; return true; }
-static bool m_ir_receive_packet(hh_ir_packet_t* p) { (void)p; return false; }
-
 static const hh_api_t mock_api = {
     .version = HH_API_VERSION, .size = sizeof(hh_api_t),
     .set = m_set, .get = m_get, .clear = m_clear, .set_brightness = m_set_brightness, .brightness = m_brightness,
@@ -348,7 +432,8 @@ static const hh_api_t mock_api = {
     .draw_text = m_draw_text_at, .text_width = m_text_width, .polar = layout_polar,
     .set_rgb = m_set_rgb, .set_linear = m_set_linear, .sin8 = AppUtil_Sin8, .hsv = AppUtil_Hsv,
     .isqrt = AppUtil_Isqrt, .atan8 = AppUtil_Atan8, .draw_number = m_draw_number,
-    .step_brightness = m_step_brightness, .ir_send_packet = m_ir_send_packet, .ir_receive_packet = m_ir_receive_packet, .ir_receive_shot = m_ir_receive_shot, .ir_send_shot = m_ir_send_shot,
+    .step_brightness = m_step_brightness, .ir_send_packet = m_ir_send_packet, .ir_receive_packet = m_ir_receive_packet,
+    .ir_receive_shot = m_ir_receive_shot, .ir_send_shot = m_ir_send_shot,
 };
 
 // The test's checks

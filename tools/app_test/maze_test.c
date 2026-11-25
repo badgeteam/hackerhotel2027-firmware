@@ -1,7 +1,9 @@
 // apps/maze on the PC (mock_hh.h): every maze is perfect (each cell reached
 // one way), the buttons move as a diamond (A up, B right, D down, C left),
 // A does not repeat when held, a player keeping a hand on the right-hand
-// wall solves all five in time, the time runs out, the best is saved.
+// wall solves all five in time, the first two mazes have no timer (a
+// minute without a button ends those), the time runs out from the third
+// on, the best is saved.
 #include "mock_hh.h"
 #include "../../apps/maze/maze.c"
 
@@ -121,12 +123,44 @@ int main(void) {
     CHECK(over && solved == MAZES, "the wall follower solves %d of %d mazes", solved, MAZES);
     CHECK(best == MAZES && mock_saves == 1, "the best (%d) is saved", best);
 
-    // Standing still, the time runs out
+    // The first two mazes have no timer; the next ones about twice the
+    // previous firmware's (31, 39, 47 s)
+    static const uint32_t secs[MAZES] = {0, 0, 60, 75, 90};
+    for (int s = 0; s < MAZES; s++) {
+        solved = (uint8_t)s;
+        make();
+        CHECK(limit == secs[s] * 30, "maze %d: %u s (%u s wanted)", s + 1, limit / 30, secs[s]);
+    }
+
+    // Without a timer the outline glows, all of it alike and dim
     run(OVER_MS, 0);
     run(10, HH_BTN_B);
     CHECK(!over && solved == 0, "a button starts again");
-    for (int i = 0; i < 16 * 30 && !over; i++) step(0, 0);
-    CHECK(over && solved == 0, "15 s without moving: time is up");
+    run(FRAME_MS, 0);
+    int unlike = 0;
+    for (int j = 0; j < HH_EDGE_COUNT; j++) unlike += mock_leds[layout_edge[j]] != mock_leds[layout_edge[0]];
+    CHECK(unlike == 0 && mock_leds[layout_edge[0]] > 0 && mock_leds[layout_edge[0]] <= 40, "no timer: the outline glows (%d, %d unlike)",
+          mock_leds[layout_edge[0]], unlike);
+
+    // Standing still in the first maze: no time is up, but a minute
+    // without a button ends the game
+    for (int i = 0; i < 59 * 30; i++) step(0, 0);
+    CHECK(!over, "59 s without moving in the first maze: still on");
+    step(0, HH_BTN_D);  // holding a button counts
+    for (int i = 0; i < 59 * 30; i++) step(0, 0);
+    CHECK(!over, "a held button starts the minute again");
+    for (int i = 0; i < 2 * 30 && !over; i++) step(0, 0);
+    CHECK(over && solved == 0, "a minute without a button ends it");
+
+    // Standing still in the third maze, the time runs out
+    run(OVER_MS, 0);
+    run(10, HH_BTN_B);
+    solved = 2;
+    make();
+    for (int i = 0; i < 59 * 30; i++) step(0, HH_BTN_D);
+    CHECK(!over, "59 s in the third maze: time left");
+    for (int i = 0; i < 2 * 30 && !over; i++) step(0, HH_BTN_D);
+    CHECK(over && solved == 2, "60 s: time is up, even while moving");
     CHECK(mock_saves == 1, "a lower score does not save");
 
     over = true, over_ms = 0;  // a game that just ended

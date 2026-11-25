@@ -107,9 +107,9 @@
   {
    "name": "MAZE",
    "file": "maze.hhapp",
-   "bytes": 2304,
+   "bytes": 2440,
    "api": 6,
-   "description": "Maze: you stay in the middle of the grid and the maze moves around you; only the walls close by are lit. The buttons are a diamond round the badge's corners: A up, B right, D down, C left (B, C, D repeat when held; A steps once a tap, since holding A opens the menu). The arm that points most towards the exit, in the far corner, lights blue, and the outline shows the time left. Five mazes, from 5 x 5 to 13 x 13 cells, with 15 s for the first and 8 s more for each next one; an arm's sides turn green for each maze solved. After the end, any button starts again; the most mazes solved are kept on the badge. Until the first button the badge walks the mazes itself, a hand on the right-hand wall, and it goes back to that 15 s after a game. As in the previous firmware's maze.",
+   "description": "Maze: you stay in the middle of the grid and the maze moves around you; only the walls close by are lit. The buttons are a diamond round the badge's corners: A up, B right, D down, C left (B, C, D repeat when held; A steps once a tap, since holding A opens the menu). The arm that points most towards the exit, in the far corner, lights blue. Five mazes, from 5 x 5 to 13 x 13 cells. The first two have no timer: take your time, the outline only glows. From the third on the outline shows the time left: 60 s for the third, 75 s for the fourth and 90 s for the last. An arm's sides turn green for each maze solved. After the end, any button starts again; the most mazes solved are kept on the badge. A minute without a button in a maze without a timer also ends the game. Until the first button the badge walks the mazes itself, a hand on the right-hand wall, and it goes back to that 15 s after a game. As in the previous firmware's maze, with more time.",
    "recommended": false
   },
   {

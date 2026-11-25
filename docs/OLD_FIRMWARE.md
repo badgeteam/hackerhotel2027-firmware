@@ -244,7 +244,7 @@ a new board.
 | `ir_game.py`: 4 in a row on two emulators, also with 30 % of packets lost | partly: [#38] | `tools/four_test` plays whole games on two emulators, without lost packets. |
 | USB protocol fuzz test, 200 000-frame soak | partly | `tools/app_test` gives every app random buttons in the emulator. No USB fuzz test. |
 | `tools/sim/docs_gifs.sh`: GIFs of every screen for the docs | untracked | The docs here have no GIFs. |
-| CI fails the build over 61440 bytes, the most the `wchisp` command-line tool can flash without harm there ([README][r-tools]) | untracked | The linker stops at 30720 B (`ledmatrix.ld`). The `wchisp` command-line tool can erase the start of the item store from 29697 B (see [Hardware notes](#hardware-notes)). Nothing checks for that. The firmware is 27964 B now. |
+| CI fails the build over 61440 bytes, the most the `wchisp` command-line tool can flash without harm there ([README][r-tools]) | untracked | The linker stops at 30720 B (`ledmatrix.ld`). The `wchisp` command-line tool can erase the start of the item store from 29697 B (see [Hardware notes](#hardware-notes)). Nothing checks for that. The firmware is 28568 B now. |
 | `tools/gen_layout.py` from the KiCad board | partly | Now from `webui/board_data.js`; the script that makes that file is missing ([#13]). |
 
 ## Hardware notes

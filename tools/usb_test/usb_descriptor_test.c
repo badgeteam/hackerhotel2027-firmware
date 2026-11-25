@@ -63,6 +63,9 @@ static void test_device_and_config(void) {
     check(at == n, "configuration: its descriptors fill wTotalLength exactly");
     check(interfaces == 1 && c[4] == 1,
           "configuration: one interface, so the Microsoft OS 2.0 set needs no subset headers");
+    // USB 2.0 9.4.9: a device that says it can wake the host must accept
+    // SET_FEATURE(DEVICE_REMOTE_WAKEUP); fsusb.c stalls it (FUSB_SUPPORTS_SLEEP 0)
+    check(c && (c[7] & 0x20) == 0, "configuration: no remote wakeup, which the badge cannot do");
 }
 
 // Returns the capability with this UUID in the BOS descriptor, or NULL

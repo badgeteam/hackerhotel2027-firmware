@@ -44,7 +44,7 @@ static const uint8_t config_descriptor[] = {
     0x01,  // bNumInterfaces (1)
     0x01,  // bConfigurationValue
     0x00,  // iConfiguration
-    0xA0,  // bmAttributes: Bus Powered; Remote Wakeup
+    0x80,  // bmAttributes: Bus Powered; no remote wakeup (usb_config.h: FUSB_SUPPORTS_SLEEP 0)
     0x32,  // MaxPower: 100mA
 
     /* Interface Descriptor (Vendor) */

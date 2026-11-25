@@ -30,7 +30,8 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
                                            At the end the badge shows its name tag again.
 
 With more than one badge plugged in, pick one with --serial SERIAL before
-the command (list shows each badge's serial number).
+the command (list shows each badge's serial number). Badges with older
+firmware all have serial 001: of those, the first one found is used.
 """
 import argparse
 import json
@@ -72,8 +73,14 @@ class Badge:
             devs = [d for d in devs if serial_of(d).upper() == serial.upper()]
         if not devs:
             sys.exit("no badge %sfound (USB %04x:%04x)" % ("with serial %s " % serial if serial else "", VID, PID))
+        serials = [serial_of(d) for d in devs]
+        if len(set(serials)) > 1:
+            sys.exit("%d badges found; pick one with --serial: %s" % (len(devs), ", ".join(serials)))
         if len(devs) > 1:
-            sys.exit("%d badges found; pick one with --serial: %s" % (len(devs), ", ".join(serial_of(d) for d in devs)))
+            # older firmware gives every badge the serial 001, so --serial
+            # cannot tell them apart: the first one, as before
+            print("warning: %d badges with serial %s (older firmware); using the first. A firmware update "
+                  "gives each badge its own serial." % (len(devs), serials[0]), file=sys.stderr)
         self.dev = devs[0]
         self.serial = serial_of(self.dev)
         if self.dev.is_kernel_driver_active(0):

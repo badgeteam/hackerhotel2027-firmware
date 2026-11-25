@@ -73,8 +73,12 @@ static void enter_boot_rom(void) {
 #define BOOT_ARROW_MS 1000  // then the arrow runs this long
 
 // An arrow runs down the grid for a second, so people see that the held
-// C + D works. Then the badge goes into the boot ROM.
-static void boot_rom_arrow(void) {
+// C + D works. Then the badge goes into the boot ROM. `brightness` is the
+// brightness from before C or D went down: outside apps, the press of D
+// that started the chord also made the LEDs one step darker.
+static void boot_rom_arrow(uint8_t brightness) {
+    LEDMatrix_SetBrightness(brightness);
+    Persist_SetBrightness(brightness);
     for (uint32_t ms = 0; ms < BOOT_ARROW_MS; ms += TICK_MS) {
         LEDMatrix_Clear();
         int shift = (int)(ms * 4 / BOOT_ARROW_MS);  // 4 rows in the second
@@ -151,6 +155,7 @@ int main(void) {
     uint32_t last_tick = funSysTick32();
     uint32_t hold_ms = 0;   // how long A has been down
     uint32_t boot_ms = 0;   // how long C + D have been down together
+    uint8_t chord_brightness = LEDMatrix_GetBrightness();  // from before C or D went down
     uint8_t last_mode = 0;  // to start the name tag when it comes on
     bool menu_open = false;
     bool greeting = false;  // greet.h has the LEDs; what they showed before is saved
@@ -178,9 +183,10 @@ int main(void) {
         uint8_t held = buttons_down();
 
         // Hold C + D: the boot ROM, from the name tag, the menu, an app or
-        // the factory test
+        // the factory test. The brightness is kept from before the chord.
+        if (!(held & (HH_BTN_C | HH_BTN_D))) chord_brightness = LEDMatrix_GetBrightness();
         boot_ms = (held & (HH_BTN_C | HH_BTN_D)) == (HH_BTN_C | HH_BTN_D) ? boot_ms + elapsed_ms : 0;
-        if (boot_ms >= BOOT_HOLD_MS) boot_rom_arrow();
+        if (boot_ms >= BOOT_HOLD_MS) boot_rom_arrow(chord_brightness);
 
         // Banana shots: outside apps (which take their own) they are taken
         // every pass, so none shows later; the name tag shows them, only
@@ -300,7 +306,8 @@ int main(void) {
 
         // Outside apps, B and D are the brightness
         if (buttons & HH_BTN_B) Menu_StepBrightness(1);
-        if (buttons & HH_BTN_D) Menu_StepBrightness(-1);
+        // (not D while C is down: that is the start of the boot ROM chord)
+        if ((buttons & HH_BTN_D) && !(held & HH_BTN_C)) Menu_StepBrightness(-1);
 
         infrared_nec_message_t message;
         while (infrared_receive(&message)) {

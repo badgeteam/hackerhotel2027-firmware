@@ -3,7 +3,8 @@
 // name (persist.h, set in the web interface) on the centre grid, standing
 // still if it fits and scrolling if it does not, or "HACKER HOTEL 2027"
 // while no name is set; the arms slowly cycle colour and the outline
-// sparkles. As in the previous firmware's name tag.
+// sparkles. As in the previous firmware's name tag. A banana shot
+// (infrared.h) shows on top of it for a second.
 //
 // A text item from the store plays the same way, with its own text.
 #include <stdbool.h>
@@ -33,3 +34,8 @@ void Nametag_Start(void);
 bool Nametag_StartText(const uint8_t* payload, uint32_t length);
 // Call every main loop pass with the milliseconds since the previous one
 void Nametag_Tick(uint32_t elapsed_ms);
+// A banana shot came in while the name tag shows (team 0 .. 7, command
+// 0 .. 15, as ir_shot_t has them): a shoot (HH_SHOT_SHOOT) sends a ring out
+// and blinks the arms in the team's colour, a heal pulses them green, a set
+// team shows the team's colour; other commands show nothing
+void Nametag_Shot(uint8_t team, uint8_t command);

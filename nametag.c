@@ -10,6 +10,7 @@
 #define FALLBACK "HACKER HOTEL 2027"
 #define NAME_SPEED 10  // columns per second
 #define GAP 8          // blank columns before a scrolling text comes round again
+#define SHOT_MS 1000   // a banana shot shows this long (Nametag_Shot)
 
 static uint32_t s_ms;      // since the start
 static uint32_t s_accum;   // towards the next frame
@@ -19,6 +20,13 @@ static unsigned s_len;
 static uint8_t s_speed = NAME_SPEED;
 static uint8_t s_style = TEXT_STYLE_NAMETAG;
 static uint32_t s_rand = 0x20275EA5u;
+static uint32_t s_shot_left;  // of the last shot's effect; 0: none
+static uint8_t s_shot_team, s_shot_command;
+
+// The banana's team colours, as apps/banana/banana.c has them
+static const uint8_t TEAM[8][3] = {
+    {255, 0, 0}, {0, 255, 0}, {0, 60, 255}, {255, 200, 0}, {255, 0, 200}, {0, 200, 255}, {255, 255, 255}, {255, 90, 0},
+};
 
 static uint8_t random8(void) {
     s_rand ^= s_rand << 13;
@@ -79,6 +87,21 @@ static void draw(uint32_t t_ms) {
             if (d < 40) set_slot(slot, 255);
         }
 
+    // A banana shot (Nametag_Shot), for a second: a shoot sends a ring out
+    // from the middle and blinks the arms in the shooter's colour, a heal
+    // pulses them green, a set team shows the team's colour on them
+    uint32_t since = SHOT_MS - s_shot_left;
+    const uint8_t* team = s_shot_left ? TEAM[s_shot_team] : NULL;
+    unsigned v = 256;
+    if (team && s_shot_command == HH_SHOT_SHOOT) {
+        unsigned front = since / 5;  // 1/4 mm from the middle: past the outline at the end
+        for (unsigned slot = 0; slot < HH_SLOTS; slot++) {
+            if (front - layout_polar[slot][0] < 24) set_slot(slot, 255);  // unsigned: d <= front
+        }
+        if (since & 128) v = 0;
+    }
+    if (team && s_shot_command == HH_SHOT_HEAL) team = TEAM[1], v = ~since & 255;  // four fading flashes
+
     // The arms cycle through the colours, each arm a fifth apart, and
     // breathe from the centre out
     uint8_t turn = (uint8_t)(t_ms * 20 / 1000);
@@ -86,6 +109,8 @@ static void draw(uint32_t t_ms) {
         const hh_rgb_t* led = &layout_rgb[i];
         uint8_t rgb[3];
         hue((uint8_t)(turn + led->arm * 51), (uint8_t)(90 + triangle((uint8_t)(turn * 3 + led->rank * 30)) / 3), rgb);
+        if (team)
+            for (int c = 0; c < 3; c++) rgb[c] = (uint8_t)(team[c] * v >> 8);
         set_slot(led->r, rgb[0]);
         set_slot(led->g, rgb[1]);
         set_slot(led->b, rgb[2]);
@@ -103,6 +128,7 @@ static void start(const char* text, unsigned len, uint8_t speed, uint8_t style) 
     s_style = style;
     s_ms = 0;
     s_scroll = 0;
+    s_shot_left = 0;
     s_accum = FRAME_MS;  // draw at once
 }
 
@@ -121,9 +147,17 @@ bool Nametag_StartText(const uint8_t* payload, uint32_t length) {
     return true;
 }
 
+void Nametag_Shot(uint8_t team, uint8_t command) {
+    if (!(1 << command & (1 << HH_SHOT_SHOOT | 1 << HH_SHOT_HEAL | 1 << HH_SHOT_TEAM))) return;
+    s_shot_team = team;
+    s_shot_command = command;
+    s_shot_left = SHOT_MS;
+}
+
 void Nametag_Tick(uint32_t elapsed_ms) {
     s_ms += elapsed_ms;
     s_scroll += elapsed_ms * s_speed;
+    s_shot_left = s_shot_left > elapsed_ms ? s_shot_left - elapsed_ms : 0;
     s_accum += elapsed_ms;
     if (s_accum < FRAME_MS) return;
     s_accum %= FRAME_MS;

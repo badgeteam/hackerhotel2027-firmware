@@ -13,6 +13,8 @@
 //   I <address> <command>  (IR sent)     i <address> <command>  (IR received)
 //   P <packet, hex>  (IR packet sent)    p <packet, hex>  (IR packet received)
 //                    a packet: type, length, data (no CRC)
+//                                        s <team> <trigger> <command> <parameter>
+//                                          (a banana shot received, ir_codec.h)
 //   S 1 / S 0  (standby on / off)
 //   L <text>   (the firmware's log)
 //   B          (jumped to the boot ROM; the program then exits)
@@ -258,9 +260,17 @@ bool infrared_send_shot(uint16_t bits) {  // the emulator has no shots yet: nobo
     (void)bits;
     return true;
 }
-bool infrared_receive_shot(ir_shot_t* shot) {  // the emulator has no shots yet
-    (void)shot;
-    return false;
+// Shots: the receiver keeps 7, as infrared.c does
+static ir_shot_t s_ir_shots[7];
+static unsigned s_ir_shot_head, s_ir_shot_tail;
+bool infrared_receive_shot(ir_shot_t* shot) {
+    if (!s_ir_on || s_ir_shot_tail == s_ir_shot_head) return false;
+    *shot = s_ir_shots[s_ir_shot_tail++ % 7];
+    return true;
+}
+static void ir_shot_received(unsigned team, unsigned trigger, unsigned command, unsigned parameter) {
+    if (!s_ir_on || s_ir_shot_head - s_ir_shot_tail >= 7) return;
+    s_ir_shots[s_ir_shot_head++ % 7] = (ir_shot_t){team & 7, trigger & 1, command & 15, parameter & 15};
 }
 unsigned infrared_raw_read(uint16_t* out, unsigned max) {  // the emulator's IR has no marks and spaces
     (void)out, (void)max;
@@ -385,6 +395,9 @@ static void* reader(void* arg) {
         } else if (line[0] == 'i') {
             unsigned a, c;
             if (sscanf(line + 2, "%u %u", &a, &c) == 2) ir_received((uint16_t)a, (uint8_t)c);
+        } else if (line[0] == 's') {
+            unsigned t, g, c, v;
+            if (sscanf(line + 2, "%u %u %u %u", &t, &g, &c, &v) == 4) ir_shot_received(t, g, c, v);
         }
         pthread_mutex_unlock(&s_lock);
     }

@@ -5,7 +5,7 @@ on the centre grid with the glyphs from font.c.
 hh27-emu talks on stdin/stdout as tools/emu/emu.py does (hw.c lists the
 lines): "u <hex>" a USB packet and "U <hex>" its reply, "b <hex>" the
 buttons held, "F <hex>" a frame, "P <hex>" / "p <hex>" an IR packet sent /
-received.
+received, "s <team> <trigger> <command> <parameter>" a banana shot received.
 """
 import os
 import queue
@@ -22,6 +22,7 @@ TEXT_Y = 4         # nametag.c
 
 ITEM_BEGIN, ITEM_CHUNK, ITEM_COMMIT, ITEM_RUN, ITEM_DELETE, NAME_SET, QUERY = 0x21, 0x22, 0x23, 0x25, 0x27, 0x31, 0xFF
 BTN_A, BTN_C, BTN_B, BTN_D = 1, 2, 4, 8  # "b <hex>": bit 0 A, 1 C, 2 B, 3 D
+SHOT_SHOOT, SHOT_HEAL, SHOT_TEAM, SHOT_BYTE = 1, 2, 8, 10  # a banana shot's command (ir_codec.h)
 TYPE_ANIMATION, TYPE_TEXT = 1, 3
 MODE_FLASH_PATTERN = 2
 
@@ -94,6 +95,10 @@ class Emu:
         time.sleep(ms / 1000)
         self.buttons(0)
         time.sleep(0.08)
+
+    def shot(self, team, command, parameter=0, trigger=1):
+        """A banana shot comes in (with a good CRC)"""
+        self.send("s %d %d %d %d" % (team, trigger, command, parameter))
 
     def set_name(self, name):
         return self.usb(NAME_SET, *name.encode())

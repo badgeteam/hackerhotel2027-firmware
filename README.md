@@ -15,7 +15,9 @@ the web interface you can:
 - set your name.
 
 When nothing else runs, the badge shows its **name tag**: your name on the
-centre grid, or "HACKER HOTEL 2027" while no name is set.
+centre grid, or "HACKER HOTEL 2027" while no name is set. Shoot it with a
+Hacker Hotel 2025 banana and a ring goes out, with the arms blinking in
+the shooter's team colour; a heal pulses them green.
 
 ## Flash and RAM
 
@@ -317,6 +319,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/text_test/run.sh` | checks text items: the web interface's payloads, played on the emulator |
 | `tools/four_test/run.sh` | checks 4 in a row: its rules on the PC, and whole games on two emulators |
 | `tools/ir_test/run.sh` | checks the infrared codec with a model of the receiver, and the name swap on two emulators |
+| `tools/nametag_test/run.sh` | checks how the name tag shows banana shots, on the emulator |
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, the text on the grid |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

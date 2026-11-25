@@ -192,6 +192,8 @@ bool AppHost_Start(const uint8_t* image, uint32_t length, const char* name) {
     memcpy(s_name, name, STORE_NAME_LEN);
     s_random = funSysTick32() ^ ESIG->UID0 ^ 0x9E3779B9u;
     if (!s_random) s_random = 1;
+    ir_shot_t stale;  // shots from before the app (another app that ignored them) are not for it
+    while (infrared_receive_shot(&stale)) {}
     LEDMatrix_Clear();
 #ifdef HH_EMU
     if (!emu_app_init(s_app->init, &s_api)) {

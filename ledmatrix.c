@@ -150,6 +150,14 @@ int main(void) {
         uint8_t buttons = buttons_poll();
         uint8_t held = buttons_down();
 
+        // Banana shots: outside apps (which take their own) they are taken
+        // every pass, so none shows later; the name tag shows them, only
+        // while it is on (and not those left from an app: see below)
+        ir_shot_t shot;
+        while (g_app_mode != APP_MODE_APP && infrared_receive_shot(&shot))
+            if (g_app_mode == APP_MODE_NAMETAG && !factory && !menu_open && !greeting)
+                Nametag_Shot(shot.team, shot.command);
+
         // The factory test (factory.h) has the LEDs and the buttons until
         // it passes or is left; USB goes on working
         if (WebUSB_TakeFactoryRequest() && !factory) {
@@ -224,7 +232,9 @@ int main(void) {
         }
 
         if (g_app_mode == APP_MODE_APP) {
-            // The app has the buttons and the infrared
+            // The app has the buttons and the infrared. The name tag starts
+            // afresh after it, which drops the shots the app left queued.
+            last_mode = APP_MODE_APP;
             if (!AppHost_Tick(elapsed_ms, buttons, held)) {
                 AppHost_Stop();
                 g_app_mode = APP_MODE_NAMETAG;

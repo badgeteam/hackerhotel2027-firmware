@@ -1,5 +1,5 @@
 // apps/chase on the PC (mock_hh.h): a press beside the green arm is a hit
-// and speeds the light up, never so far that it jumps a zone; a press
+// and speeds the light up, gently, never so far that it jumps a zone; a press
 // elsewhere is a miss; three misses end it; the best is saved.
 #include "mock_hh.h"
 #include "../../apps/chase/chase.c"
@@ -31,11 +31,11 @@ int main(void) {
         CHECK(off >= -4 && off <= 4, "arm %d's zone is about a fifth of the way round per arm (%d off)", a, off);
     }
 
-    // The demo: it hits until level 5, then presses late; it saves nothing
+    // The demo: it hits until level 10, then presses late; it saves nothing
     // and starts over
     CHECK(demo, "it opens with the demo");
     for (int i = 0; i < 2000000 && !over; i++) run(33, 0);
-    CHECK(over && hits >= 4 && hits < 30, "the demo reaches level %d, then misses three", hits + 1);
+    CHECK(over && hits >= DEMO_HITS && hits < 30, "the demo reaches level %d, then misses three", hits + 1);
     CHECK(best == 0 && mock_saves == 0, "a demo game saves nothing");
     run(DEMO_OVER_MS, 0);
     CHECK(demo && !over && hits == 0, "and starts over");
@@ -44,11 +44,19 @@ int main(void) {
     run(10, HH_BTN_D);
     CHECK(!demo && !over && hits == 0 && lives == LIVES, "D starts a real game, and is no press in it");
 
-    // A player who presses as soon as the light is beside the green arm
+    // A player who presses as soon as the light is beside the green arm.
+    // The ramp is gentle: at level 10 the light is under 1.25 LEDs a step
+    // and at level 15 under 1.5 (the previous ramp, x 6/5 a hit, passed
+    // those at levels 5 and 7)
+    int32_t speed_at[31] = {0};
     for (int i = 0; i < 200000 && hits < 30 && !over; i++) {
         settle();
+        speed_at[hits] = speed;
         step(in_zone(head()) ? HH_BTN_C : 0);
     }
+    CHECK(speed_at[9] < ONE * 5 / 4, "level 10: %d / 256 LEDs a step", (int)speed_at[9]);
+    CHECK(speed_at[14] < ONE * 3 / 2, "level 15: %d / 256 LEDs a step", (int)speed_at[14]);
+    CHECK(speed_at[20] < ONE * 2 && speed_at[25] == ONE * 2, "the top speed comes after level 21 (%d, %d)", (int)speed_at[20], (int)speed_at[25]);
     CHECK(hits == 30 && lives == LIVES, "30 hits without a miss (%d hits, %d lives)", hits, lives);
     CHECK(speed == ONE * 2, "the light is at its top speed (%d)", (int)speed);
 

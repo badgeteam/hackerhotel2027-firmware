@@ -27,9 +27,9 @@
   {
    "name": "CHASE",
    "file": "chase.hhapp",
-   "bytes": 1576,
+   "bytes": 1560,
    "api": 6,
-   "description": "Star Chase: a light runs round the outline. Press B, C or D when it is beside the arm that shows green. Every hit makes the light faster, up to a limit; three misses and the game is over. The grid shows the level, the dots below it the lives left. After the end, any button starts again; the best level is kept on the badge. Until the first button the badge plays a demo, and it goes back to that 15 s after a game. As in the previous firmware's Star Chase.",
+   "description": "Star Chase: a light runs round the outline. Press B, C or D when it is beside the arm that shows green. Every hit makes the light a little faster, by the same step each time, up to a limit at level 24; three misses and the game is over. The grid shows the level, the dots below it the lives left. After the end, any button starts again; the best level is kept on the badge. Until the first button the badge plays a demo, and it goes back to that 15 s after a game. As in the previous firmware's Star Chase, with a gentler speed-up.",
    "recommended": false
   },
   {

@@ -106,6 +106,13 @@ int emu_printf(const char* fmt, ...) {
 }
 
 void debug_output_write(const char* buf, int size) { log_bytes(buf, size); }
+void debug_log(const char* first, ...) {  // as debug_output.c
+    va_list ap;
+    va_start(ap, first);
+    for (const char* t = first; t; t = va_arg(ap, const char*)) log_bytes(t, (int)strlen(t));
+    va_end(ap);
+    log_bytes("\n", 1);
+}
 
 void emu_log(const char* fmt, ...) {
     char buf[256];

@@ -1,3 +1,4 @@
+#include <stdarg.h>
 // SPDX-License-Identifier: MIT
 
 #include "debug_output.h"
@@ -54,4 +55,16 @@ void debug_output_write(const char* buf, int size) {
 
         place += tosend;
     }
+}
+
+void debug_log(const char* first, ...) {
+    va_list ap;
+    va_start(ap, first);
+    for (const char* s = first; s; s = va_arg(ap, const char*)) {
+        int n = 0;
+        while (s[n]) n++;
+        debug_output_write(s, n);
+    }
+    va_end(ap);
+    debug_output_write("\n", 1);
 }

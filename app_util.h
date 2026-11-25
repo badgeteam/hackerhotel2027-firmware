@@ -8,6 +8,9 @@ uint8_t AppUtil_Sin8(uint8_t angle);
 uint32_t AppUtil_Hsv(uint8_t h, uint8_t s, uint8_t v);
 uint32_t AppUtil_Isqrt(uint32_t n);
 uint8_t AppUtil_Atan8(int x, int y);
+// Linear light (PWM duty) to brightness as a screen shows it: the value
+// whose gamma (layout_gamma, rising) comes closest
+uint8_t AppUtil_Linear(const uint8_t gamma[256], uint8_t linear);
 // n in decimal, with a '-' if negative, into text (12 bytes: "-2147483648");
 // returns text
 char* AppUtil_Decimal(int32_t n, char text[12]);

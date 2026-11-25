@@ -80,7 +80,7 @@ static void m_set_rgb(int i, uint8_t r, uint8_t g, uint8_t b) {
     if (i < 0 || i >= HH_RGB_COUNT) return;
     m_set(layout_rgb[i].r, r), m_set(layout_rgb[i].g, g), m_set(layout_rgb[i].b, b);
 }
-static void m_set_linear(uint16_t s, uint8_t v) { m_set(s, layout_linear[v]); }
+static void m_set_linear(uint16_t s, uint8_t v) { m_set(s, AppUtil_Linear(layout_gamma, v)); }
 static int m_step_brightness(int dir) {  // as menu.c
     static const uint8_t levels[HH_BRIGHTNESS_LEVELS] = {8, 16, 32, 64, 128, 255};
     for (int k = 0; dir && k < HH_BRIGHTNESS_LEVELS; k++) {

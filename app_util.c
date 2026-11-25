@@ -81,3 +81,13 @@ char* AppUtil_Decimal(int32_t n, char text[12]) {
     while ((*d++ = *p++)) {}
     return text;
 }
+
+uint8_t AppUtil_Linear(const uint8_t gamma[256], uint8_t linear) {
+    unsigned lo = 0, hi = 255;  // the first value whose gamma is at least linear
+    while (lo < hi) {
+        unsigned mid = (lo + hi) / 2;
+        if (gamma[mid] < linear) lo = mid + 1;
+        else hi = mid;
+    }
+    return (uint8_t)(lo && linear - gamma[lo - 1] < gamma[lo] - linear ? lo - 1 : lo);
+}

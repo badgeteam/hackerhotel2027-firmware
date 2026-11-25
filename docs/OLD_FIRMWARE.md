@@ -55,7 +55,7 @@ notes.
 | The same chord, held while USB is plugged in ([BRINGUP][bringup], steps 3 and 10) | untracked | To reach the boot ROM, the menu must work. A button held at power-on is now the safe start: the badge skips the boot item ([#1]). |
 | Hold A + B for 3 s: the bring-up test ([USAGE][u-bringup]) | partly: [#59] | The same two switches now only leave the factory test. See [Bring-up test](#bring-up-test). |
 | Tap A on the name tag or an animation: brightness ([USAGE][u-nametag]) | replaced | Outside apps, B is brighter and D dimmer. The level shows on the grid for a second. |
-| ◀ / ▶ on the name tag or an animation: previous / next screen ([USAGE][u-nametag]) | untracked | Only the menu changes what runs. C does nothing outside apps. |
+| ◀ / ▶ on the name tag or an animation: previous / next screen ([USAGE][u-nametag]) | done: `ledmatrix.c` | A tap of C shows the next: the name tag, then every item in store order (apps too), then the name tag again. Only forward: B and D stay the brightness, and C + D is a chord. In an app, C is the app's. |
 
 ## Menu and settings
 
@@ -308,7 +308,7 @@ decision first: is it worth the flash, and is it worth the work?
 2. **Brightness on the badge.** Done: a new badge starts at 12.5 %, as
    the old firmware did, and BRIGHTNESS shows the level on the grid, as
    B / D outside apps do for a second (`menu.c`, `ledmatrix.c`).
-3. **Browse without the menu.** C (or C / D) on the name tag steps
+3. **Browse without the menu.** Done: a tap of C outside apps steps
    through the items, as ◀ / ▶ did.
 4. **A boot ROM chord.** C + D for 3 s reboots into the boot ROM, so a
    badge with a broken menu can still be flashed over USB.

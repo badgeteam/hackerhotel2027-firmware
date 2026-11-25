@@ -51,6 +51,10 @@ static void fill_halves(uint8_t top, uint8_t bottom) {
 
 // B or D outside apps: the brightness level shows this long over what runs
 #define LEVEL_SHOW_MS 1000
+// C outside apps: a press shorter than this, with D up all the time, is a
+// tap and shows the next item (browse_next). A longer press is no tap, and
+// C + D together is the boot ROM chord, never a tap.
+#define BROWSE_TAP_MS 500
 
 // What the LEDs showed when the menu opened, to put back when it closes
 static uint8_t s_saved_leds[LED_MATRIX_ROWS * LED_MATRIX_COLS];
@@ -96,6 +100,20 @@ static void run_item(uint8_t index) {
     }
 }
 
+// A tap of C outside apps: the next stop in the ring of the name tag, then
+// every store item in store order (as the menu lists them, apps too),
+// then the name tag again. From the host's drawing (custom mode) it goes
+// to the first item.
+static void browse_next(void) {
+    int next = (g_app_mode == APP_MODE_FLASH_PATTERN ? g_running_item : -1) + 1;
+    if (next < Store_Count()) {
+        run_item((uint8_t)next);
+    } else {
+        AppHost_Stop();
+        g_app_mode = APP_MODE_NAMETAG;
+    }
+}
+
 int main(void) {
     SystemInit();
     funGpioInitAll();
@@ -135,6 +153,9 @@ int main(void) {
     bool menu_open = false;
     uint32_t level_ms = 0;     // the brightness level shows this much longer
     bool level_drawn = false;  // the previous pass drew it over what runs
+    bool outside = false;      // the previous pass ran outside apps, to its end
+    uint32_t c_ms = 0;         // how long C has been down
+    bool c_tap = false;        // C went down outside apps, and so far it is a tap
     bool greeting = false;  // greet.h has the LEDs; what they showed before is saved
     uint8_t menu_mode = 0, menu_item = STORE_NONE;  // what ran when it opened
 
@@ -142,6 +163,8 @@ int main(void) {
         LEDMatrix_Show();  // what the previous pass drew (the app, the menu, the name tag, the host)
         if (level_drawn) restore_leds();  // what runs keeps its own frame
         level_drawn = false;
+        bool was_outside = outside;
+        outside = false;
         WebUSB_HandleCommand();
         uint8_t run = WebUSB_TakeRunRequest();
         if (run != STORE_NONE) run_item(run);
@@ -285,6 +308,24 @@ int main(void) {
         // and the level shows for a moment (at the end of the pass)
         if (buttons & (HH_BTN_B | HH_BTN_D)) level_ms = LEVEL_SHOW_MS;
 
+        // A tap of C shows the next item (browse_next), on its release.
+        // B and D stay the brightness, as the menu's BUTTONS setting only
+        // changes the menu, so C alone browses. Not a tap: a press that
+        // started in an app, the menu, a greeting or the factory test; a
+        // long press; D down at any time during it (C + D is a chord).
+        if (!was_outside) c_tap = false;
+        if (buttons & HH_BTN_C) {
+            c_tap = true;
+            c_ms = 0;
+        }
+        if (held & HH_BTN_C) {
+            c_ms += elapsed_ms;
+            if ((held & HH_BTN_D) || c_ms >= BROWSE_TAP_MS) c_tap = false;
+        } else if (c_tap) {
+            c_tap = false;
+            browse_next();
+        }
+
         infrared_nec_message_t message;
         while (infrared_receive(&message)) {
             if (message.address != IR_ADDRESS || message.repeat) continue;
@@ -309,12 +350,13 @@ int main(void) {
             Nametag_Tick(elapsed_ms);
         }
         last_mode = g_app_mode;
+        outside = g_app_mode != APP_MODE_APP;  // browse_next can start an app
         // The brightness level goes over the frame only for the next
         // LEDMatrix_Show(): then what was under it comes back, so what runs
         // needs to draw nothing again when the level goes. The saved LEDs
         // are free here: the menu and a greeting keep them only while they
         // are on, and neither is on at the end of this pass.
-        if (level_ms) {
+        if (level_ms && outside) {
             save_leds();
             Menu_DrawBrightness();
             level_drawn = true;

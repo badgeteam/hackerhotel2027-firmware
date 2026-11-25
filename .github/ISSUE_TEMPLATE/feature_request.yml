@@ -1,0 +1,38 @@
+name: Feature request
+description: An idea for the firmware, the web interface, an app or the tools.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you want
+      description: What should the badge, the web interface or the tool do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What does it make possible, and for whom?
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it belong
+      description: >-
+        The firmware has little flash left (30 KB in total). If it can be an
+        app, it costs space only on the badges that store it.
+      options:
+        - An app
+        - The firmware
+        - The web interface
+        - The tools
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: More information
+      description: Sketches, examples, links, or how you would build it.

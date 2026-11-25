@@ -30,6 +30,7 @@
 #define CMD_ITEM_DELETE 0x27
 #define CMD_NAME_GET 0x30
 #define CMD_NAME_SET 0x31
+#define CMD_BRIGHTNESS 0x32
 #define CMD_BOOT_ROM 0x40
 #define CMD_FW_INFO 0x41
 #define CMD_IR_RAW 0x50  // reply: count, then that many marks / spaces (infrared_raw_read)
@@ -236,6 +237,13 @@ static void handle_command(const uint8_t* data, int len) {
         case CMD_NAME_SET:
             Persist_SetName((const char*)&data[1], (unsigned)(len - 1));
             s_name_reply = true;
+            break;
+
+        case CMD_BRIGHTNESS:  // the main loop saves it (Persist_SetBrightness), as it does B and D
+            if (len < 2 || !data[1])
+                s_result = STORE_ERR_ARGS;
+            else
+                LEDMatrix_SetBrightness(data[1]);
             break;
 
         case CMD_QUERY:

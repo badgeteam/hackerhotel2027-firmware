@@ -80,6 +80,12 @@ C bottom left, D bottom right.
 | **Hold A** | the menu, also from an app (hold it for a second there) |
 | **B** / **D** | brighter / dimmer (when no app runs) |
 
+When no app runs and the menu is closed:
+
+- **B** and **D** show the brightness level for a second at the bottom of
+  the grid, over what runs: six dots, one for each level, bright up to
+  the level now.
+
 **The menu** lists the name tag, SAY HI, every stored animation, text and
 app, and the badge's settings. The name of the entry shows on the grid,
 the outline shows where you are in the list, and the arms show the group:
@@ -109,7 +115,8 @@ The settings in the menu:
   To make the name shorter, set the characters at the end to blank. After
   a minute without a button, the editor closes without saving.
 - **BRIGHTNESS:** each tap is one level brighter, then back to the
-  dimmest.
+  dimmest. Six dots under the label show the level. A new badge starts
+  at the third level (32 of 255, 12.5 %).
 - **BUTTONS:** which pair steps through the menu. `C D` is the bottom pair,
   side by side (the default). `B D` is the right pair, one above the
   other: then B is previous, and in the editor C is the previous
@@ -217,8 +224,10 @@ cd webui && python3 -m http.server 8027 --bind 127.0.0.1
 Open http://127.0.0.1:8027/ and click **Connect badge**. In the
 browser's box, pick **Hackerhotel 2027 starfish**. The **Your badge**
 panel then shows the badge's state and lets you set your name
-(**Save name**). The **On your badge** panel shows what is stored on the
-badge. In that panel you can:
+(**Save name**) and the brightness (**Brightness**, the six levels of the
+badge's menu; `tools/badge.py brightness N` sets any value from 1 to
+255). The **On your badge** panel shows what is stored on the badge. In
+that panel you can:
 
 - start an item (**Start**),
 - choose the item that starts at power-on (the star button),
@@ -369,6 +378,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/board_test/run.sh` | checks that `tools/extract_board_data.py` makes the committed `webui/board_data.js` from the board (SKIP without it) |
 | `tools/nametag_test/run.sh` | checks how the name tag shows banana shots, on the emulator |
 | `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge, banana shots, on emulators |
+| `tools/brightness_test/run.sh` | checks the brightness on the emulator: the start value, the USB command and `tools/badge.py brightness`, the level on the grid |
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, the text on the grid |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

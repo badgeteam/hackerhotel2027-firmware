@@ -79,7 +79,17 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="d643", MODE="0666"
 					<button type="button" id="badge-name-btn" class="btn">Save name</button>
 				</div>
 				<p id="badge-name-status" class="meta" role="status"></p>
-				<p class="meta">Change the brightness on the badge with the B and D buttons.</p>
+				<div id="badge-brightness-control" hidden>
+					<div class="field">
+						<label for="badge-brightness">Brightness</label>
+						<input type="range" id="badge-brightness" min="0" max="5" step="1" value="2"
+							aria-describedby="badge-brightness-hint">
+						<output id="badge-brightness-readout" for="badge-brightness"></output>
+					</div>
+					<p id="badge-brightness-hint" class="meta">The badge keeps it when it is off. B and D on
+						the badge change it too.</p>
+					<p id="badge-brightness-status" class="meta" role="status"></p>
+				</div>
 			</section>
 
 			<section id="stored" class="card" aria-labelledby="stored-h">

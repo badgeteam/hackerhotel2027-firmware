@@ -13,6 +13,8 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
   tools/badge.py recommended               erase, then install the recommended app set
                                            (webui/apps/index.json; make -C apps webui)
   tools/badge.py name [TEXT]               show or set the owner's name
+  tools/badge.py brightness [N]            show or set the brightness, 1 .. 255; the badge
+                                           keeps it (B / D step 8, 16, 32, 64, 128, 255)
   tools/badge.py irlog [--seconds N]       print the infrared marks and spaces the badge
                                            receives, frame by frame (Ctrl-C to stop)
   tools/badge.py shoot TEAM [COMMAND [PARAMETER]]
@@ -178,6 +180,8 @@ def main():
     sub.add_parser("factory")
     n = sub.add_parser("name")
     n.add_argument("text", nargs="?")
+    b = sub.add_parser("brightness")
+    b.add_argument("value", type=int, nargs="?")
     sh = sub.add_parser("shoot")
     sh.add_argument("team", type=int)
     sh.add_argument("command", type=int, nargs="?", default=1)
@@ -240,6 +244,13 @@ def main():
     elif args.cmd == "name":
         s = badge.send(0x31, *args.text.encode()[:32]) if args.text is not None else badge.send(0x30)
         print("name: %r" % s["name"])
+    elif args.cmd == "brightness":
+        if args.value is not None and not 1 <= args.value <= 255:
+            sys.exit("brightness: 1 to 255")
+        s = badge.check(badge.send(0x32, args.value), "brightness") if args.value is not None else badge.send(0xFF)
+        if args.value is not None and s["brightness"] != args.value:
+            sys.exit("the badge's firmware is too old to set the brightness: update it")
+        print("brightness: %d of 255" % s["brightness"])
 
     s = badge.send(0xFF)
     print("mode %s, %d items, %d bytes free, app API %d" % (MODES.get(s["mode"], s["mode"]), s["count"], s["free"], s["api"]))

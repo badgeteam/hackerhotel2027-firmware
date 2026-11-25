@@ -25,7 +25,7 @@ enum { ENTRY_NAMETAG, ENTRY_SAY_HI, ENTRY_ITEM, ENTRY_EDIT, ENTRY_BRIGHTNESS, EN
 // through them
 static const char s_chars[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.!?'*:/#@&+_";
 
-static const uint8_t s_levels[] = {8, 16, 32, 64, 128, 255};  // brightness
+static const uint8_t s_levels[HH_BRIGHTNESS_LEVELS] = {8, 16, 32, 64, 128, 255};  // brightness
 
 static unsigned s_cursor;  // the entry shown
 static bool s_editing;
@@ -116,6 +116,14 @@ int Menu_BrightnessLevel(void) {
 
 static void set_slot(uint16_t slot, uint8_t v) { LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, v); }
 
+void Menu_DrawBrightness(void) {
+    for (int y = MENU_LEVEL_Y - 1; y <= MENU_LEVEL_Y + 1; y++)
+        for (int x = 0; x < HH_GRID_W; x++) set_slot(layout_grid[y][x], 0);
+    // Row 13 has LEDs in columns 3 .. 13: the dots in 3, 5, .. 13
+    int level = Menu_BrightnessLevel();
+    for (int i = 0; i < HH_BRIGHTNESS_LEVELS; i++) set_slot(layout_grid[MENU_LEVEL_Y][3 + 2 * i], i <= level ? 255 : 40);
+}
+
 static void arms(uint8_t r, uint8_t g, uint8_t b) {
     for (int i = 0; i < HH_RGB_COUNT; i++) {
         set_slot(layout_rgb[i].r, r);
@@ -157,6 +165,7 @@ static void draw_menu(void) {
         default: copy_label(label, "UPDATE", sizeof label - 1); break;
     }
     Text_DrawLabel(label, TEXT_Y, s_shown_ms, 255);
+    if (kind == ENTRY_BRIGHTNESS) Menu_DrawBrightness();
     outline(s_cursor, s_cursor + 1, entry_count());
     // The arms show the group: the name tag and SAY HI orange, animations
     // purple, texts blue, apps green, the badge's settings white

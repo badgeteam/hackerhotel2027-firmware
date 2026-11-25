@@ -34,3 +34,11 @@ menu_result_t Menu_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held, uint
 void Menu_StepBrightness(int dir);
 // The level of the brightness now: the highest of them at or below it, 0 .. 5
 int Menu_BrightnessLevel(void);
+
+// The brightness level on the grid, as BRIGHTNESS in the menu shows it:
+// one dot per level in row MENU_LEVEL_Y, bright up to the level now and
+// dim above it, with that row and the rows above and below it dark around
+// the dots, so it shows over anything. The main loop also draws it for a
+// moment when B or D change the brightness outside apps.
+#define MENU_LEVEL_Y 13
+void Menu_DrawBrightness(void);

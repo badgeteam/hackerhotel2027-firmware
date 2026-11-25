@@ -54,7 +54,7 @@ notes.
 | Hold ◀ + ▶ for 3 s: reboot into the USB boot ROM, after an arrow runs down the grid for a second ([USAGE][u-always]) | replaced: [#34], [#33] | UPDATE in the menu, or the firmware update in the web interface (`CMD_BOOT_ROM`). There is no chord and no arrow. |
 | The same chord, held while USB is plugged in ([BRINGUP][bringup], steps 3 and 10) | untracked | To reach the boot ROM, the menu must work. A button held at power-on is now the safe start: the badge skips the boot item ([#1]). |
 | Hold A + B for 3 s: the bring-up test ([USAGE][u-bringup]) | partly: [#59] | The same two switches now only leave the factory test. See [Bring-up test](#bring-up-test). |
-| Tap A on the name tag or an animation: brightness ([USAGE][u-nametag]) | replaced | Outside apps, B is brighter and D dimmer. |
+| Tap A on the name tag or an animation: brightness ([USAGE][u-nametag]) | replaced | Outside apps, B is brighter and D dimmer. The level shows on the grid for a second. |
 | ◀ / ▶ on the name tag or an animation: previous / next screen ([USAGE][u-nametag]) | untracked | Only the menu changes what runs. C does nothing outside apps. |
 
 ## Menu and settings
@@ -63,7 +63,7 @@ notes.
 |---|---|---|
 | The menu: label on the grid, place on the outline, group on the arms, 20 s timeout ([USAGE][u-menu]) | done: [#34] | Groups now: orange the name tag and SAY HI, purple animations, blue texts, green apps, white settings. C / D step; the new BUTTONS setting makes it B / D. |
 | Fixed entries: NAME, HACKER HOTEL, 6 animations, 11 games, VICTORY, EDIT NAME, LIGHT, SPONSORS, SLEEP | replaced: [#1], [#34] | The menu lists the items in the store. The animations and games are apps in `apps/`. A new badge gets the recommended set (`apps/recommended.txt`, **Erase badge and install recommended apps** in the web interface's App library). It holds 3 of the 6 old animations and 6 of the 11 old games. The rest are in the web interface's App library. For VICTORY and SPONSORS, see [Challenges](#challenges-and-the-victory-dance) and [Sponsor reel](#sponsor-reel-charging-and-standby). |
-| LIGHT: 5 levels (night, 5 %, 12.5 %, 31 %, full), a bar on the grid, 12.5 % at first start ([USAGE][u-menu]) | partly: [#34], [#48] | BRIGHTNESS has 6 levels (8, 16, 32, 64, 128, 255). The grid shows only the label, not the level. A new badge starts at full brightness. |
+| LIGHT: 5 levels (night, 5 %, 12.5 %, 31 %, full), a bar on the grid, 12.5 % at first start ([USAGE][u-menu]) | done: [#34], [#48], `menu.c` | BRIGHTNESS has 6 levels (8, 16, 32, 64, 128, 255). Six dots under the label show the level; B / D outside apps show them for a second. A new badge starts at 32 (12.5 %). |
 | SLEEP: dark until a button; that button only wakes; USB disconnects | done: [#34], `standby.c` | The same behaviour. The standby current is not measured: [#14]. |
 | New in this firmware | done | BUTTONS ([#34]), UPDATE ([#34]), SAY HI ([#37]), safe start ([#1]). |
 
@@ -153,7 +153,7 @@ apps, the item store and firmware updates.
 |---|---|---|
 | Set the name, saved in flash | done: [#2] | Web interface and `tools/badge.py name`. |
 | Pick what the badge shows | replaced: [#1] | **Start** next to the item in the web interface, or `tools/badge.py run N`. |
-| Set the brightness | untracked | The status line shows the brightness, but the USB protocol has no command to set it. |
+| Set the brightness | done | USB command `0x32` BRIGHTNESS (1 .. 255, kept over power-off): **Brightness** in the web interface's **Your badge** (the 6 levels), and `tools/badge.py brightness N`. |
 | Read the state every second: what shows, the brightness, charging | partly | The page asks every second: mode, brightness, store, app API. There is no charging bit ([#9]). |
 | Windows: Microsoft OS 2.0 descriptor, WinUSB, no driver to install ([README][r-setup]) | untracked | `usb_config.h` has no BOS descriptor (bcdUSB 2.00). Not checked on Windows. |
 | USB serial number made from the chip's unique ID ([BRINGUP][bringup], step 2) | untracked | The serial number is always `001`. |
@@ -172,7 +172,7 @@ wants the UART's RX pin.
 | `info` | partly | `tools/badge.py list` gives the items, what runs, the boot item and the app API. |
 | `name TEXT` | replaced: [#2] | `tools/badge.py name TEXT`. |
 | `show N` | replaced: [#1] | `tools/badge.py run N`. |
-| `level N` | untracked | No way to set the brightness over USB (see above). |
+| `level N` | replaced | `tools/badge.py brightness N` (1 .. 255), and the web interface. |
 | `hello` | partly: [#37] | SAY HI in the menu. No USB command. |
 | `test` | tracked: [#11] | |
 | `factory` | replaced: [#59] | `tools/badge.py factory` (USB command `0x52`). |
@@ -302,12 +302,12 @@ Some may be out of date for the current hardware revision.
 Candidates for new issues. None of them is opened yet. Each needs a
 decision first: is it worth the flash, and is it worth the work?
 
-1. **Brightness over USB.** A USB command to set the brightness, in the
-   web interface and in `tools/badge.py`. The old setup page and
-   `level N` had it.
-2. **Brightness on the badge.** A lower start brightness for a new badge
-   (the old firmware started at 12.5 %), and the level on the grid in
-   BRIGHTNESS.
+1. **Brightness over USB.** Done: the USB command BRIGHTNESS
+   (`webusb_protocol.h`), in the web interface and in `tools/badge.py`,
+   as the old setup page and `level N` had it.
+2. **Brightness on the badge.** Done: a new badge starts at 12.5 %, as
+   the old firmware did, and BRIGHTNESS shows the level on the grid, as
+   B / D outside apps do for a second (`menu.c`, `ledmatrix.c`).
 3. **Browse without the menu.** C (or C / D) on the name tag steps
    through the items, as ◀ / ▶ did.
 4. **A boot ROM chord.** C + D for 3 s reboots into the boot ROM, so a

@@ -45,6 +45,13 @@ static void fill_halves(uint8_t top, uint8_t bottom) {
 #define MENU_HOLD_MS 700
 #define MENU_HOLD_APP_MS 1000
 
+// A badge that has never saved a brightness starts at 32 of 255 (12.5 %),
+// as the old firmware did: full brightness dazzles and drains the battery
+#define START_BRIGHTNESS 32
+
+// B or D outside apps: the brightness level shows this long over what runs
+#define LEVEL_SHOW_MS 1000
+
 // What the LEDs showed when the menu opened, to put back when it closes
 static uint8_t s_saved_leds[LED_MATRIX_ROWS * LED_MATRIX_COLS];
 
@@ -100,8 +107,8 @@ int main(void) {
     Power_Init();
 
     Persist_Init();
-    // the brightness from last time (B / D or an app set it); full the first time
-    LEDMatrix_SetBrightness(Persist_Brightness() ? Persist_Brightness() : 255);
+    // the brightness from last time (B / D, the host or an app set it)
+    LEDMatrix_SetBrightness(Persist_Brightness() ? Persist_Brightness() : START_BRIGHTNESS);
 
     // Start the boot item from the store, unless a button is held: then
     // the badge starts without it (in case it is an app that hangs).
@@ -126,11 +133,15 @@ int main(void) {
     uint32_t hold_ms = 0;   // how long A has been down
     uint8_t last_mode = 0;  // to start the name tag when it comes on
     bool menu_open = false;
+    uint32_t level_ms = 0;     // the brightness level shows this much longer
+    bool level_drawn = false;  // the previous pass drew it over what runs
     bool greeting = false;  // greet.h has the LEDs; what they showed before is saved
     uint8_t menu_mode = 0, menu_item = STORE_NONE;  // what ran when it opened
 
     while (1) {
         LEDMatrix_Show();  // what the previous pass drew (the app, the menu, the name tag, the host)
+        if (level_drawn) restore_leds();  // what runs keeps its own frame
+        level_drawn = false;
         WebUSB_HandleCommand();
         uint8_t run = WebUSB_TakeRunRequest();
         if (run != STORE_NONE) run_item(run);
@@ -140,6 +151,7 @@ int main(void) {
 
         uint32_t elapsed_ms = (funSysTick32() - last_tick) / DELAY_MS_TIME;
         last_tick += elapsed_ms * DELAY_MS_TIME;
+        level_ms = level_ms > elapsed_ms ? level_ms - elapsed_ms : 0;
 
         // keep what the host, the app or the buttons changed
         Persist_SetBrightness(LEDMatrix_GetBrightness());
@@ -270,6 +282,9 @@ int main(void) {
         if (buttons & HH_BTN_B) Menu_StepBrightness(1);
         if (buttons & HH_BTN_D) Menu_StepBrightness(-1);
 
+        // and the level shows for a moment (at the end of the pass)
+        if (buttons & (HH_BTN_B | HH_BTN_D)) level_ms = LEVEL_SHOW_MS;
+
         infrared_nec_message_t message;
         while (infrared_receive(&message)) {
             if (message.address != IR_ADDRESS || message.repeat) continue;
@@ -294,6 +309,16 @@ int main(void) {
             Nametag_Tick(elapsed_ms);
         }
         last_mode = g_app_mode;
+        // The brightness level goes over the frame only for the next
+        // LEDMatrix_Show(): then what was under it comes back, so what runs
+        // needs to draw nothing again when the level goes. The saved LEDs
+        // are free here: the menu and a greeting keep them only while they
+        // are on, and neither is on at the end of this pass.
+        if (level_ms) {
+            save_leds();
+            Menu_DrawBrightness();
+            level_drawn = true;
+        }
 
         Delay_Ms(TICK_MS);
     }

@@ -518,8 +518,10 @@ static void panel(void) {
     unsigned f = frames;
     mock_ms += 5000;
     tick(5000);
+    mock_tick_end();
     mock_ms += 5;
     tick(5);
+    mock_tick_end();
     CHECK(S.last_frame == mock_ms - 5, "C22 after a 5 s pause: one frame, not a burst");
     (void)f;
 

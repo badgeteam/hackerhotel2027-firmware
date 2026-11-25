@@ -15,10 +15,12 @@
 // MOCK_OVERDRAW=all also lists, without failing, the pixels the octagon's
 // corners or the grid's edges clip and the text's gaps lit afterwards.
 // A text used as a mask is not checked: the pixels of a text that the app
-// read back with get() and then wiped with clear(), in the same tick, were
-// never shown (the name tag draws its text at 255, reads it back, clears,
-// and its style shades every pixel from that). A get() alone, or a clear()
-// alone, still counts as drawing over the text.
+// read back with get() and then wiped with clear(), in the same tick, are
+// forgotten (the name tag draws its text at 255, reads it back, clears,
+// and its style shades every pixel from that). The check then cannot see
+// what the app draws over the shaded text later in that tick: the name
+// tag's rings (ring() in apps/nametag/nametag.c) are not checked. A get()
+// alone, or a clear() alone, still counts as drawing over the text.
 #pragma once
 #include <stdio.h>
 #include <stdlib.h>
@@ -174,14 +176,14 @@ typedef struct {
     unsigned long tick;  // the last tick that counted in frames
 } od_find_t;
 static od_find_t* od_finds;
-static int od_nfinds, od_lost;
+static int od_nfinds, od_lost, od_lost_info;  // lost: entries of texts drawn over, which fail; info: the others
 static od_find_t* od_find(int kind, const char* t, int x, int y, uint8_t v, const void* writer, const char* how) {
     if (!od_finds) od_finds = calloc(OD_FINDS, sizeof *od_finds);
     for (int i = 0; i < od_nfinds; i++) {
         od_find_t* f = &od_finds[i];
         if (f->kind == kind && f->app == mock_app && f->x == x && f->y == y && f->v == v && f->writer == writer && !strcmp(f->t, t)) return f;
     }
-    if (od_nfinds == OD_FINDS) return od_lost++, NULL;
+    if (od_nfinds == OD_FINDS) return kind ? od_lost_info++ : od_lost++, NULL;
     od_find_t* f = &od_finds[od_nfinds++];
     f->kind = kind, f->app = mock_app, f->x = x, f->y = y, f->v = v, f->writer = writer, f->how = how;
     snprintf(f->t, sizeof f->t, "%s", t);
@@ -232,7 +234,7 @@ static void od_report(void) {
     if (!od_enabled()) return;
     const char* prog = strrchr(MOCK_APP, '/') ? strrchr(MOCK_APP, '/') + 1 : MOCK_APP;
     printf("OVERDRAW %s: %lu ticks, %d overwritten text entries%s\n", prog, od_ticks, od_overwritten() - od_lost,
-           od_lost ? " (table full, some lost)" : "");
+           od_lost || od_lost_info ? " (table full, some lost)" : "");
     static const char* what[] = {"OVERWRITTEN", "OCTAGON", "OFF-GRID", "IN-GAPS"};
     for (int kind = 0; kind < (od_on > 1 ? 4 : 1); kind++)
         for (int i = 0; i < od_nfinds; i++) {

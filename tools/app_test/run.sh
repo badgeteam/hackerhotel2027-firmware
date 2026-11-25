@@ -30,8 +30,9 @@ cc -std=gnu11 -Wall -Wextra -O1 -fsanitize=address,undefined -I"$root" -I"$root/
 for d in "$root"/apps/*/; do
     a=$(basename "$d")
     [ -f "$d$a.c" ] || continue
+    more=$(ls "$d"*.c | grep -v "/$a\.c\$" || true)  # an app of more files (nametag: styles.c)
     cc -std=gnu11 -Wall -Wextra -O1 -g -I"$root" -I"$root/apps" -DAPP_FILE="\"$d$a.c\"" -DMOCK_APP="\"$a\"" \
-        -o "$out/od_$a" "$here/overdraw_run.c" "$root/layout.c" -lm
+        -o "$out/od_$a" "$here/overdraw_run.c" $more "$root/layout.c" -lm
     "$out/od_$a" 2
 done
 make -s -C "$root/apps" clean all >/dev/null  # only the apps of this checkout

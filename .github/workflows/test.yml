@@ -2,7 +2,8 @@
 # request and on main: tools/*/run.sh, the emulator's RV32 interpreter test
 # and the web flasher's test. It also checks that the layout tables are
 # what tools/gen_layout.py makes from webui/board_data.js. The toolchain is Ubuntu's, as ch32fun's own CI
-# uses.
+# uses. tools/board_test compares webui/board_data.js with the KiCad board,
+# fetched from the public hardware repository.
 name: Tests
 
 on:
@@ -53,6 +54,17 @@ jobs:
 
       - name: Apps
         run: make -C apps
+
+      # For tools/board_test: the public hardware repository, at the commit
+      # tools/extract_board_data.py names (HW_REV). An anonymous fetch: it
+      # needs no token and no permission beyond the block above.
+      - name: Hardware board
+        run: |
+          rev=$(python3 -c 'import sys; sys.path.insert(0, "tools"); import extract_board_data as e; print(e.HW_REV)')
+          test -n "$rev"
+          git init -q "$RUNNER_TEMP/hw"
+          git -C "$RUNNER_TEMP/hw" fetch -q --depth 1 https://github.com/badgeteam/hackerhotel2027-hardware "$rev"
+          echo "HH27_HW=$RUNNER_TEMP/hw" >> "$GITHUB_ENV"
 
       - name: Tests
         run: |

@@ -139,8 +139,18 @@ int main(void) {
     run(FRAME_MS, 0);
     int unlike = 0;
     for (int j = 0; j < HH_EDGE_COUNT; j++) unlike += mock_leds[layout_edge[j]] != mock_leds[layout_edge[0]];
-    CHECK(unlike == 0 && mock_leds[layout_edge[0]] > 0 && mock_leds[layout_edge[0]] <= 40, "no timer: the outline glows (%d, %d unlike)",
+    CHECK(unlike == 0 && mock_leds[layout_edge[0]] >= 25 && mock_leds[layout_edge[0]] <= 60, "no timer: the outline glows (%d, %d unlike)",
           mock_leds[layout_edge[0]], unlike);
+    // ... and fades: after gamma it passes many levels, not two or three
+    uint8_t levels[256] = {0};
+    int nlevels = 0;
+    for (int i = 0; i < 128; i++) {
+        run(FRAME_MS, 0);
+        uint8_t g = layout_gamma[mock_leds[layout_edge[0]]];
+        if (!levels[g]++) nlevels++;
+    }
+    CHECK(nlevels >= 8, "the glow fades through %d levels", nlevels);
+    idle = 0;  // that was not the player standing still
 
     // Standing still in the first maze: no time is up, but a minute
     // without a button ends the game

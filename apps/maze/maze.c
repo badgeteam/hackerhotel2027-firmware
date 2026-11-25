@@ -194,7 +194,7 @@ static void draw(void) {
     }
     // No timer: the outline glows, slowly brighter and dimmer
     if (!limit) {
-        uint8_t v = (uint8_t)(8 + hh->sin8((uint8_t)(t * 2)) * 24 / 255);
+        uint8_t v = (uint8_t)(25 + hh->sin8((uint8_t)(t * 2)) * 35 / 255);  // after gamma 2 .. 11 of 255
         for (int j = 0; j < HH_EDGE_COUNT; j++) hh->set(hh->edge[j], v);
         return;
     }

@@ -10,6 +10,7 @@ static void run(uint32_t ms, uint8_t pressed) {
     mock_ms += ms;
     mock_pressed_now = pressed;
     tick(ms);
+    mock_tick_end();
     mock_pressed_now = 0;
 }
 
@@ -49,7 +50,16 @@ static void hold(uint8_t key, uint32_t ms) {
     run(10, 0);
 }
 
+// Text pixels that something drew over after the text, in the same tick:
+// the mock's overdraw report (on for this test, see mock_hh.h)
+static int overdrawn(void) {
+    int n = 0;
+    for (int i = 0; i < od_nfinds; i++) n += od_finds[i].kind == 0 || od_finds[i].kind == 3;
+    return n;
+}
+
 int main(void) {
+    if (!od_enabled()) od_on = 1;  // without MOCK_OVERDRAW=1: count, but print no report
     init(&mock_api);
     run(10, 0);
     CHECK(hits == 0 && shots == SHOTS && lit_grid() > 40, "it opens with the banana (%d LEDs), 5 shots", lit_grid());
@@ -115,5 +125,18 @@ int main(void) {
     byte('\n');
     for (int i = 0; i < 200 && text_len; i++) run(50, 0);
     CHECK(text_len == 0, "a newline: it scrolls once more, then goes");
+
+    // a shot's ring under the team's name and the credits: the text stays whole
+    run(10, HH_BTN_D);
+    run(10, 0);
+    run(10, HH_BTN_B);
+    for (int i = 0; i < 30; i++) run(20, 0);
+    run(600, 0);  // the name is gone
+    credit_ms = CREDIT_EVERY_MS + 1000;
+    run(10, HH_BTN_B);
+    for (int i = 0; i < 30; i++) run(20, 0);
+    CHECK(mock_shots_sent == 8 && strstr(mock_text, "ANESIDORA"), "B under the team's name and the credits (%u sent, %s)",
+          mock_shots_sent, mock_text);
+    CHECK(!overdrawn(), "no ring drew over the text (%d entries; MOCK_OVERDRAW=1 lists them)", overdrawn());
     return mock_report("banana");
 }

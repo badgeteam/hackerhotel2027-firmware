@@ -73,7 +73,10 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   of printable ASCII. `x` and `y` may be off the grid, which makes
   scrolling easy. It returns the width; `text_width(text)` gives the same
   without drawing. Each character takes 6 columns (`HH_FONT_ADVANCE`). The grid is 17 wide, so about 3
-  characters fit at a time. Snake uses it to show the score.
+  characters fit at a time. Snake uses it to show the score. Draw the
+  text last, or leave the grid around it dark: anything set on the grid
+  after it in the same tick (walls, effects) cuts pixels out of it.
+  `tools/app_test/run.sh` fails when an app does that.
 - **Infrared.** `ir_send()` and `ir_receive()` send and get NEC frames,
   as a remote control sends. `ir_send_packet(type, data, length)` and
   `ir_receive_packet()` send and get packets from badge to badge: a type

@@ -3,7 +3,7 @@
   {
    "name": "BANANA",
    "file": "banana.hhapp",
-   "bytes": 2076,
+   "bytes": 2108,
    "api": 6,
    "description": "Banana: the badge joins the Hacker Hotel 2025 banana game (thanks, Anesidora team!), by the banana's rules. Shoot it with a banana or a Fri3d Camp 2022 Time Blaster: a hit sends a ring out in the shooter's colour, and 5 hits is GAME OVER (hold B to play again). You can't shoot your own team. It shoots back: B shoots (5 shots, the arms show them), C reloads, D picks the badge's team, hold D to give a banana that team. Text typed into a banana's serial port scrolls by.",
    "recommended": true
@@ -147,7 +147,7 @@
   {
    "name": "STARTRIS",
    "file": "startris.hhapp",
-   "bytes": 3228,
+   "bytes": 3232,
    "api": 6,
    "description": "Startris: a 9-wide, 14-deep well in the middle of the octagon. C / D move the piece (hold to repeat), tap A to rotate, B drops it. Full rows clear; the more lines, the faster the pieces fall. The arms show the next piece's colour and fill with the lines you cleared. When a new piece has no room, the game is over: the grid shows the lines, the outline the best (kept on the badge), and any button starts again. Until the first button the badge plays a demo, placing each piece where it scores best, and it goes back to that 15 s after a game. As in the previous firmware's Startris.",
    "recommended": true

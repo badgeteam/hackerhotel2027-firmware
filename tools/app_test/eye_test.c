@@ -2,7 +2,9 @@
 // every mood shows what it should (a wink shuts and flashes, sleepy sleeps
 // and startles, suspicious squints, dizzy spins its lashes, angry frowns
 // red, surprised flashes white without shutting) and ends, B starts a mood,
-// and a long run has blinks, a wide pupil and moods by itself.
+// a banana's shots set a mood (surprised, then angry; love; a wink) and
+// flash the lashes in the shooter's team colour, and a long run has blinks,
+// a wide pupil and moods by itself.
 #include "mock_hh.h"
 #include "../../apps/eye/eye.c"
 
@@ -19,6 +21,7 @@ static void reset(void) {
     again = false;
     ir_ms = 0;
     level_shown = 0;
+    shot_left = shot_team = 0;
     mood = last = MOOD_NONE;
     init(&mock_api);
 }
@@ -29,6 +32,33 @@ static int row(int r) {
     int s = 0;
     for (int c = 0; c < HH_GRID_W; c++) s += px(r, c);
     return s;
+}
+
+// This long in 5 ms ticks, every frame run
+static void wait(uint32_t ms) {
+    for (uint32_t i = 0; i < ms; i += 5) run(5, 0);
+}
+
+// A banana shot from this team, then a frame
+static void shot(uint8_t command, uint8_t team) {
+    mock_shot = (hh_ir_shot_t){team, 1, command, 0};
+    mock_shot_pending = true;
+    wait(40);
+}
+
+// How many lashes show the colour c (r, g, b of 0 or 1) now, and how many are lit
+static int lashes(int r, int g, int b, int* lit) {
+    int n = 0;
+    *lit = 0;
+    for (int i = 0; i < HH_RGB_COUNT; i++) {
+        uint8_t q[3];
+        mock_rgb(i, q);
+        int hi = imax(q[0], imax(q[1], q[2]));
+        if (hi < 40) continue;
+        ++*lit;
+        n += (q[0] > hi / 2) == r && (q[1] > hi / 2) == g && (q[2] > hi / 2) == b;
+    }
+    return n;
 }
 
 static const char* const names[MOOD_COUNT] = {
@@ -162,6 +192,82 @@ int main(void) {
     mock_ir_pending = true;
     run(5, 0);
     CHECK(mood == MOOD_WINK, "let go, then 3: wink (%s)", names[mood]);
+
+    // a banana: shot, it is surprised; shot again while surprised, angry;
+    // the lashes flash the shooter's team colour for about a second
+    struct { uint8_t team; int r, g, b; const char* what; } teams[] = {
+        {0, 1, 0, 0, "red"}, {1, 0, 1, 0, "green"}, {2, 0, 0, 1, "blue"}, {3, 1, 1, 0, "yellow"},
+        {4, 1, 0, 1, "magenta"}, {5, 0, 1, 1, "light blue"},
+    };
+    for (unsigned i = 0; i < sizeof teams / sizeof teams[0]; i++) {
+        reset();
+        run(500, 0);
+        shot(HH_SHOT_SHOOT, teams[i].team);
+        CHECK(mood == MOOD_SURPRISED, "shot by %s: surprised (%s)", teams[i].what, names[mood]);
+        int most = 0, lit = 0;
+        for (int k = 0; k < 30; k++) {
+            wait(35);
+            int l, n = lashes(teams[i].r, teams[i].g, teams[i].b, &l);
+            if (n > most) most = n, lit = l;
+        }
+        CHECK(most > 0 && most == lit, "shot by %s: the lashes flash %s (%d of %d)", teams[i].what,
+              teams[i].what, most, lit);
+    }
+    // surprised by something else (B, a remote): a first shot keeps it surprised
+    reset();
+    run(500, 0);
+    now(MOOD_SURPRISED);
+    shot(HH_SHOT_SHOOT, 0);
+    CHECK(mood == MOOD_SURPRISED && shot_left > 0, "surprised, then a first shot: surprised on (%s)", names[mood]);
+    reset();
+    run(500, 0);
+    shot(HH_SHOT_SHOOT, 5);
+    int lashes_lit;
+    wait(1550);
+    CHECK(shot_left < 5 * FPS - FPS, "and the flash is over after a second (%d)", shot_left);
+    CHECK(lashes(0, 1, 1, &lashes_lit) < lashes_lit, "the lashes their own colours again");
+    shot(HH_SHOT_SHOOT, 3);
+    CHECK(mood == MOOD_ANGRY, "shot again within 5 s: angry (%s)", names[mood]);
+    uint32_t angry = mt;
+    wait(1000);
+    shot(HH_SHOT_SHOOT, 3);
+    CHECK(mood == MOOD_ANGRY && mt > angry + 20, "shot while angry: angry on (%s, %u frames in)", names[mood],
+          (unsigned)mt);
+    // a second shot after the surprise is over, but within 5 s: angry
+    reset();
+    run(500, 0);
+    shot(HH_SHOT_SHOOT, 0);
+    wait(3000);
+    CHECK(mood == MOOD_NONE, "the surprise is over (%s)", names[mood]);
+    wait(1000);
+    shot(HH_SHOT_SHOOT, 0);
+    CHECK(mood == MOOD_ANGRY, "shot again 4 s later: angry (%s)", names[mood]);
+    // but after more than 5 s it is only surprised again
+    reset();
+    run(500, 0);
+    shot(HH_SHOT_SHOOT, 0);
+    wait(6000);
+    shot(HH_SHOT_SHOOT, 0);
+    CHECK(mood == MOOD_SURPRISED, "shot again 6 s later: surprised (%s)", names[mood]);
+    // a heal: love, and healed again it goes on; a team: a wink
+    reset();
+    run(500, 0);
+    shot(HH_SHOT_HEAL, 1);
+    CHECK(mood == MOOD_LOVE && shot_left == 0, "healed: love, no flash (%s)", names[mood]);
+    wait(1000);
+    uint32_t love = mt;
+    shot(HH_SHOT_HEAL, 1);
+    CHECK(mood == MOOD_LOVE && mt > love, "healed again: love goes on (%u, then %u frames in)", (unsigned)love,
+          (unsigned)mt);
+    reset();
+    run(500, 0);
+    shot(HH_SHOT_TEAM, 4);
+    CHECK(mood == MOOD_WINK, "given a team: a wink (%s)", names[mood]);
+    // a byte of text: nothing
+    reset();
+    run(500, 0);
+    shot(HH_SHOT_BYTE, 2);
+    CHECK(mood == MOOD_NONE && shot_left == 0, "a text byte: nothing (%s)", names[mood]);
 
     reset();
     bool never = true;

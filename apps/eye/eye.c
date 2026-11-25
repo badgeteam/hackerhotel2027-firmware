@@ -7,7 +7,9 @@
 // a mood:
 // 3 wink, 4 eye roll, 5 dizzy, 6 sleepy, 7 suspicious, 8 angry, 9 surprised,
 // 0 hypnotised, red crazy, blue crying, yellow laughing, green one at random;
-// and 1 or 2: it falls in love, which it never does by itself.
+// and 1 or 2: it falls in love, which it never does by itself. A banana: a
+// shot surprises it, a second one soon after makes it angry, and the lashes
+// flash the shooter's team colour; a heal: love; a team: a wink.
 #include "hhapp.h"
 
 // The eye thinks in frames: 30 a second, stepped from the 5 ms ticks
@@ -41,6 +43,9 @@
 // Samsung TV remote: volume up and down set the brightness
 #define SAMSUNG_VOL_UP 0x07
 #define SAMSUNG_VOL_DOWN 0x0B
+// A banana shot within this many frames of the one before makes it angry;
+// the lashes flash the shooter's team colour for the first second of them
+#define SHOT_AGAIN (5 * FPS)
 
 typedef enum {
     MOOD_NONE,
@@ -55,7 +60,7 @@ typedef enum {
     MOOD_CRYING,      // sad lids, looking down, tears falling, blue tears running down the lower arms
     MOOD_CRAZY,       // the pupil twitches and jumps, the lids out of step, the lashes flicker
     MOOD_LAUGHING,    // the eye squeezed into a bobbing ^, golden lashes bouncing
-    MOOD_LOVE,        // a beating heart for a pupil, pink lashes: only from a Samsung remote
+    MOOD_LOVE,        // a beating heart for a pupil, pink lashes: only from a Samsung remote or a banana
     MOOD_COUNT
 } mood_t;
 
@@ -100,6 +105,8 @@ static uint8_t tear_c[TEARS];   // a tear's column + 1; 0 = no tear
 static int tear_y[TEARS], tear_v[TEARS];  // its height, and its speed in 1/4
 static uint32_t ir_ms;          // when the last IR frame came in
 static uint8_t level_shown;     // frames the outline still shows the brightness
+static uint8_t shot_left;       // frames left of SHOT_AGAIN after a banana shot
+static uint8_t shot_team;       // the shooter's team
 
 // Samsung TV remote (Samsung32) keys, by their command; MOOD_NONE: at random
 static const uint8_t samsung_keys[][2] = {
@@ -108,6 +115,10 @@ static const uint8_t samsung_keys[][2] = {
     {0x0E, MOOD_SURPRISED}, {0x11, MOOD_HYPNO},     {0x6C, MOOD_CRAZY},     {0x16, MOOD_CRYING},
     {0x15, MOOD_LAUGHING}, {0x14, MOOD_NONE},
 };
+
+// The banana's team colours, as hues: red, green, blue, yellow, magenta,
+// light blue, then white (no colour) and orange
+static const uint8_t team_hue[8] = {0, 86, 165, 36, 222, 140, 0, 15};
 
 // ---------------------------------------------------------------- helpers
 
@@ -522,6 +533,7 @@ static void draw(void) {
         int lit = HH_EDGE_COUNT * (hh->step_brightness(0) + 1) / HH_BRIGHTNESS_LEVELS;
         for (int i = 0; i < lit; i++) hh->set(hh->edge[i], 160);
     }
+    if (shot_left) shot_left--;
 
     // lashes: upper ones on the top three arms, lower ones on the bottom two;
     // they fold in with the lids and spring out again
@@ -536,7 +548,10 @@ static void draw(void) {
         uint8_t cover = (uint8_t)clamp(len - l->rank * 256, 0, 255);
         if (!cover) continue;
         uint8_t v = scale((uint8_t)(255 - l->rank * 22), cover);
-        rgb_t col = lash(hsv((uint8_t)(hue + l->rank * 9 + (upper ? 0 : 40)), 220, v), l, v, ou);
+        // shot: they flash the shooter's team colour
+        rgb_t col = shot_left > SHOT_AGAIN - FPS && shot_left & 4
+                        ? hsv(team_hue[shot_team], shot_team == 6 ? 0 : 255, v)
+                        : lash(hsv((uint8_t)(hue + l->rank * 9 + (upper ? 0 : 40)), 220, v), l, v, ou);
         hh->set_rgb(i, col.r, col.g, col.b);
     }
 }
@@ -578,6 +593,17 @@ static void tick(uint32_t elapsed_ms) {
         if (ir.command == SAMSUNG_VOL_DOWN) brighter(-1);
         for (unsigned i = 0; i < sizeof samsung_keys / sizeof samsung_keys[0]; i++)
             if (samsung_keys[i][0] == ir.command) now(samsung_keys[i][1] == MOOD_NONE ? pick() : (mood_t)samsung_keys[i][1]);
+    }
+    // a banana: shot, it flinches, and the lashes flash the shooter's team
+    hh_ir_shot_t s;
+    while (hh->ir_receive_shot(&s)) {
+        if (s.command == HH_SHOT_SHOOT) {
+            now(shot_left ? MOOD_ANGRY : MOOD_SURPRISED);  // a second shot within 5 s: angry
+            shot_left = SHOT_AGAIN;
+            shot_team = s.team & 7;
+        }
+        if (s.command == HH_SHOT_HEAL) now(MOOD_LOVE);
+        if (s.command == HH_SHOT_TEAM) now(MOOD_WINK);
     }
     acc += elapsed_ms * FPS;
     if (acc < 1000) return;

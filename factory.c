@@ -17,7 +17,12 @@ static const char* const NAME[STEPS] = {"LED", "ROW", "KEY", "USB", "IR"};
 #define USB_TIMEOUT_MS 10000
 #define USB_STEADY_MS 1000
 #define IR_EVERY_MS 1000
-#define IR_TIMEOUT_MS 10000
+#define IR_TIMEOUT_MS 10000  // then IR? (a hand in front helps)
+#define IR_FAIL_MS 30000     // nothing heard at all: IR fails
+#define LED_MS 4500          // LED: 1.5 s white, then 1 s each red, green, blue
+#ifndef FACTORY_KEYS
+#define FACTORY_KEYS 1       // 0 (make FACTORY_KEYS=0): no KEY step, the test runs on its own
+#endif
 #define PASS_MS 3000
 #define LEAVE_MS 3000       // hold A + B this long: leave the test
 #define TEST_TYPE 'T'       // the IR test packet's type
@@ -65,7 +70,7 @@ static void start(uint8_t step) {
 
 static void next(void) {
     if (s_step < STEPS - 1) {
-        start(s_step + 1);
+        start(s_step + 1 == KEY && !FACTORY_KEYS ? KEY + 1 : s_step + 1);
         return;
     }
     infrared_set_loopback(false);
@@ -159,14 +164,12 @@ factory_status_t Factory_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held
                 unsigned c = (ph - 1500) / 1000;
                 arms(c == 0 ? 255 : 0, c == 1 ? 255 : 0, c == 2 ? 255 : 0);
             }
-            if (pressed & HH_BTN_B) next();
-            else if (pressed & HH_BTN_A) fail("marked bad (A)");
+            if (t >= LED_MS) next();  // look: all lit, the right colours?
             break;
         }
         case ROW:
             draw_row(t);
-            if (pressed & HH_BTN_B) next();
-            else if (pressed & HH_BTN_A) fail("marked bad (A)");
+            if (t >= (HH_ROWS + HH_COLS) * ROW_MS) next();  // once through: one line at a time, never two?
             break;
         case KEY:
             for (int i = 0; i < 4; i++) {
@@ -202,12 +205,7 @@ factory_status_t Factory_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held
                 // nothing heard yet: keep listening, and ask
                 center("IR?", 2, blink ? 255 : 90);
                 arms(255, 120, 0);
-                if (pressed & HH_BTN_B) {
-                    debug_log("factory IR passed by B", NULL);
-                    next();
-                    break;
-                }
-                if (pressed & HH_BTN_A) {
+                if (t >= IR_FAIL_MS) {
                     fail("nothing heard");
                     break;
                 }

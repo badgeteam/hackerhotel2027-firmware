@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """The factory test (factory.c) on the emulator (tools/emu/headless.py),
 started over USB as on a freshly flashed badge: each step's name, LED and
-ROW passed with B (and A failing a step, B trying it again), KEY with all
-four buttons, USB, IR on its own echo, OK, then the badge again. Holding
-A + B leaves the test.
+ROW going on by themselves, KEY failing without all four buttons and B
+trying it again, USB, IR on its own echo, OK, then the badge again.
+Holding A + B leaves the test.
 
   python3 tools/factory_test/emu_factory_test.py
 """
@@ -50,29 +50,25 @@ def run(e):
     check(wait_for(lambda: shows_still(e.wait_frames(), "LED"), 2), "USB 0x52 starts it: LED")
     time.sleep(1.2)
     check(lit(e) >= 370, "LED: every LED on (%d lit)" % lit(e))
-    e.press(BTN_A)
-    check(wait_for(lambda: logged(e, "factory FAIL LED"), 1), "A fails the step")
-    e.press(BTN_B)
-    check(wait_for(lambda: shows_still(e.wait_frames(), "LED"), 1), "B tries it again")
+    e.buttons(BTN_A)  # A held: no menu, and LED goes on by itself
     time.sleep(1.2)
-    e.press(BTN_B)
-    check(wait_for(lambda: shows_still(e.wait_frames(), "ROW"), 1), "B passes it: ROW")
+    e.buttons(0)
+    check(not logged(e, "factory FAIL"), "A does nothing in LED (and opens no menu)")
+    check(wait_for(lambda: logged(e, "factory ROW"), 5), "LED goes on to ROW by itself")
     time.sleep(1.3)
     n = lit(e)
     check(n in (16, 24), "ROW: one line at a time (%d lit)" % n)
-    e.buttons(BTN_A)  # A held: no menu during the test
-    time.sleep(1.2)
-    e.buttons(0)
-    check(logged(e, "factory FAIL ROW"), "A in ROW fails it (and opens no menu)")
-    e.press(BTN_B)
-    time.sleep(1.2)
-    e.press(BTN_B)
-    check(wait_for(lambda: shows_still(e.wait_frames(), "KEY"), 1), "KEY")
+    check(wait_for(lambda: logged(e, "factory KEY"), 7), "ROW goes on to KEY by itself")
     time.sleep(1.2)
     for b in (BTN_C, BTN_A, BTN_D):
         e.press(b)
     check(not logged(e, "factory USB"), "three of four buttons: not yet")
+    check(wait_for(lambda: logged(e, "factory FAIL KEY: missing: . B . ."), 22), "20 s without B: KEY fails, B missing")
     e.press(BTN_B)
+    check(wait_for(lambda: shows_still(e.wait_frames(), "KEY"), 1), "B tries KEY again")
+    time.sleep(1.2)
+    for b in (BTN_A, BTN_B, BTN_C, BTN_D):
+        e.press(b)
     check(wait_for(lambda: logged(e, "factory USB"), 1), "all four: USB")
     check(wait_for(lambda: logged(e, "factory IR"), 4), "USB power for a second: IR")
     check(wait_for(lambda: logged(e, "factory PASS"), 4), "IR hears its own echo: PASS")

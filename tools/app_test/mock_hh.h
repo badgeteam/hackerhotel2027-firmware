@@ -397,13 +397,19 @@ static bool m_ir_receive_packet(hh_ir_packet_t* p) {
 
 // IR packets the app sent: the first 64 and when (mock_ms); mock_sent_n
 // counts them all. While mock_tx_busy, send fails as when the transmitter
-// is busy.
+// is busy. With mock_air, a packet keeps the transmitter busy for its air
+// time at the slowest (hhapp.h: 6.75 ms + 2.2 ms per bit), until
+// mock_tx_free; set mock_tx_free = mock_ms when turning it on.
 static hh_ir_packet_t mock_sent[64];
 static uint32_t mock_sent_ms[64];
 static unsigned mock_sent_n;
-static bool mock_tx_busy;
+static bool mock_tx_busy, mock_air;
+static uint32_t mock_tx_free;
+__attribute__((unused)) static uint32_t mock_airtime(unsigned n) { return 7 + (n + 3) * 176 / 10; }
 static bool m_ir_send_packet(uint8_t type, const void* d, uint8_t n) {
     if (mock_tx_busy || n > HH_IR_PACKET_MAX) return false;
+    if (mock_air && (int32_t)(mock_ms - mock_tx_free) < 0) return false;
+    if (mock_air) mock_tx_free = mock_ms + mock_airtime(n);
     if (mock_sent_n < 64) {
         hh_ir_packet_t* p = &mock_sent[mock_sent_n];
         p->type = type, p->length = n;

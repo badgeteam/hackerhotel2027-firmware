@@ -32,7 +32,7 @@ static void fresh(const char* name, uint32_t start) {
     memset(mock_data, 0, sizeof mock_data);
     mock_data_len = mock_saves = 0;
     mock_sent_n = mock_in_n = mock_shotq_n = 0;
-    mock_shot_pending = mock_tx_busy = mock_save_fail = false;
+    mock_shot_pending = mock_tx_busy = mock_air = mock_save_fail = false;
     mock_held_now = 0;
     mock_log[0] = 0;
     mock_brightness = 255;
@@ -216,12 +216,12 @@ static void friends(void) {
     // C8: the beacon, again 20 .. 30 s later, a HELLO within 15 s
     fresh("ALICE", 0);
     run(3000, 0);
-    CHECK(mock_sent_n >= 1 && mock_sent[0].type == 'R' && mock_sent[0].length == 7 && !memcmp(mock_sent[0].data, "ALICE\0\x1F", 7),
-          "C8 a beacon 'R' ALICE + NUL + 0x1F within 3 s");
+    CHECK(mock_sent_n >= 1 && mock_sent[0].type == 'N' && mock_sent[0].length == 7 && !memcmp(mock_sent[0].data, "ALICE\0\x1F", 7),
+          "C8 a beacon 'N' ALICE + NUL + 0x1F within 3 s");
     run(32000, 0);
     int r = -1;
     for (unsigned i = 1; i < mock_sent_n && r < 0; i++)
-        if (mock_sent[i].type == 'R') r = (int)i;
+        if (mock_sent[i].type == 'N') r = (int)i;
     CHECK(r > 0 && mock_sent_ms[r] - mock_sent_ms[0] >= 20000 && mock_sent_ms[r] - mock_sent_ms[0] <= 30005,
           "C8 the next beacon 20 .. 30 s later (%u ms)", r > 0 ? mock_sent_ms[r] - mock_sent_ms[0] : 0);
     int h = -1;
@@ -254,20 +254,28 @@ static void friends(void) {
     packet('R', "BOB\0\x13", 5);
     run(100, 0);
     CHECK(S.sv.met == 1 && mock_saves == saves && !S.npop, "C10 BOB again: still 1, nothing saved, no popup");
+    run(11 * 60000, 0);
+    packet('N', "BOB\0\x13", 5);
+    run(40, 0);
+    CHECK(S.sv.met == 1 && !strcmp(S.shown, "HI BOB"), "C10 BOB back after 11 min: a hello (%s), still 1", S.shown);
+    run(5000, 0);
     reinit();
     packet('R', "bob", 3);
-    CHECK(S.sv.met == 1 && mock_saves == saves, "C10 after a power cycle, bob: still 1, nothing saved");
     run(40, 0);
-    CHECK(!strcmp(S.shown, "HI bob"), "C10 but a hello (%s)", S.shown);
+    CHECK(S.sv.met == 1 && mock_saves == saves && !S.npop && !strcmp(S.fr[0].name, "bob"),
+          "C10 after a power cycle, bob: still 1, nothing saved, no hello (it may never have left), in the table");
 
     // C11: not counted
     fresh("ALICE", 0);
     packet('R', "ALICE\0\x1F", 7);
-    packet('R', "alice", 5);
+    packet('N', "alice", 5);
     packet('R', "", 0);
-    packet('H', "\x01" "AB", 3);
-    packet('R', "A\xC3" "B", 3);
-    CHECK(S.sv.met == 0 && !S.fr[0].name[0] && !S.reply_pending, "C11 own name, empty, bad bytes: nothing learned (met %d)", S.sv.met);
+    CHECK(S.sv.met == 0 && !S.fr[0].name[0] && !S.reply_pending, "C11 own name, empty: nothing learned (met %d)", S.sv.met);
+    // but any other bytes are a name, as for the firmware (UTF-8 from the web interface)
+    packet('H', "J\xC3\xB6RG", 5);
+    CHECK(S.sv.met == 1 && S.reply_pending && !strcmp(S.fr[0].name, "J\xC3\xB6RG"), "C11 an 'H' from J\\xC3\\xB6RG: answered, learned");
+    packet('N', "\x01" "AB\xFF", 4);
+    CHECK(S.sv.met == 2, "C11 a beacon from \\x01AB\\xFF: learned (met %d)", S.sv.met);
 }
 
 static void answering(void) {
@@ -300,7 +308,7 @@ static void answering(void) {
     mock_tx_busy = false;
     CHECK(mock_sent_n == 0, "C13 nothing while busy");
     run(2000, 0);
-    CHECK(mock_sent_n == 1 && mock_sent[0].type == 'R' && mock_sent_ms[0] <= 3010, "C13 the answer is dropped, the beacon goes at once (%u, %u ms)",
+    CHECK(mock_sent_n == 1 && mock_sent[0].type == 'N' && mock_sent_ms[0] <= 3010, "C13 the answer is dropped, the beacon goes at once (%u, %u ms)",
           mock_sent_n, mock_sent_ms[0]);
 
     // C14: no name: silent, but answers, and counts
@@ -314,13 +322,44 @@ static void answering(void) {
           "C14 an 'H' gets an empty 'R'");
     run(600000, 0);
     CHECK(mock_sent_n == 1, "C14 nothing else in 10 min (%u)", mock_sent_n);
+
+    // C24: an answer to a plain badge's HELLO ends before it calls again,
+    // 1.5 s after its HELLO began, even with long names on both sides
+    static const char* longest = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+    int late = 0, early = 0;
+    for (int k = 0; k < 40; k++) {
+        const char* other = k & 1 ? longest : "ZOE";
+        int n = (int)strlen(other);
+        fresh(k & 2 ? longest : "DAVE", 4000);
+        mock_seed = (uint32_t)k * 7919u + 3;
+        run(3000, 0);
+        mock_air = true, mock_tx_free = mock_ms;
+        from = mock_sent_n;
+        t0 = mock_ms;
+        packet('H', other, n);
+        run(2000, 0);
+        int i = (int)from;
+        while (i < (int)mock_sent_n && mock_sent[i].type != 'R') i++;
+        if (i == (int)mock_sent_n) {
+            late++;
+            continue;
+        }
+        uint32_t end = mock_sent_ms[i] - t0 + mock_airtime(mock_sent[i].length) + mock_airtime((unsigned)n);
+        late += end > 1500;
+        early += mock_sent_ms[i] - t0 < 20;
+    }
+    CHECK(!late && !early, "C24 40 HELLOs from plain badges, short and long names: every answer within 20 ms .. 1.5 s (%d late, %d early)",
+          late, early);
 }
 
 static void timing(void) {
     fresh("ALICE", 0);
     run(600000, 0);
-    int r = sent('R', 0, 0, 0xFFFFFFFF), h = sent('H', 0, 0, 0xFFFFFFFF);
-    CHECK(r >= 10 && r <= 30 && h >= 2 && h <= 5, "C15 alone, 10 min: %d beacons, %d HELLOs", r, h);
+    int r = sent('N', 0, 0, 0xFFFFFFFF), h = sent('H', 0, 0, 0xFFFFFFFF);
+    CHECK(r >= 10 && r <= 30 && h == 1, "C15 alone, 10 min: %d beacons, %d HELLOs (one at the start)", r, h);
+    run(600000, 0);
+    h = sent('H', 0, 0, 0xFFFFFFFF);
+    CHECK(h == 2, "C15 20 min: %d HELLOs, the next 10 .. 15 min after the first", h);
 
     fresh("ALICE", 0);
     run(20000, 0);
@@ -341,7 +380,7 @@ static void timing(void) {
     uint32_t t0 = mock_ms;
     packet('F', "\x01\x02\x03\x04", 4);
     run(1000, 0);
-    CHECK(sent('R', from, t0, t0 + 400) == 0 && sent('R', from, t0 + 400, t0 + 805) == 1, "C16 after an 'F': quiet 0.4 .. 0.8 s, then the beacon");
+    CHECK(sent('N', from, t0, t0 + 400) == 0 && sent('N', from, t0 + 400, t0 + 805) == 1, "C16 after an 'F': quiet 0.4 .. 0.8 s, then the beacon");
     CHECK(S.sv.met == 0 && !S.fr[0].name[0] && !S.reply_pending, "C16 an 'F' is not learned or answered");
     from = mock_sent_n;
     t0 = mock_ms;
@@ -351,6 +390,29 @@ static void timing(void) {
     CHECK(sent('R', from, t0, t0 + 2500) == 1 && sent('H', from, t0, t0 + 2500) == 0, "C16 after an 'H': only the answer for 2.5 s");
     run(200, 0);
     CHECK(sent('H', from, t0 + 2500, t0 + 2800) == 1, "C16 then a due HELLO");
+
+    // C25: after our HELLO the air stays free for the answers: a beacon due
+    // 0.3 s later waits 2.5 s
+    fresh("ALICE", 0);
+    run(4000, 0);
+    from = mock_sent_n;
+    t0 = mock_ms;
+    S.query_at = mock_ms, S.beacon_at = mock_ms + 300;
+    run(3000, 0);
+    CHECK(sent('H', from, t0, t0 + 10) == 1 && sent('N', from, t0, t0 + 2500) == 0 && sent('N', from, t0 + 2500, t0 + 2600) == 1,
+          "C25 our HELLO, then the beacon only 2.5 s later");
+    // and a C tap waits for the air too
+    run(10000, 0);
+    from = mock_sent_n;
+    packet('R', "BOB", 3);
+    t0 = mock_ms;
+    run(5, HH_BTN_C);
+    run(1000, 0);
+    int ih = -1;
+    for (unsigned i = from; i < mock_sent_n && ih < 0; i++)
+        if (mock_sent[i].type == 'H') ih = (int)i;
+    CHECK(ih >= 0 && mock_sent_ms[ih] - t0 >= 295 && mock_sent_ms[ih] - t0 <= 605, "C25 C right after an 'R': the HELLO after the quiet (%d ms)",
+          ih >= 0 ? (int)(mock_sent_ms[ih] - t0) : -1);
 }
 
 static void table(void) {
@@ -379,6 +441,24 @@ static void table(void) {
     run(5, 0);
     CHECK(S.panel && strlen(S.panel_text) <= 95 && !strncmp(S.panel_text, "MET 14 NEAR 12 13", 17), "C18 the panel is bounded (%s)",
           S.panel_text);
+
+    // C23: a crowd of 20 NAMETAG badges, more than the table holds, each
+    // with a beacon a minute: after the first round of hellos, the own name
+    // shows and nobody is greeted again
+    fresh("ALICE", 0);
+    unsigned own = 0, all = 0, backs = 0;
+    uint32_t ret = S.ret_t;
+    for (uint32_t t = 0; t < 360000; t += 5) {
+        if (t % 3000 == 0) {
+            snprintf(name, sizeof name, "CROWD%02u", t / 3000 % 20);
+            mock_packet('N', name, (uint8_t)strlen(name));
+        }
+        run(5, 0);
+        if (t >= 240000 && S.last_frame == mock_ms) all++, own += !strcmp(S.shown, "ALICE");
+        if (S.ret_t != ret) backs++, ret = S.ret_t;
+    }
+    CHECK(all > 3000 && own * 100 >= all * 95 && !backs && met() >= 18 && met() <= 22,
+          "C23 20 badges around: the own name on %u of %u frames in minutes 4 .. 6, %u greeted again, met %u", own, all, backs, met());
 
     // C19: 10 names with no Bloom collisions, over a power cycle, then 10 more
     fresh("ALICE", 0);
@@ -423,7 +503,8 @@ static void panel(void) {
     run(5, HH_BTN_C);
     run(40, 0);
     CHECK(!strncmp(S.shown, "MET 1 NEAR 1 BOB", 16), "C21 C: the panel (%s)", S.shown);
-    CHECK(sent('H', from, t0, t0 + 100) == 1, "C21 and a HELLO");
+    run(1000, 0);
+    CHECK(sent('H', from, t0, t0 + 1000) == 1, "C21 and a HELLO, once the air is free");
     run(5, HH_BTN_C);
     run(40, 0);
     CHECK(!S.panel, "C21 C again closes it");
@@ -447,7 +528,7 @@ static void panel(void) {
     int r = 0;
     bool regular = true;
     for (unsigned i = 0, prev = 99; i < mock_sent_n && i < 64; i++) {
-        if (mock_sent[i].type != 'R') continue;
+        if (mock_sent[i].type != 'N') continue;
         if (prev != 99) regular &= mock_sent_ms[i] - mock_sent_ms[prev] >= 20000 && mock_sent_ms[i] - mock_sent_ms[prev] <= 30005;
         prev = i;
         r++;

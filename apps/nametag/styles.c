@@ -13,7 +13,7 @@
 #define W HH_GRID_W
 #define H HH_GRID_H
 #define EDGES HH_EDGE_COUNT
-#define STARS 14
+#define STARS 20
 
 // If the app outgrows its room in the store: STYLE_CUT 1 drops STARFIELD's
 // flash and arm streak when a star leaves the grid (about 130 bytes), 2 also
@@ -67,14 +67,14 @@ static void step(const hh_api_t* h, uint8_t st, uint32_t t) {
     (void)h, (void)t;
     switch (st) {
 #if STYLE_COUNT > 1
-        case 1:  // FIRE: embers below, heat rises and cools, the text burns at 255
-            for (uint8_t* p = z.heat[H]; p < z.heat[H] + 2 * W; p++) *p = 90 + RND() % 80;
+        case 1:  // FIRE: hot embers below, heat rises and cools, the text burns; above it, tongues
+            for (uint8_t* p = z.heat[H]; p < z.heat[H] + 2 * W; p++) *p = (uint8_t)(RND() | 128);
             for (int y = 0; y < H; y++)
                 for (int x = 0; x < W; x++) {
                     uint32_t r = RND();
-                    int c = y < 4 ? 4 + r % 24 : (y < 12 ? 8 : 12) + r % 30;
+                    int c = y < 4 ? 15 + (r & 63) : (y < 12 ? 8 : 6) + r % 30;
                     int v = z.heat[y + 1][(x + 16 + (r >> 8) % 3) % W] - c;  // row y + 1 is still last frame's
-                    z.heat[y][x] = M(x, y) ? 255 : v < 0 ? 0 : (uint8_t)v;
+                    z.heat[y][x] = M(x, y) ? (r >> 16 | 160) & 255 : v < 0 ? 0 : (uint8_t)v;
                 }
             break;
 #endif
@@ -104,21 +104,21 @@ static void step(const hh_api_t* h, uint8_t st, uint32_t t) {
                         if ((q & 255) <= 100) z.sf.streak[(q >> 8) % 5] = t;  // within 10 of an arm
                     }
 #endif
-                    r = RND(), a = r >> 8 & 255, r %= 24;
+                    r = RND(), a = r >> 8 & 255, r %= 40;
                 }
                 r += (2 + r / 10) * n;
                 z.sf.a[k] = (uint8_t)a, z.sf.r[k] = (uint8_t)r;
-                int dx = S(a) - 128, dy = 128 - S(a + 64), v = 20 + r * 3 / 5;
+                int dx = S(a) - 128, dy = 128 - S(a + 64), v = r < 145 ? 110 + r : 255;  // bright enough through the gamma
                 star(dx, dy, r, v);
-                if (r > 60) star(dx, dy, r * 3 / 4, v / 3);  // its tail
+                if (r > 60) star(dx, dy, r * 3 / 4, 75);  // its tail
             }
             break;
         }
 #endif
 #if STYLE_COUNT > 5
-        case 5: {  // GLITCH: one burst of 120..250 ms somewhere in every 1.4 s, by a hash of the period
-            uint32_t c = t / 1400 * 2654435761u;
-            z.gl.burst = t % 1400 - (c >> 22) < 120 + (c >> 12 & 127);
+        case 5: {  // GLITCH: one burst of 120..250 ms somewhere in every 0.7 s, by a hash of the period
+            uint32_t c = t / 700 * 2654435761u;
+            z.gl.burst = t % 700 - (c >> 24) < 120 + (c >> 12 & 127);
             if (z.gl.burst && t / 40 != z.gl.roll) {  // reroll every 40 ms
                 z.gl.roll = t / 40;
                 for (int b = 0; b < 4; b++) z.gl.shift[b] = (int8_t)(RND() % 7) - 3;
@@ -163,12 +163,12 @@ static void step(const hh_api_t* h, uint8_t st, uint32_t t) {
 }
 
 #if STYLE_COUNT > 3
-// WAVE: the text sampled with each column bobbed by w/16 rows, antialiased
+// WAVE: every letter bobs as a whole, so it reads, by a whole row (a
+// pixel split over two rows loses its strokes to the gamma); a wave runs
+// through the letters
 static int wave(const hh_api_t* h, int x, int y, uint32_t t) {
-    int w = (S(x * 10 - t / 4) - 128) * 7 >> 5;  // a letter bobs nearly as a whole, so it reads
-    if (x < 2 || x > W - 3) w /= 2;
-    int k = w >> 4, f = w & 15;
-    return (M(x, y - k) * (16 - f) + M(x, y - k - 1) * f) * 255 >> 4;
+    int k = (x - nt_text_x) / HH_FONT_ADVANCE;
+    return M(x, y - ((S(k * 48 - t / 4) - 64) >> 7)) ? 255 : 0;
 }
 #endif
 
@@ -184,10 +184,10 @@ static int grid_px(const hh_api_t* h, uint8_t st, int x, int y, uint32_t t) {
             return z.heat[y][x] * (mid ? 90 : 150) >> 8;
 #endif
 #if STYLE_COUNT > 2
-        case 2: {  // the text decodes column by column in 0.15 .. 1.43 s
+        case 2: {  // a new text decodes column by column in 0.1 .. 0.5 s, once
             static const uint8_t TRAIL[6] = {120, 70, 45, 28, 16, 8};
             int d = (z.mx.drop[x] >> 4) - y;
-            if (m) return nt_text_ms < 150u + (unsigned)(x * 7 % 17) * 80 ? (RND() & 1) * 120 : d ? 210 : 255;
+            if (m) return nt_text_on < 100u + (unsigned)((x - nt_text_x) * 7 % 17) * 25 ? (RND() & 1) * 120 : d ? 210 : 255;
             int v = (unsigned)d < 6 ? TRAIL[d] : 0;
             return mid ? v * 3 >> 2 : v;
         }
@@ -206,12 +206,12 @@ static int grid_px(const hh_api_t* h, uint8_t st, int x, int y, uint32_t t) {
 #endif
 #if STYLE_COUNT > 4
         case 4:
-            return m ? 240 : z.sf.sky[y][x];
+            return m ? 240 : z.sf.sky[y][x] >> mid;  // half in the text's rows
 #endif
 #if STYLE_COUNT > 5
         case 5:
             if (!z.gl.burst) {
-                if ((unsigned)y == t / 45 % 24) return m ? 255 : 35;  // the scanline
+                if ((unsigned)y == t / 45 % 24) return m ? 255 : 100;  // the scanline
                 return m && RND() % 40 ? 210 : 0;                    // now and then a dead pixel
             }
             if (!(RND() % 54)) return 255;  // about 5 sparks a frame
@@ -224,10 +224,11 @@ static int grid_px(const hh_api_t* h, uint8_t st, int x, int y, uint32_t t) {
 #endif
 #if STYLE_COUNT > 6
         case 6: {
-            int dx = x - nt_text_x;
-            if (y >= 4 && y <= 10 && dx == z.tw.c && (!z.tw.phase || (t / 250 & 1))) return 120;  // the cursor
-            if (!m || dx >= z.tw.c) return 0;
-            return dx >= z.tw.c - 6 ? 255 : 190;  // the newest character brightest
+            int dx = x - nt_text_x, c = z.tw.c;
+            if (!z.tw.phase && y >= 4 && y <= 10 && dx == c) return 120;                   // the cursor, typing
+            if (z.tw.phase == 1 && (t / 250 & 1) && y == 12 && (unsigned)(c - 1 - dx) < 5) return 120;  // then under the last letter, blinking
+            if (!m || dx >= c) return 0;
+            return z.tw.phase ? 230 : dx >= c - 6 ? 255 : 190;  // typing: the newest character brightest
         }
 #endif
     }
@@ -252,7 +253,7 @@ static int edge_px(const hh_api_t* h, uint8_t st, int i, uint32_t t) {
 #if STYLE_COUNT > 2
         case 2: {
             uint32_t r = RND();
-            if ((r & 255) < 6) z.glow[i + 1] = 90 + (r >> 8) % 60;
+            if ((r & 255) < 14) z.glow[i + 1] = 90 + (r >> 8) % 100;
             return 0;
         }
 #endif
@@ -302,7 +303,7 @@ uint32_t style_arm(uint8_t st, int i, uint32_t t) {
 #if STYLE_COUNT > 2
         case 2: {  // rain falling inward
             int d = rank - 6 + (int)((t / 70 + arm * 3) % 10);
-            hu = 85, va = 12;
+            hu = 85, va = 90;
             if (!d)
                 sa = 120, va = 255;
             else if ((unsigned)(d - 1) < 3)
@@ -316,8 +317,8 @@ uint32_t style_arm(uint8_t st, int i, uint32_t t) {
             break;
 #endif
 #if STYLE_COUNT > 4
-        case 4: {  // dark blue; a star leaving over the arm streaks out to its tip
-            hu = 165, va = 18;
+        case 4: {  // a twinkling night blue; a star leaving over the arm streaks out to its tip
+            hu = 165, va = r & 15 ? 110 : 230;
 #if STYLE_CUT < 1
             uint32_t age = t - z.sf.streak[arm];
             int d = (int)(age / 25) - rank;
@@ -331,14 +332,14 @@ uint32_t style_arm(uint8_t st, int i, uint32_t t) {
 #if STYLE_COUNT > 5
         case 5:
             if (z.gl.burst) return (rank ^ z.gl.swap) & 1 ? 0x00DCFF : 0xFF0028;
-            hu = 200, va = 40;
-            if (arm == z.gl.arm) hu = 128, va = 200;
+            hu = 200 + t / 64, va = 120;  // a slow drift between bursts
+            if (arm == z.gl.arm) hu = 128, va = 255;
             break;
 #endif
 #if STYLE_COUNT > 6
         case 6: {  // a struck key flashes an arm
             uint32_t age = t - z.tw.strike_t;
-            hu = 30, sa = 170, va = 45;
+            hu = 30, sa = 170, va = 130;
             if (arm == z.tw.arm && age < 150) sa = 80, va = 255 - age * 4 / 3;
             break;
         }

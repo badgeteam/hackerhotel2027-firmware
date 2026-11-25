@@ -3,7 +3,8 @@
 (tools/emu/headless.py): two badges running it learn each other's names
 by themselves and say hi; C shows the panel and the dots of who is near;
 the hackers met survive a power cycle; a badge with the plain firmware
-ignores the beacons, answers a HELLO and is answered on SAY HI; banana
+ignores the beacons (also while it calls), answers a HELLO and is
+answered on SAY HI; banana
 shots count and colour the arms; the style is kept.
 
   python3 tools/nametag_app_test/emu_nametag_app_test.py APP.hhapp
@@ -132,13 +133,14 @@ def run(app, paths, emus):
     check(wait_for(lambda: shows(a, "HI BOB"), 3), "E1 A shows HI BOB")
     check(wait_for(lambda: shows_still(b.wait_frames(), "BOB"), 12), "E1 then B's name tag BOB returns")
     check(wait_for(lambda: shows(a, "ALICE"), 8), "E1 and A's ALICE (it scrolls)")
-    sent = [p for p in a.ir_sent if p[0] == ord("R")]
-    check(sent and sent[0] == b"R\x07ALICE\x00\x1f", "E1 A's beacon: its name, a NUL, no team (%r)" % sent[:1])
+    sent = [p for p in a.ir_sent if p[0] == ord("N")]
+    check(sent and sent[0] == b"N\x07ALICE\x00\x1f", "E1 A's beacon 'N': its name, a NUL, no team (%r)" % sent[:1])
 
     # E2: C opens the panel, a dot goes round for B
     a.press(BTN_C)
     check(wait_for(lambda: scroll_offset(a.wait_frames(), "MET 1 NEAR 1 BOB") is not None, 3), "E2 C: the panel MET 1 NEAR 1 BOB")
-    check(wait_for(lambda: any(a.wait_frames()[s] == 255 for s in EDGE), 2), "E2 a dot on the outline for the badge nearby")
+    check(wait_for(lambda: (lambda f: any(f[s] == 255 for s in EDGE))(a.wait_frames()), 2),
+          "E2 a dot on the outline for the badge nearby")
     a.press(BTN_C)
     t_hello = time.time()
 
@@ -157,9 +159,18 @@ def run(app, paths, emus):
     a.peers.clear()
     b.peers.clear()
     link(a, c)
-    c.send("p " + b"R\x07ALICE\x00\x1f".hex())  # a beacon, as A sends it
+    c.send("p " + b"N\x07ALICE\x00\x1f".hex())  # a beacon, as A sends it
     check(not wait_for(lambda: shows(c, "HI ALICE"), 1.5) and wait_for(lambda: shows(c, "CAROL"), 2),
           "E4 a beacon does not change the plain badge's name tag")
+    a.peers.clear()  # A out of range: the plain badge calls, only a beacon comes
+    c.peers.clear()
+    say_hi(c)
+    time.sleep(0.3)
+    c.send("p " + b"N\x07ALICE\x00\x1f".hex())
+    check(not wait_for(lambda: shows(c, "HI ALICE"), 2.0), "E4 a beacon is not taken as the answer to SAY HI")
+    check(wait_for(lambda: shows(c, "NO REPLY"), 7), "E4 the plain badge gives up: NO REPLY")
+    check(wait_for(lambda: shows(c, "CAROL"), 5), "E4 and its name tag returns")
+    link(a, c)
     time.sleep(max(0, t_hello + 5.5 - time.time()))  # C sends HELLO only 5 s after the last
     a.press(BTN_C)
     check(wait_for(lambda: shows(c, "HI ALICE"), 2), "E4 C on A: the plain badge shows HI ALICE (the tail is not shown)")

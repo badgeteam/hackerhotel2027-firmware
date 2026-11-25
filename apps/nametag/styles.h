@@ -13,6 +13,7 @@ extern const hh_api_t* hh;            // nametag.c, set in init()
 extern uint32_t nt_mask[HH_GRID_H];   // this frame's text: bit x of row y
 extern int nt_text_x, nt_text_w;      // first copy's left column; width in columns
 extern uint32_t nt_text_ms;           // ms since this text became visible or last wrapped
+extern uint32_t nt_text_on;           // ms since this text became visible
 
 static inline int M(int x, int y) { return (unsigned)x < HH_GRID_W && (unsigned)y < HH_GRID_H && (nt_mask[y] >> x & 1); }
 

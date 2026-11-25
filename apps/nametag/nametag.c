@@ -3,9 +3,11 @@
 // Hacker Hotel 2025 banana game built in: a hit rings out in the shooter's
 // colour and counts, a banana's team colours the arms. Badge friends:
 // badges near each other swap names by infrared by themselves, count the
-// hackers you met (kept over power-off, approximate past ~50), and the dots
-// going round show who is nearby. C: who is here? Hold C and press B / D
-// for brightness.
+// hackers you met (kept over power-off; an estimate from about 50 on, it
+// tops out near 400), and the dots going round show who is nearby. C: who
+// is here? (this app's SAY HI; the menu's does nothing while an app runs).
+// Hold C and press B / D for brightness. Badges without an app nearby
+// show "HI <your name>" when this one says hello, at most every 10 min.
 
 // This file: what shows (the name, a hit count, a team, "HI <name>", the
 // panel), the buttons, the saved data, the banana's shots and the name
@@ -14,16 +16,20 @@
 // Infrared: the firmware's SAY HI packets (greet.h), 'H' HELLO and 'R'
 // REPLY, with the owner's name and, when it fits, a NUL and an info byte
 // (0x10 | team, 15 for none) that a plain badge does not show. Every 20 to
-// 60 s the app sends an 'R' nobody asked for, a beacon: other NAMETAG
-// badges learn the name, the firmware ignores it. About every 3.5 min one
-// badge of a group sends 'H' (an 'H' heard puts ours off), which plain
-// badges answer too. An 'H' gets an 'R' after 0.3 to 1.2 s (2.3 s from an
-// app), after the firmware's own answers. Beacons and HELLOs wait while
-// the air is busy.
+// 60 s the app sends an 'N' with the same contents, a beacon: other NAMETAG
+// badges learn the name, the firmware and other apps ignore the type. (Not
+// 'R': a plain badge doing SAY HI takes any 'R' as its answer.) About every
+// 12 min one badge of a group sends 'H' (an 'H' heard puts ours off), which
+// plain badges answer, and show "HI <name>" for 5 s. An 'H' gets an 'R'
+// after 0.3 s or more, after the firmware's own answers (0.3 to 2.3 s from
+// an app), and from a plain badge early enough to end before its next
+// HELLO, 1.5 s after the last. Beacons and HELLOs wait while the air is
+// busy, and after our HELLO for its answers.
 //
 // The hackers met are counted with a 192-bit Bloom filter of name hashes
-// in the saved data, so the count survives power-off but is approximate
-// past ~50 (a new name may look known).
+// in the saved data, so the count survives power-off. Past about 50 the
+// count shown is estimated from how full the filter is; it tops out near
+// 400, and the more names it holds, the more often a new name looks known.
 #include "styles.h"
 
 #define FRAME_MS 33
@@ -40,6 +46,8 @@
 #define HELLO_GAP_MS 5000    // C sends no HELLO if one was sent or heard this recently
 #define NEAR_MS 150000       // heard this recently: nearby
 #define REGREET_MS 600000    // not heard this long: "HI" again
+#define BACK_GAP_MS 60000    // at most one "HI" a minute for a friend back
+#define HELLO_EVERY_MS 600000  // our own HELLO: 10 .. 15 min after one sent or heard
 #define REPLY_LATE_MS 1000   // an answer the transmitter never frees for is dropped
 #define OLD 0x40000000u      // a start time long ago: nothing shows
 #define FALLBACK "HACKER HOTEL 2027"
@@ -47,6 +55,7 @@
 #define POPUPS 4
 #define HELLO 'H'
 #define REPLY 'R'
+#define BEACON 'N'
 #ifndef CUT_EXTRAS
 #define CUT_EXTRAS 0  // 1: no blink for a friend back, no confetti (the size ladder's step 3, about 120 bytes)
 #endif
@@ -83,7 +92,7 @@ void* memset(void* d, int c, __SIZE_TYPE__ n);
 const hh_api_t* hh;
 uint32_t nt_mask[HH_GRID_H];
 int nt_text_x, nt_text_w;
-uint32_t nt_text_ms;
+uint32_t nt_text_ms, nt_text_on;
 
 // All the state in one place: init() clears it in one go, and the code
 // reaches every field from one base address (smaller code). Words, not
@@ -167,8 +176,8 @@ static uint32_t beacon_gap(void) {
     return ms < 60000 ? ms : 60000;
 }
 
-static void hello_heard(void) {  // or sent: one HELLO per group every ~3.5 min
-    S.query_at = S.now + 150000 + rnd(120000);
+static void hello_heard(void) {  // or sent: one HELLO per group every ~12 min
+    S.query_at = S.now + HELLO_EVERY_MS + rnd(HELLO_EVERY_MS / 2);
     S.last_hello = S.now;
 }
 
@@ -184,6 +193,19 @@ static int bloom(unsigned a) {
     uint8_t *p = &S.sv.seen[a >> 3], m = (uint8_t)(1 << (a & 7)), was = *p & m;
     *p |= m;
     return was;
+}
+
+// The hackers met: the count, or the estimate from how many bits of the
+// filter are set (linear counting: a name sets 2 bits, so going from i to
+// i + 1 bits takes 96 / (192 - i) names), whichever is more. The count
+// misses the new names that looked known, the estimate is rough while
+// small.
+static unsigned met(void) {
+    unsigned b = 0, n = 128;
+    for (int i = 0; i < 192; i++)
+        if (S.sv.seen[i >> 3] >> (i & 7) & 1) n += 96 * 256 / (192 - b++);
+    n >>= 8;
+    return n > S.sv.met ? n : S.sv.met;
 }
 
 static void learn(const uint8_t* d, int n, uint8_t team) {
@@ -214,10 +236,13 @@ static void learn(const uint8_t* d, int n, uint8_t team) {
         hh->print("\n");
         S.new_t = now;
         S.new_team = team;
-    } else if (miss || back) {
+    } else if (back && !miss && now - S.ret_t >= BACK_GAP_MS) {
         S.ret_t = now;
     } else {
-        return;  // a friend who stays near: no hello again
+        // A friend who stays near: no hello again. Nor one who dropped out
+        // of the table, in a crowd of more than FRIENDS: that would greet
+        // the whole crowd over and over instead of showing the name.
+        return;
     }
     if (S.npop < POPUPS) {  // else the name still counts and is in the panel
         popup_t* q = &S.pop[(S.pop_head + S.npop++) % POPUPS];
@@ -232,15 +257,21 @@ static void heard(const hh_ir_packet_t* p) {
     uint8_t t = p->type;
     const uint8_t* d = p->data;
     int len = p->length, n = 0;
-    uint32_t q = t == REPLY ? 300 : 400;
+    uint32_t q = t == HELLO ? 400 : 300;
     quiet(t == HELLO ? 2500 : q + rnd(q));
-    if (t != HELLO && t != REPLY) return;
-    for (; n < len && d[n]; n++)
-        if ((uint8_t)(d[n] - 0x20) > 0x5E) return;  // not printable ASCII: not a name
+    if (t != HELLO && t != REPLY && t != BEACON) return;
+    while (n < len && d[n]) n++;  // any bytes, as the firmware: the font shows those it lacks as a space
     bool tail = len == n + 2 && d[n + 1] >> 4 == 1;
     if (t == HELLO) {
         hello_heard();
-        if (!S.reply_pending) S.reply_pending = 1, S.reply_due = S.now + 300 + rnd(tail ? 2000 : 900);
+        // A plain badge calls again 1.5 s after its HELLO began, and does
+        // not hear while it sends: our answer ends before that. A packet of
+        // n bytes takes 7 + 18 * (n + 3) ms at the slowest (hhapp.h); ours
+        // has the name and the tail.
+        uint8_t b[HH_NAME_MAX];
+        int w = 1450 - 14 - (len + own(b) + 8) * 18, lo = w > 600 ? 300 : 20;
+        if (tail) w = 2300, lo = 300;
+        if (!S.reply_pending) S.reply_pending = 1, S.reply_due = S.now + (uint32_t)lo + rnd(w > lo ? (uint32_t)(w - lo) : 1);
     }
     learn(d, n, tail ? d[n + 1] & 15 : 15);
 }
@@ -271,7 +302,7 @@ static void toggle_panel(void) {
         int k = nearby();
         S.put_at = S.panel_text;
         put("MET ");
-        put(dec(S.sv.met));
+        put(dec(met()));
         put(" NEAR ");
         put(dec((unsigned)k));
         for (int i = 0; i < k; i++) put(" "), put(S.fr[i].name);  // the most recent first
@@ -309,7 +340,7 @@ again:  // the text: the first that is on wins; some end by themselves
     if (now - S.hit_t - 300 < HIT_MSG_MS) s = dec(S.hits), id = SRC_HIT;
     else if (now - S.team_t < LABEL_MS) s = NAME[S.sv.team & 7], id = SRC_TEAM;
     else if (S.panel) s = S.panel_text, id = SRC_PANEL;
-    else if (S.npop && S.pop_count) s = dec(S.sv.met) - 1, *(char*)s = '#', id = SRC_COUNT, lim = COUNT_MS;
+    else if (S.npop && S.pop_count) s = dec(met()) - 1, *(char*)s = '#', id = SRC_COUNT, lim = COUNT_MS;
     else if (S.npop) s = S.pop[S.pop_head].text, id = SRC_POP;
     else s = nm[0] ? nm : FALLBACK, id = SRC_NAME;
     if (id != S.src) S.src = id, S.src_t = now;
@@ -334,7 +365,7 @@ again:  // the text: the first that is on wins; some end by themselves
         nt_text_ms = on % (per * 100);
     }
     S.shown = s;
-    nt_text_x = x, nt_text_w = w;
+    nt_text_x = x, nt_text_w = w, nt_text_on = on;
 
     // The mask: the text at 255, read back. The second copy is off the
     // grid unless the text scrolls.
@@ -380,7 +411,7 @@ again:  // the text: the first that is on wins; some end by themselves
 
     // The arms: the style's colour, then the team, a friend, a hit
     const uint8_t *U = team < 8 ? TEAM[team] : 0, *NT = S.new_team < 8 ? TEAM[S.new_team] : 0, *ST = TEAM[S.shot_team];
-    uint32_t pa = now % 8000, tip = 170 + h->sin8((uint8_t)(now / 8)) / 3u, took = h->sin8((uint8_t)(ta / 2));
+    uint32_t pa = now % 8000, tip = 190 + h->sin8((uint8_t)(now / 8)) / 4u, took = h->sin8((uint8_t)(ta / 2));
     uint32_t blink = now / 60, healv = 255 - ha * 255 / 450;
     int f = pa < 420 ? 6 - (int)(pa / 60) : 99, g = ta < LABEL_MS ? 6 - (int)(ta / 80) : 99;
     bool newb = na < BURST_MS, back = ra < 300 && !(ra / 100 & 1), hit = !heal && ha < dur, healb = heal && ha < dur;
@@ -390,7 +421,8 @@ again:  // the text: the first that is on wins; some end by themselves
         uint32_t c = style_arm((uint8_t)st, i, now), v = 255;
         const uint8_t* T = 0;
         if (U) {
-            if (r == 6) T = U, v = tip;                                  // the tips
+            if (r == 6) T = U, v = tip;                                  // the tips,
+            if (r == 5) T = U, v = 0;                                    // set off from the style's colours
             if ((unsigned)(r - f) < 2) T = U, v = r == f ? 255 : 120;  // a pulse in, every 8 s
             if (r >= g) T = U, v = took;                               // just taken
         }
@@ -428,9 +460,9 @@ static void init(const hh_api_t* api) {
     static char line[] = "nametag: style 0 met ";
     line[15] = (char)('0' + S.sv.style);
     api->print(line);
-    char* met = dec(S.sv.met);
+    char* m = dec(met());
     S.num[7] = '\n';  // S.num[8] stays 0
-    api->print(met);
+    api->print(m);
 }
 
 static void tick(uint32_t elapsed_ms) {
@@ -468,19 +500,17 @@ static void tick(uint32_t elapsed_ms) {
     hh_ir_packet_t p;
     while (h->ir_receive_packet(&p)) heard(&p);
 
-    // Sending: an answer first, then a HELLO for C, then a beacon or a
-    // HELLO when the air is free; each tried again while the transmitter
-    // is busy
+    // Sending: an answer first, then, when the air is free, a HELLO (for
+    // C, or due) or a beacon; each tried again while the transmitter is
+    // busy. After our HELLO the air stays free for the answers.
     if (S.reply_pending && due(S.reply_due)) {
         if ((int32_t)(now - S.reply_due) > REPLY_LATE_MS) S.reply_pending = 0;
         else if (say(REPLY)) S.reply_pending = 0, S.beacon_at = now + beacon_gap();
-    } else if (S.hello_now) {
-        if (say(HELLO)) S.hello_now = 0, hello_heard();
     } else if (h->name()[0] && due(S.quiet_until)) {
-        if (due(S.beacon_at)) {
-            if (say(REPLY)) S.beacon_at = now + beacon_gap();
-        } else if (due(S.query_at) && say(HELLO)) {
-            hello_heard();
+        if (S.hello_now || due(S.query_at)) {
+            if (say(HELLO)) S.hello_now = 0, hello_heard(), quiet(2500);
+        } else if (due(S.beacon_at) && say(BEACON)) {
+            S.beacon_at = now + beacon_gap();
         }
     }
 

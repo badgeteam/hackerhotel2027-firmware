@@ -10,13 +10,26 @@ on:
   push:
     branches: [main]
 
+# The jobs only read the repository. The repository's default token can
+# write, so every workflow declares its own permissions.
+permissions:
+  contents: read
+
+# One run per branch or pull request at a time. A new push to a pull
+# request cancels the run that is still going for it. On main a running
+# run is not cancelled: a newer push waits for it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test:
+  test:  # a required check on main: keep this job id
     runs-on: ubuntu-24.04
+    timeout-minutes: 20  # a run takes about 5 minutes
     env:
       PREFIX: riscv64-unknown-elf  # the Makefiles' default is riscv64-elf (Arch)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Toolchain
         run: |
@@ -24,7 +37,7 @@ jobs:
           sudo apt-get -yqq purge man-db || true  # its trigger is slow
           sudo apt-get install -y --no-install-recommends gcc-riscv64-unknown-elf libnewlib-dev
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 

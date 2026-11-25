@@ -1,0 +1,60 @@
+name: Bug report
+description: Something on the badge, in the web interface or in the tools does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report. For a security problem, do not open an
+        issue: see SECURITY.md for how to report it privately.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect to see?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The steps, in order, that make it happen.
+      placeholder: |
+        1. Open the menu (hold A)
+        2. Choose ...
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Firmware on a badge
+        - Emulator
+        - Web interface
+        - An app
+        - tools/badge.py or another tool
+        - Build or tests
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >-
+        The firmware commit (the web interface's Firmware panel shows the
+        badge's), and the web interface's commit (in its footer).
+      placeholder: firmware 1a2b3c4, web interface 5d6e7f8
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      description: For problems with the web interface.
+      placeholder: Chrome 131 on Linux
+  - type: textarea
+    id: more
+    attributes:
+      label: More information
+      description: Logs, photos, a video, the app or animation that causes it.

@@ -1,5 +1,7 @@
 # Hacker Hotel 2027 starfish badge firmware
 
+[![Tests](https://github.com/badgeteam/hackerhotel2027-firmware/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/badgeteam/hackerhotel2027-firmware/actions/workflows/test.yml)
+
 This is the firmware for the Hacker Hotel 2027 starfish badge, a WCH
 CH643Q with 384 LED channels. It is written in C, on
 [ch32fun](https://github.com/cnlohr/ch32fun).
@@ -23,10 +25,10 @@ earn its place. This is how the space is split, and what uses it now:
 
 | Memory | Size | Use | In use now |
 |---|---|---|---|
-| Flash | 30 KB | firmware | 23.4 KB |
+| Flash | 30 KB | firmware | 27.6 KB |
 | Flash | 31 KB | item store: animations, texts and apps | what you store |
 | Flash | 1 KB | persistent record: name, brightness, boot item, app data | 2 × 512 B |
-| RAM | 8 KB | firmware data and stack | 4.0 KB data, the rest is stack |
+| RAM | 8 KB | firmware data and stack | 4.7 KB data, the rest is stack |
 | RAM | 12 KB | the app that runs (its code and data); while an animation plays, the animation decoder | snake: 1.4 KB code + 0.6 KB data; the decoder 3.5 KB |
 
 How we juggle space and usability:
@@ -318,3 +320,15 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, the text on the grid |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |
+
+## Contributing
+
+`CONTRIBUTING.md` explains how to build, test and send a change.
+`SECURITY.md` explains how to report a security problem privately.
+
+## License
+
+MIT, see `LICENSE`. Copyright (c) 2026 the badge.team contributors.
+
+`ch32fun/` is a copy of [ch32fun](https://github.com/cnlohr/ch32fun) and
+keeps its own MIT license, in `ch32fun/LICENSE`.

@@ -4,9 +4,10 @@ started over USB as on a freshly flashed badge: each step's name, LED and
 ROW going on by themselves, KEY failing without all four buttons and B
 trying it again, USB (the emulator's USB power and charger switched on and
 off), IR on its own echo, OK, then the badge again. Holding A + B leaves
-the test. Then the power-on: the emulator skips the test, unless asked as
-the badge does (factory) or on a fresh start, which erases the persistent
-record and keeps the items.
+the test. USB packets get no reply while USB power is out. Then the
+power-on: the emulator skips the test, unless asked as the badge does
+(factory) or on a fresh start, which erases the persistent record and
+keeps the items.
 
   python3 tools/factory_test/emu_factory_test.py
 """
@@ -82,6 +83,7 @@ def chg(frame):
 
 def usb_step(e):
     """The USB step, with the emulator's USB power (PC3) and charger (PB22)"""
+    check(e.pins() == (False, True), "no USB power: PC3 low, and the charger off: CHRG (PB22) high")
     seen = frames(e, 2.0)  # USB out since before the step, and the battery charges
     check(any(0 < label(f, "USB", 2) <= 30 for f in seen), "no USB power: USB blinks")
     check(not any(chg(f) for f in seen), "no USB power: no CHG, though the battery would charge")
@@ -89,6 +91,7 @@ def usb_step(e):
 
     # (the waits leave room for a firmware that wants CHRG steady for 500 ms)
     e.usb_power(True)
+    check(e.pins() == (True, False), "USB power in: PC3 high, CHRG low")
     check(wait_for(lambda: chg(e.frame[1:]), 0.9), "USB power in: CHG")
     check(label(e.frame[1:], "USB", 2) == 255, "USB power in: USB stays lit")
     e.usb_power(False)  # out again within the second it needs
@@ -101,6 +104,11 @@ def usb_step(e):
     check(wait_for(lambda: label(e.frame[1:], "USB", 2) == 255, 0.6) and not chg(e.frame[1:]),
           "USB power in, the battery full: USB, no CHG")
     e.no_battery()  # CHRG toggles every 100 ms
+    high = []
+    for _ in range(30):
+        high.append(e.pins()[1])
+        time.sleep(0.02)
+    check(any(high) and not all(high), "no battery: CHRG toggles (high in %d of %d samples)" % (sum(high), len(high)))
     seen = frames(e, 0.6)
     check(not all(chg(f) for f in seen), "no battery: CHG does not stay on (%d of %d frames)" % (sum(map(chg, seen)), len(seen)))
     e.charging(False)  # a battery again, for the tests after this one
@@ -155,6 +163,22 @@ def run(e):
           "back to the name tag")
 
 
+def unplugged(path):
+    """USB packets while USB power is out: dropped, as on the badge"""
+    e = Emu(path)
+    try:
+        e.wait_frames()
+        e.usb_power(False)
+        e.send("u %02x" % QUERY)
+        time.sleep(0.5)
+        check(e.replies.empty(), "no USB power: a USB packet gets no reply")
+        check(logged(e, "USB is unplugged: packet dropped"), "no USB power: the emulator logs the dropped packet")
+        e.usb_power(True)
+        check(len(e.usb(QUERY)) > 0, "USB power in: the badge answers again")
+    finally:
+        e.stop()
+
+
 def power_on(path, **kw):
     """The factory test's first step at power-on, or nothing for 1.5 s;
     returns the emulator and whether the test started"""
@@ -200,6 +224,7 @@ def main():
             run(e)
         finally:
             e.stop()
+        unplugged(path)
         fresh(path)
     print("%s  factory test: %d failures" % ("FAIL" if failures else "ok  ", failures))
     sys.exit(1 if failures else 0)

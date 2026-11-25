@@ -19,6 +19,8 @@
 //                                        v 1 / v 0  (USB power in / out)
 //                                        c 0 / c 1 / c 2  (the battery: not
 //                                          charging / charging / not there)
+//   Q <PC3> <PB22>  (the power pins now,  q
+//     1 high, 0 low: for the tests)
 //   S 1 / S 0  (standby on / off)
 //   L <text>   (the firmware's log)
 //   B          (jumped to the boot ROM; the program then exits)
@@ -431,6 +433,9 @@ static void* reader(void* arg) {
         } else if (line[0] == 'c') {
             s_battery = line[2] == '1' ? BATTERY_CHARGING : line[2] == '2' ? BATTERY_NONE : BATTERY_IDLE;
             set_pins();
+        } else if (line[0] == 'q') {  // the pins as power.c reads them, firmware debounce or not
+            set_pins();
+            out_line("Q %d %d", !!(GPIOC->INDR & 1u << 3), !!(GPIOB->INDR & 1u << 22));
         }
         pthread_mutex_unlock(&s_lock);
     }

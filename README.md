@@ -296,14 +296,15 @@ The two buttons under the board do the same as **V** and **U**.
   with a battery that does not charge. The firmware reads both from the
   same pins as on the badge: PC3 for USB power, the charger's CHRG (PB22)
   for charging. Without USB power the charger is off, and the badge gets
-  no USB packets, so the web interface reports an error. Without a
-  battery, CHRG toggles every 100 ms, as the charger does.
+  no USB packets: the web interface shows the badge as disconnected, as
+  when you unplug a badge. Without a battery, CHRG toggles every 100 ms,
+  as the charger does.
 - **Fresh start.** The emulator skips the factory test at power-on.
   `--fresh` starts as a newly flashed badge: the persistent record (name,
-  settings, factory test passed) is erased and the items stay, so the
-  factory test runs. It runs on a copy of the flash file, so your own
-  file stays as it was. `--fresh --keep` erases the record in the file
-  itself.
+  settings, boot item, factory test passed, and what apps saved, such as
+  high scores) is erased and the items stay, so the factory test runs. It
+  runs on a copy of the flash file, so your own file stays as it was.
+  `--fresh --keep` erases the record in the file itself.
 - **Log.** The firmware's log appears in the terminal.
 
 `tools/emu/rv32_test/run.sh` checks the interpreter against the same

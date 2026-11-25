@@ -1,5 +1,6 @@
 // 4 in a row: drop discs into seven columns, six high; four of yours in a
-// line (across, up or diagonal) wins. C / D aim, B drops. Against another
+// line (across, up or diagonal) wins. The columns sit side by side, each
+// two LEDs wide. C / D aim, B drops. Against another
 // badge over infrared: open 4 in a row on both and point them at each
 // other, and they pair up. Drop a disc before that, and you play against
 // this badge. After a game, B starts the next one.
@@ -23,9 +24,9 @@
 
 #define W 7
 #define H 6
-#define X0 2        // column c is grid column X0 + 2c
+#define X0 1        // column c is grid columns X0 + 2c and X0 + 2c + 1
 #define Y0 5        // row r (0 = top) is grid row Y0 + r
-#define CURSOR_Y 3
+#define CURSOR_Y 4  // just above the top row: rows 4 .. 11 are wide enough
 #define PACKET 'F'
 #define FL_ANSWER 1  // please answer: we have not heard you got this
 #define FL_SECOND 2  // the sender moves second
@@ -255,7 +256,7 @@ static void tick(uint32_t elapsed_ms) {
     // Draw
     uint32_t t = hh->millis();
     hh->clear();
-    for (int x = 1; x < HH_GRID_W - 1; x++) hh->set(hh->grid[Y0 + H][x], 20);  // the floor
+    for (int x = X0; x < X0 + 2 * W; x++) hh->set(hh->grid[Y0 + H][x], 20);  // the floor
     for (int r = 0; r < H; r++)
         for (int c = 0; c < W; c++) {
             uint8_t v = cell[r][c];
@@ -264,9 +265,15 @@ static void tick(uint32_t elapsed_ms) {
             if ((v & WIN_BIT) && t / 160 % 2) b = 0;
             else if (n && r == last_r && c == last_c && since_ms < 1000 && since_ms / 130 % 2) b = 0;  // the last disc blinks
             hh->set(hh->grid[Y0 + r][X0 + 2 * c], b);
+            hh->set(hh->grid[Y0 + r][X0 + 2 * c + 1], b);
         }
-    if (!winner && !lost && my_turn() && !(mode == LOCAL && n % 2))
-        hh->set(hh->grid[CURSOR_Y][X0 + 2 * cursor], t / 270 % 3 ? 255 : 90);
+    if (!winner && !lost && my_turn() && !(mode == LOCAL && n % 2)) {
+        // The cursor sits right on the top row, so it blinks fully off:
+        // over a full column it must not look like a seventh disc
+        uint8_t b = t / 200 % 3 ? 255 : 0;
+        hh->set(hh->grid[CURSOR_Y][X0 + 2 * cursor], b);
+        hh->set(hh->grid[CURSOR_Y][X0 + 2 * cursor + 1], b);
+    }
 
     uint8_t cr, cg, cb;
     if (winner == 3 || lost) {

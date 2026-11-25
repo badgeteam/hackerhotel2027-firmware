@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from headless import *  # noqa: E402,F403
 
 TYPE_APP = 2
-W, H, X0, Y0 = 7, 6, 2, 5  # four.c
+W, H, X0, Y0 = 7, 6, 1, 5  # four.c: column c is grid columns X0 + 2c and X0 + 2c + 1
 
 failures = 0
 

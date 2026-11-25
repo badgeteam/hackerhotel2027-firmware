@@ -1,16 +1,19 @@
 // Star Chase: a light runs round the outline. Press B, C or D when it is
-// beside the arm that shows green. Every hit makes the light faster, up to
-// a limit; three misses and the game is over. The grid shows the level,
-// the dots below it the lives left. After the end, any button starts
-// again; the best level is kept on the badge. Until the first button the
-// badge plays a demo, and it goes back to that 15 s after a game. As in the
-// previous firmware's Star Chase.
+// beside the arm that shows green. Every hit makes the light a little
+// faster, by the same step each time, up to a limit at level 24; three
+// misses and the game is over. The grid shows the level, the dots below it
+// the lives left. After the end, any button starts again; the best level
+// is kept on the badge. Until the first button the badge plays a demo, and
+// it goes back to that 15 s after a game. As in the previous firmware's
+// Star Chase, with a gentler speed-up.
 #include "hhapp.h"
 
 #define FRAME_MS 33   // the game steps 30 times a second
 #define ONE 256       // fixed point: 1/256 of an outline LED
 #define LIVES 3
 #define FX_FRAMES 16  // the flash after a hit or a miss
+#define SPEED_UP (ONE / 16)  // each hit: 1.9 LEDs a second faster
+#define DEMO_HITS 9   // the demo hits until level 10, then presses late
 #define OVER_MS 1000
 #define TEXT_Y 3
 #define KEYS (HH_BTN_B | HH_BTN_C | HH_BTN_D)
@@ -65,14 +68,14 @@ static void step(uint8_t pressed) {
         return;
     }
     pos = (pos + speed) % (HH_EDGE_COUNT * ONE);
-    if (demo) {  // it presses at the end of the zone; from level 5 on, a bit late
+    if (demo) {  // it presses at the end of the zone; from level 10 on, a bit late
         int h = head(), n = HH_EDGE_COUNT;
-        pressed = hits < 4 ? in_zone(h) && !in_zone((h + 2) % n) : !in_zone(h) && in_zone((h - 2 + n) % n);
+        pressed = hits < DEMO_HITS ? in_zone(h) && !in_zone((h + 2) % n) : !in_zone(h) && in_zone((h - 2 + n) % n);
     }
     if (!pressed) return;
     if (in_zone(head())) {
         hits++;
-        speed = speed * 6 / 5 < ONE * 2 ? speed * 6 / 5 : ONE * 2;  // never so fast that it jumps a zone
+        speed = speed + SPEED_UP < ONE * 2 ? speed + SPEED_UP : ONE * 2;  // never so fast that it jumps a zone
         arm = (uint8_t)((arm + 1 + hh->random() % 4) % 5);
         fx_hit = true;
     } else {

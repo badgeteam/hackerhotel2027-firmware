@@ -2,13 +2,16 @@
 // only the walls close by are lit. The buttons are a diamond round the
 // badge's corners: A up, B right, D down, C left (B, C, D repeat when held;
 // A steps once a tap, since holding A opens the menu). The arm that points
-// most towards the exit, in the far corner, lights blue, and the outline
-// shows the time left. Five mazes, from 5 x 5 to 13 x 13 cells, with 15 s
-// for the first and 8 s more for each next one; an arm's sides turn green
-// for each maze solved. After the end, any button starts again; the most
-// mazes solved are kept on the badge. Until the first button the badge
-// walks the mazes itself, a hand on the right-hand wall, and it goes back
-// to that 15 s after a game. As in the previous firmware's maze.
+// most towards the exit, in the far corner, lights blue. Five mazes, from
+// 5 x 5 to 13 x 13 cells. The first two have no timer: take your time, the
+// outline only glows. From the third on the outline shows the time left:
+// 60 s for the third, 75 s for the fourth and 90 s for the last. An arm's
+// sides turn green for each maze solved. After the end, any button starts
+// again; the most mazes solved are kept on the badge. A minute without a
+// button in a maze without a timer also ends the game. Until the first
+// button the badge walks the mazes itself, a hand on the right-hand wall,
+// and it goes back to that 15 s after a game. As in the previous
+// firmware's maze, with more time.
 #include "hhapp.h"
 
 #define FRAME_MS 33  // the game steps 30 times a second
@@ -25,6 +28,8 @@
 #define DEMO_OVER_MS 2000      // a demo game's end shows this long
 #define BACK_TO_DEMO_MS 15000  // after a game, no button this long: the demo
 #define DEMO_EVERY 5           // the demo steps every this many game steps
+#define UNTIMED 2              // the first mazes have no timer
+#define IDLE_STEPS (60 * 30)   // no button this long in one of those: the end
 
 static const int8_t DR[4] = {0, 1, 0, -1};  // right, down, left, up
 static const int8_t DC[4] = {1, 0, -1, 0};
@@ -41,7 +46,8 @@ static uint8_t size;       // this maze's pixels a side
 static uint8_t pr, pc;     // you, in pixels (odd)
 static uint8_t solved, best;
 static uint8_t rep;        // steps a direction has been held
-static uint32_t time_left, limit, fx;  // in steps
+static uint32_t time_left, limit, fx;  // in steps; limit 0: no timer
+static uint32_t idle;                  // steps without a button
 static uint32_t t, frame_ms, over_ms;
 static bool over;
 static bool demo;       // the badge plays by itself
@@ -76,8 +82,9 @@ static void make(void) {
     }
     pr = pc = 1;
     heading = 0;
-    limit = (15u + 8u * solved) * 30u;
+    limit = solved < UNTIMED ? 0 : (30u + 15u * solved) * 30u;  // 60, 75, 90 s
     time_left = limit;
+    idle = 0;
 }
 
 static bool move(int d) {
@@ -110,7 +117,8 @@ static void step(uint8_t pressed, uint8_t held) {
         if (--fx == 0) make();
         return;
     }
-    if (--time_left == 0) {
+    idle = pressed || held ? 0 : idle + 1;
+    if (limit ? --time_left == 0 : !demo && idle >= IDLE_STEPS) {
         finish();
         return;
     }
@@ -183,6 +191,12 @@ static void draw(void) {
             uint32_t v = 80 + 35 * (uint32_t)k;
             hh->set_rgb(i, (uint8_t)(60 * v / 255), (uint8_t)(120 * v / 255), (uint8_t)v);
         }
+    }
+    // No timer: the outline glows, slowly brighter and dimmer
+    if (!limit) {
+        uint8_t v = (uint8_t)(25 + hh->sin8((uint8_t)(t * 2)) * 35 / 255);  // after gamma 2 .. 11 of 255
+        for (int j = 0; j < HH_EDGE_COUNT; j++) hh->set(hh->edge[j], v);
+        return;
     }
     // The time left, round the outline; the last 5 s blink
     uint32_t left = time_left * HH_EDGE_COUNT / limit;

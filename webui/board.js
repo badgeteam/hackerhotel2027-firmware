@@ -16,7 +16,16 @@ const PIXEL_COUNT = MATRIX_ROWS * MATRIX_COLS;
 const LED_RADIUS = 1.05; // mm, tuned by eye against the board's LED pitch
 // Keyboard cursor ring, a little larger than an RGB diamond (half diagonal
 // LED_RADIUS * 1.8 / sqrt(2) = 1.34 mm) so it shows around either kind.
+// The ring crosses the neighbouring LEDs (2 mm pitch), so it has two
+// tones: a wide yellow halo under a black core. One of the two always has
+// 3:1 or more against what is under it (WCAG 1.4.11): yellow on unlit dots
+// and the dark stage, black on lit dots and the light PCB.
 const BOARD_CURSOR_RADIUS = 1.75;
+const BOARD_CURSOR_HALO = 0.9; // mm, about 2.7px at 390px wide
+const BOARD_CURSOR_CORE = 0.45; // mm
+// A tap that hits no white LED selects a colour LED this close (mm), so
+// the small diamonds are easier to hit on a phone
+const BOARD_RGB_TAP_RADIUS = 3;
 const BOARD_ANNOUNCE_MS = 250; // at most one #board-live update per this
 // Arrow key -> unit vector in board millimetres (y grows downwards)
 const BOARD_ARROWS = {
@@ -37,8 +46,12 @@ class BoardView {
 		// the same `frame` array (see docs/LEDPWM_MATRIX.md), so painting
 		// one of those cells needs to refresh that LED's swatch too.
 		this._rgbRefsByCell = new Map();
-		this.onPaintAt = null; // (xMillimeters, yMillimeters) => void, called while the user draws
-		this.onSelectRgb = null; // (rgbLedInfo) => void, called on clicking an RGB LED
+		// (xMillimeters, yMillimeters) => bool, called while the user draws;
+		// false when no LED was in reach
+		this.onPaintAt = null;
+		// (rgbLedInfo, { keyboard }) => void, called on clicking an RGB LED,
+		// or Enter on one; keyboard is true for Enter
+		this.onSelectRgb = null;
 		// (xMillimeters, yMillimeters) => void, like onPaintAt but always
 		// with the eraser. Delete/Backspace on the board uses it. When it is
 		// not set, the board turns on #erase-mode for one onPaintAt call.
@@ -156,7 +169,7 @@ class BoardView {
 			c.appendChild(title);
 			c.addEventListener('click', (ev) => {
 				ev.stopPropagation();
-				if (!this.rgbBrush && this.onSelectRgb) this.onSelectRgb(led);
+				if (!this.rgbBrush && this.onSelectRgb) this.onSelectRgb(led, { keyboard: false });
 			});
 			ledLayer.appendChild(c);
 			this.rgbDotByRef.set(led.ref, c);
@@ -174,17 +187,25 @@ class BoardView {
 
 		// Keyboard cursor, on top of everything. Hidden until the board is
 		// used from the keyboard. The presentation attributes are a fallback
-		// for the .board-cursor rule in styles.css (--board-cursor #000).
+		// for the .board-cursor rules in styles.css.
 		const cursorLayer = document.createElementNS(SVG_NS, 'g');
 		cursorLayer.setAttribute('aria-hidden', 'true');
-		const cursor = document.createElementNS(SVG_NS, 'circle');
-		cursor.setAttribute('r', BOARD_CURSOR_RADIUS);
-		cursor.setAttribute('fill', 'none');
-		cursor.setAttribute('stroke', '#000');
-		cursor.setAttribute('stroke-width', '0.35');
+		const cursor = document.createElementNS(SVG_NS, 'g');
 		cursor.setAttribute('pointer-events', 'none');
 		cursor.setAttribute('visibility', 'hidden');
 		cursor.classList.add('board-cursor');
+		for (const [cls, colour, width] of [
+			['board-cursor-halo', '#f5e722', BOARD_CURSOR_HALO],
+			['board-cursor-core', '#000', BOARD_CURSOR_CORE],
+		]) {
+			const ring = document.createElementNS(SVG_NS, 'circle');
+			ring.setAttribute('r', BOARD_CURSOR_RADIUS);
+			ring.setAttribute('fill', 'none');
+			ring.setAttribute('stroke', colour);
+			ring.setAttribute('stroke-width', width);
+			ring.classList.add(cls);
+			cursor.appendChild(ring);
+		}
 		cursorLayer.appendChild(cursor);
 		svg.appendChild(cursorLayer);
 		this._cursorEl = cursor;
@@ -200,15 +221,22 @@ class BoardView {
 	}
 
 	_wirePointerEvents(svg) {
+		// onPaintAt returns false when no LED was in reach
 		const paintAt = (ev) => {
-			if (!this.onPaintAt) return;
+			if (!this.onPaintAt) return true;
 			const pt = svg.createSVGPoint();
 			pt.x = ev.clientX;
 			pt.y = ev.clientY;
 			const mm = pt.matrixTransform(svg.getScreenCTM().inverse());
-			this.onPaintAt(mm.x, mm.y);
+			return this.onPaintAt(mm.x, mm.y) !== false;
 		};
+		// WCAG 2.5.8: the LEDs are far under 24px on a phone, and as close
+		// together as on the real board. That layout is essential (it is the
+		// badge), so the exception applies; to help anyway, a tap in white
+		// mode that reaches no white LED picks the nearest colour LED.
+		let missedAt = null; // board position of a pointerdown that painted nothing
 		svg.addEventListener('pointerdown', (ev) => {
+			missedAt = null;
 			// The keyboard carries on from where the pointer went down
 			const mm = this._clientToBoard(svg, ev.clientX, ev.clientY);
 			if (mm) {
@@ -224,10 +252,22 @@ class BoardView {
 			if (ev.target.closest('.led-rgb') && !this.rgbBrush) return;
 			this._painting = true;
 			svg.setPointerCapture(ev.pointerId);
-			paintAt(ev);
+			if (!paintAt(ev) && !this.rgbBrush) missedAt = mm;
 		});
 		svg.addEventListener('pointermove', (ev) => {
-			if (this._painting) paintAt(ev);
+			if (!this._painting) return;
+			if (paintAt(ev)) missedAt = null;
+		});
+		// After the pointerup, so the focus the click gives the svg is
+		// settled before the colour editor takes it
+		svg.addEventListener('click', () => {
+			const mm = missedAt;
+			missedAt = null;
+			if (!mm || this.rgbBrush || !this.onSelectRgb) return;
+			const t = this._targets[this._nearestTarget(mm.x, mm.y)];
+			if (t && t.rgb && Math.hypot(t.led.x - mm.x, t.led.y - mm.y) <= BOARD_RGB_TAP_RADIUS) {
+				this.onSelectRgb(t.led, { keyboard: false });
+			}
 		});
 		for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
 			svg.addEventListener(type, () => {
@@ -288,7 +328,7 @@ class BoardView {
 					this._showCursor(true);
 					const t = this._targets[this._cursor];
 					if (t && t.rgb && !this.rgbBrush) {
-						if (this.onSelectRgb) this.onSelectRgb(t.led);
+						if (this.onSelectRgb) this.onSelectRgb(t.led, { keyboard: true });
 						return;
 					}
 					this._paintCursor();
@@ -339,8 +379,7 @@ class BoardView {
 	_drawCursor() {
 		const t = this._targets[this._cursor];
 		if (!t || !this._cursorEl) return;
-		this._cursorEl.setAttribute('cx', t.led.x);
-		this._cursorEl.setAttribute('cy', t.led.y);
+		this._cursorEl.setAttribute('transform', `translate(${t.led.x} ${t.led.y})`);
 	}
 
 	_paintCursor() {

@@ -140,6 +140,7 @@
 	--led-on: #ffffff;
 	--led-stroke: #2b2925;
 	--board-cursor: #000000;
+	--board-cursor-halo: #f5e722;
 	/* The stage is dark in both themes, so the board ring is always yellow
 	   (16.34:1 on #000, about 14:1 on #1c1c1c). */
 	--board-focus: #f5e722;
@@ -935,8 +936,7 @@ button,
 }
 
 .notice-warning::before,
-.notice-danger::before,
-#device-mode.stats-over-budget::before {
+.notice-danger::before {
 	content: "";
 	position: absolute;
 	top: 14px;
@@ -961,35 +961,18 @@ button,
 	margin-top: 12px;
 }
 
-/* Over budget: the stats line turns red. On #device-mode (older firmware)
-   it becomes a warning notice, and #fw-cta appears next to it. */
+/* Over budget: the stats line turns red. */
 .stats-over-budget {
 	color: var(--danger);
 	font-weight: 700;
 }
 
-#device-mode.stats-over-budget {
-	position: relative;
-	padding: 10px 12px 10px 42px;
-	background: var(--warning-bg);
-	border: 1px solid var(--warning);
-	border-inline-start-width: 4px;
-	border-radius: var(--radius);
-	color: var(--text);
-	font-size: 0.875rem;
-	font-weight: 400;
-}
-
-#device-mode.stats-over-budget::before {
-	top: 12px;
-	inset-inline-start: 12px;
-}
-
+/* Older firmware: #fw-old-notice shows, and #fw-cta under it. */
 #fw-cta {
 	display: none;
 }
 
-.card:has(#device-mode.stats-over-budget) #fw-cta {
+.card:has(#fw-old-notice:not([hidden])) #fw-cta {
 	display: inline-flex;
 }
 
@@ -1126,13 +1109,8 @@ summary:hover {
 	gap: 2px;
 }
 
-/* Long names wrap to two lines; JS puts the full name in title. */
+/* Names are at most 32 characters: they wrap, never cut off. */
 .store-name {
-	display: -webkit-box;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-	overflow: hidden;
 	overflow-wrap: anywhere;
 	font-weight: 700;
 }
@@ -1393,12 +1371,25 @@ summary:hover {
 }
 
 /* Keyboard cursor. board.js shows and hides it (visibility attribute). */
+/* Two tones, so the ring keeps 3:1 over unlit dots, lit dots and the PCB
+   alike: a yellow halo (7.3:1 on unlit #4a463f) under a black core (17:1
+   on the light PCB). Widths are in board millimetres (see board.js). */
 .board-cursor {
-	fill: none;
-	stroke: var(--board-cursor);
-	stroke-width: 0.35;
-	stroke-dasharray: 0.8 0.5;
 	pointer-events: none;
+}
+
+.board-cursor circle {
+	fill: none;
+}
+
+.board-cursor-halo {
+	stroke: var(--board-cursor-halo);
+	stroke-width: 0.9;
+}
+
+.board-cursor-core {
+	stroke: var(--board-cursor);
+	stroke-width: 0.45;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1549,8 +1540,7 @@ dialog .button-row {
 	.icon,
 	.chip.connected::before,
 	.notice-warning::before,
-	.notice-danger::before,
-	#device-mode.stats-over-budget::before {
+	.notice-danger::before {
 		forced-color-adjust: none;
 		background-color: currentColor;
 	}

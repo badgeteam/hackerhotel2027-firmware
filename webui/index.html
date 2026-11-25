@@ -49,6 +49,7 @@
 					<button type="button" id="disconnect-btn" class="btn" hidden>Disconnect</button>
 				</div>
 				<p id="device-mode" class="meta"></p>
+				<p id="fw-old-notice" class="notice notice-warning" hidden></p>
 				<a id="fw-cta" class="btn btn-primary" href="#firmware">Update firmware</a>
 				<ol id="first-run">
 					<li>Plug the badge into this computer with a USB&#8209;C cable.</li>
@@ -101,7 +102,8 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="d643", MODE="0666"
 				<label for="text-item-input">Text to show</label>
 				<p id="text-item-hint" class="meta">Shown in the badge's own font: still if it fits, else
 					scrolling. Accents are dropped; other symbols show as ?.</p>
-				<textarea id="text-item-input" rows="3" aria-describedby="text-item-hint text-item-status"></textarea>
+				<textarea id="text-item-input" rows="3" aria-describedby="text-item-hint text-item-count text-item-status"></textarea>
+				<p id="text-item-count" class="meta"></p>
 				<label for="text-item-speed">Scroll speed (columns per second)</label>
 				<input type="number" id="text-item-speed" min="1" max="60" value="10">
 				<label class="check">
@@ -130,6 +132,7 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="d643", MODE="0666"
 					<summary>Start over with the recommended apps</summary>
 					<p class="notice notice-danger">This erases everything on the badge first, then adds the
 						recommended apps.</p>
+					<p id="app-recommended-reason" class="meta" hidden></p>
 					<button type="button" id="app-recommended-btn" class="btn btn-danger">Erase badge and install recommended apps</button>
 					<span id="app-recommended-hint" class="meta" role="status"></span>
 				</details>
@@ -220,8 +223,9 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="d643", MODE="0666"
 							Show on badge while drawing
 						</label>
 					</div>
-					<p id="live-send-hint" class="meta">The badge shows your drawing and Play. Start or Stop
-						playing in On your badge ends it until you draw or play again.</p>
+					<p id="live-send-hint" class="meta">The badge shows what you draw and play here.
+						Starting an item or pressing Stop playing (under On your badge) ends this until
+						you draw or press Play again.</p>
 
 					<div id="board-container"></div>
 					<p id="board-live" class="visually-hidden" role="status" aria-live="polite"></p>
@@ -416,8 +420,9 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="d643", MODE="0666"
 							<button type="button" id="new-pattern-btn" class="btn">New animation</button>
 							<button type="button" id="save-pattern-btn" class="btn">Save in this browser</button>
 							<button type="button" id="duplicate-pattern-btn" class="btn">Duplicate</button>
-							<button type="button" id="delete-pattern-btn" class="btn btn-danger">Delete</button>
+							<button type="button" id="delete-pattern-btn" class="btn btn-danger" aria-describedby="saved-reason">Delete</button>
 						</div>
+						<p id="saved-reason" class="meta" hidden>This animation is not saved in this browser, so there is nothing to delete.</p>
 					</section>
 
 					<details class="disclosure">

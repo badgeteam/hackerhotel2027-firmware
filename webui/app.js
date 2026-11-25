@@ -40,15 +40,18 @@ brushTargetInput.addEventListener('change', () => {
 });
 
 // Paints with the brush at a board position (millimeters). `erase` paints
-// black whatever the Eraser box says (the board's Delete key).
+// black whatever the Eraser box says (the board's Delete key). Returns
+// false when no LED of the brush's kind was in reach.
 function paintAt(xmm, ymm, erase = eraseToggle.checked) {
 	const radius = Number(brushRadiusInput.value);
 	const pickRadius = Math.max(radius, 1.6); // always usable even at radius 0
 	let touched = false;
+	let hit = false;
 	if (board.rgbBrush) {
 		const [r, g, b] = currentBrushColor(erase);
 		for (const led of BOARD_DATA.rgb_leds) {
 			if (Math.hypot(led.x - xmm, led.y - ymm) > pickRadius) continue;
+			hit = true;
 			const [cr, cg, cb] = board.getRgb(led);
 			if (cr === r && cg === g && cb === b) continue; // don't resend while dragging over it
 			setRgbChannels(led, r, g, b);
@@ -60,10 +63,12 @@ function paintAt(xmm, ymm, erase = eraseToggle.checked) {
 			if (Math.hypot(led.x - xmm, led.y - ymm) <= pickRadius) {
 				paintPixel(led.row, led.col, level);
 				touched = true;
+				hit = true;
 			}
 		}
 	}
 	if (touched) markFrameDirty();
+	return hit;
 }
 
 board.onPaintAt = (xmm, ymm) => paintAt(xmm, ymm);
@@ -176,13 +181,16 @@ liveSendInput.addEventListener('change', liveCancel);
 // Where focus goes back to when the editor closes
 let rgbEditorOpener = null;
 
-board.onSelectRgb = (led) => {
+// From the keyboard, the editor takes focus and scrolls into view. From a
+// pointer it takes focus without scrolling, so the LED you clicked stays
+// on the screen.
+board.onSelectRgb = (led, { keyboard = false } = {}) => {
 	selectedRgbLed = led;
 	rgbEditorLabel.textContent = led.ref;
 	rgbColorInput.value = rgbToHex(...board.getRgb(led));
 	if (rgbEditor.hidden) rgbEditorOpener = document.activeElement;
 	rgbEditor.hidden = false;
-	rgbColorInput.focus();
+	rgbColorInput.focus(keyboard ? undefined : { preventScroll: true });
 };
 
 function closeRgbEditor() {
@@ -223,6 +231,7 @@ const connStatusEl = document.getElementById('conn-status');
 const deviceModeEl = document.getElementById('device-mode');
 const firstRunEl = document.getElementById('first-run');
 const fwCtaEl = document.getElementById('fw-cta');
+const fwOldNoticeEl = document.getElementById('fw-old-notice');
 const NO_WEBUSB_TEXT = "This browser can't connect to USB devices. Use Chrome, Edge or Opera.";
 
 function webUsbAvailable() {
@@ -248,7 +257,7 @@ function refreshConnButtons() {
 	connStatusEl.classList.toggle('connected', device.connected);
 	if (firstRunEl) firstRunEl.hidden = device.connected;
 	if (!device.connected) {
-		deviceModeEl.classList.remove('stats-over-budget');
+		if (fwOldNoticeEl) fwOldNoticeEl.hidden = true;
 		if (fwCtaEl) fwCtaEl.hidden = true;
 		if (!webUsbAvailable()) uiAnnounce(deviceModeEl, NO_WEBUSB_TEXT);
 		else if (!uiHasError(deviceModeEl)) uiAnnounce(deviceModeEl, '');
@@ -302,19 +311,20 @@ device.addEventListener('status', (ev) => {
 	const running =
 		(mode === MODE_ITEM || mode === MODE_APP) && storeItems.find((item) => item.index === ev.detail.running);
 	const what = running ? `Playing: ${running.name || 'an item with no name'}` : DEVICE_MODE_NAMES[mode] ?? `Mode ${mode}`;
-	let text = `${what} · Brightness ${brightness} of 255`;
+	const text = `${what} · Brightness ${brightness} of 255`;
+	// Older firmware: a warning of its own, above the Update firmware button
 	const old = ev.detail.api !== undefined && ev.detail.api < FIRMWARE_API;
 	if (old) {
 		const sentence =
 			`This badge has older firmware (API ${ev.detail.api}; this page needs ${FIRMWARE_API}). ` +
 			'Update it to use everything here.';
-		text += `. ${sentence}`;
+		if (fwOldNoticeEl && fwOldNoticeEl.textContent !== sentence) fwOldNoticeEl.textContent = sentence;
 		if (!oldFirmwareAnnounced) {
 			oldFirmwareAnnounced = true;
 			uiAnnounce(null, sentence);
 		}
 	}
-	deviceModeEl.classList.toggle('stats-over-budget', old);
+	if (fwOldNoticeEl) fwOldNoticeEl.hidden = !old;
 	if (fwCtaEl) fwCtaEl.hidden = !old;
 	// not a live region: it changes every second
 	if (deviceModeEl.textContent !== text || uiHasError(deviceModeEl)) uiAnnounce(deviceModeEl, text);
@@ -508,7 +518,8 @@ function buildPharmacySignPattern() {
 	return pattern;
 }
 
-document.getElementById('pharmacy-sign-btn').addEventListener('click', () => {
+document.getElementById('pharmacy-sign-btn').addEventListener('click', async () => {
+	if (!(await confirmDiscard())) return;
 	const pattern = buildPharmacySignPattern();
 	savePattern(pattern);
 	renderPatternList();
@@ -572,6 +583,7 @@ videoConvertBtn.addEventListener('click', async () => {
 		videoFileInput.focus();
 		return;
 	}
+	if (!(await confirmDiscard())) return;
 
 	const notes = [];
 	const fps = clampedInput(videoFpsInput, 1, 20, 8, 'Frames per second', notes);
@@ -679,13 +691,14 @@ textRgbEdgeSpeedInput.addEventListener('input', () => {
 	textRgbEdgeSpeedReadout.textContent = textRgbEdgeSpeedInput.value;
 });
 
-textConvertBtn.addEventListener('click', () => {
+textConvertBtn.addEventListener('click', async () => {
 	const text = textInput.value;
 	if (!text.trim()) {
 		uiError(textStatus, 'Type some text first.');
 		textInput.focus();
 		return;
 	}
+	if (!(await confirmDiscard())) return;
 
 	const notes = [];
 	const fps = clampedInput(textFpsInput, 1, 20, 10, 'Frames per second', notes);
@@ -744,6 +757,7 @@ function setActivePattern(pattern) {
 	document.getElementById('pattern-fps').value = pattern.fps;
 	loadFrameIntoBoard();
 	renderFrameStrip();
+	renderDeletePattern();
 }
 
 document.getElementById('pattern-name').addEventListener('input', (ev) => {
@@ -753,7 +767,32 @@ document.getElementById('pattern-fps').addEventListener('input', (ev) => {
 	activePattern.fps = Math.max(1, Math.min(20, Number(ev.target.value) || 4));
 });
 
-document.getElementById('new-pattern-btn').addEventListener('click', () => {
+// The editor's animation has changes this browser has not saved: a new
+// drawing with anything on it, or a saved one changed since
+function activePatternUnsaved() {
+	const saved = getPattern(activePattern.id);
+	if (!saved) return activePattern.frames.length > 1 || activePattern.frames.some((f) => f.some((v) => v));
+	return (
+		saved.name !== activePattern.name ||
+		saved.fps !== activePattern.fps ||
+		JSON.stringify(saved.frames) !== JSON.stringify(activePattern.frames)
+	);
+}
+
+// Before something replaces the editor's animation: true to go on
+async function confirmDiscard() {
+	if (!activePatternUnsaved()) return true;
+	const name = activePattern.name || 'this animation';
+	return uiConfirm(`Your changes to ${name} are not saved in this browser. Discard them?`, {
+		title: 'Discard your changes?',
+		confirmLabel: 'Discard changes',
+		cancelLabel: 'Keep editing',
+		danger: true,
+	});
+}
+
+document.getElementById('new-pattern-btn').addEventListener('click', async () => {
+	if (!(await confirmDiscard())) return;
 	setActivePattern(newPattern('Untitled'));
 	renderPatternList();
 });
@@ -803,6 +842,7 @@ importPatternInput.addEventListener('change', async (ev) => {
 	if (!file) return;
 	try {
 		const pattern = importPattern(await file.text());
+		if (!(await confirmDiscard())) return;
 		savePattern(pattern);
 		renderPatternList();
 		setActivePattern(pattern);
@@ -811,8 +851,18 @@ importPatternInput.addEventListener('change', async (ev) => {
 	}
 });
 
+// Delete works on a saved animation only; the line under it says why not
+function renderDeletePattern() {
+	const saved = !!getPattern(activePattern.id);
+	const deleteBtn = document.getElementById('delete-pattern-btn');
+	if (!saved && document.activeElement === deleteBtn) document.getElementById('save-pattern-btn').focus();
+	deleteBtn.disabled = !saved;
+	document.getElementById('saved-reason').hidden = saved;
+}
+
 // Rebuilt on every change; the button that had focus gets it back
 function renderPatternList() {
+	renderDeletePattern();
 	const list = document.getElementById('pattern-list');
 	const focusedId = list.contains(document.activeElement) ? document.activeElement.dataset.id : undefined;
 	list.replaceChildren();
@@ -835,7 +885,9 @@ function renderPatternList() {
 			li.classList.add('active');
 			btn.setAttribute('aria-current', 'true');
 		}
-		btn.addEventListener('click', () => {
+		btn.addEventListener('click', async () => {
+			if (activePattern.id === p.id) return;
+			if (!(await confirmDiscard())) return;
 			setActivePattern(JSON.parse(JSON.stringify(p)));
 			renderPatternList();
 		});
@@ -854,12 +906,37 @@ function renderPatternList() {
 const frameStrip = document.getElementById('frame-strip');
 const frameCountLabel = document.getElementById('frame-count-label');
 
+const deleteFrameBtn = document.getElementById('delete-frame-btn');
+
+function selectFrame(index) {
+	activeFrameIndex = index;
+	loadFrameIntoBoard();
+	renderFrameStrip(false);
+}
+
 frameStrip.addEventListener('click', (ev) => {
 	const btn = ev.target.closest('.frame-thumb');
 	if (!btn) return;
-	activeFrameIndex = Number(btn.dataset.index);
-	loadFrameIntoBoard();
-	renderFrameStrip(false);
+	selectFrame(Number(btn.dataset.index));
+});
+
+// One Tab stop for the whole strip (roving tabindex, like the tabs): the
+// active frame. The arrow keys, Home and End select a frame and move focus.
+frameStrip.addEventListener('keydown', (ev) => {
+	const btn = ev.target.closest('.frame-thumb');
+	if (!btn || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+	const i = Number(btn.dataset.index);
+	const n = activePattern.frames.length;
+	const next = {
+		ArrowRight: Math.min(i + 1, n - 1),
+		ArrowLeft: Math.max(i - 1, 0),
+		Home: 0,
+		End: n - 1,
+	}[ev.key];
+	if (next === undefined) return;
+	ev.preventDefault();
+	selectFrame(next);
+	frameStrip.children[next].focus();
 });
 
 // `stats`: the frames may have changed, so redo the size line
@@ -880,6 +957,7 @@ function renderFrameStrip(stats = true) {
 		const btn = frameStrip.children[i];
 		const active = i === activeFrameIndex;
 		btn.classList.toggle('active', active);
+		btn.tabIndex = active ? 0 : -1;
 		const label = `Frame ${i + 1} of ${n}`;
 		if (btn.getAttribute('aria-label') !== label) btn.setAttribute('aria-label', label);
 		if (active) btn.setAttribute('aria-current', 'step');
@@ -889,6 +967,7 @@ function renderFrameStrip(stats = true) {
 
 	if (n < 2 && playTimer) stopPlayback();
 	playBtn.disabled = n < 2;
+	deleteFrameBtn.disabled = n < 2;
 	const count = `${n} frame${n === 1 ? '' : 's'}`;
 	frameCountLabel.textContent = n < 2 ? `${count}. Add a second frame to play.` : count;
 }
@@ -900,12 +979,14 @@ document.getElementById('add-frame-btn').addEventListener('click', () => {
 	renderFrameStrip();
 });
 
-document.getElementById('delete-frame-btn').addEventListener('click', () => {
+deleteFrameBtn.addEventListener('click', () => {
 	if (activePattern.frames.length <= 1) return;
 	activePattern.frames.splice(activeFrameIndex, 1);
 	activeFrameIndex = Math.max(0, activeFrameIndex - 1);
 	loadFrameIntoBoard();
 	renderFrameStrip();
+	// the last frame but one is gone: the button turns off, Add frame takes focus
+	if (deleteFrameBtn.disabled) document.getElementById('add-frame-btn').focus();
 });
 
 // --- Playback ---------------------------------------------------
@@ -977,7 +1058,9 @@ function showFlashWarning() {
 		flashWarningEl.className = 'notice notice-warning';
 		flashWarningText = document.createElement('p');
 		flashWarningText.id = 'play-flash-warning-text';
-		flashWarningText.textContent = 'This animation flashes fast. Play anyway?';
+		flashWarningText.textContent =
+			'This animation flashes fast, which can cause seizures. To make it safe, lower the speed or make ' +
+			'neighbouring frames less different. Play anyway?';
 		const row = document.createElement('div');
 		row.className = 'button-row';
 		const anyway = document.createElement('button');
@@ -992,7 +1075,16 @@ function showFlashWarning() {
 			playBtn.focus();
 			startPlayback();
 		});
-		row.appendChild(anyway);
+		const dont = document.createElement('button');
+		dont.type = 'button';
+		dont.className = 'btn';
+		dont.id = 'play-dont-btn';
+		dont.textContent = "Don't play";
+		dont.addEventListener('click', () => {
+			hideFlashWarning();
+			playBtn.focus();
+		});
+		row.append(dont, anyway);
 		flashWarningEl.append(flashWarningText, row);
 		(playBtn.closest('.button-row') || playBtn).insertAdjacentElement('afterend', flashWarningEl);
 	}
@@ -1185,7 +1277,7 @@ uploadPatternBtn.addEventListener('click', async () => {
 		uiError(uploadPatternStatusEl, 'Connect your badge first.');
 		return;
 	}
-	if (storeBusy) {
+	if (storeUploading) {
 		uiError(uploadPatternStatusEl, 'Wait until the badge is done with the last upload.');
 		return;
 	}
@@ -1209,13 +1301,16 @@ uploadPatternBtn.addEventListener('click', async () => {
 		}
 		handOverBadge();
 		uiAnnounce(uploadPatternStatusEl, `Saving ${formatBytes(bytes.length)}…`);
+		storeUploading = true;
 		try {
 			await device.uploadPattern(bytes, name);
 			uiAnnounce(uploadPatternStatusEl, `Saved as ${name} (${formatBytes(bytes.length)}) and playing.`);
-			refreshStore();
 		} catch (e) {
 			uiError(uploadPatternStatusEl, `Couldn't save to the badge: ${e.message}`);
+		} finally {
+			storeUploading = false;
 		}
+		refreshStore();
 	} finally {
 		uiBusy(uploadPatternBtn, null);
 	}
@@ -1229,6 +1324,7 @@ importCompressedInput.addEventListener('change', async (ev) => {
 	try {
 		const bytes = new Uint8Array(await file.arrayBuffer());
 		const { fps, frames } = decompressPattern(bytes);
+		if (!(await confirmDiscard())) return;
 		const pattern = newPattern(file.name.replace(/\.[^.]+$/, ''));
 		pattern.fps = fps;
 		pattern.frames = frames;
@@ -1247,6 +1343,9 @@ const storeStatusEl = document.getElementById('store-status');
 storeStatusEl.tabIndex = -1; // takes focus when the row that had it is gone
 let storeItems = []; // [{index, type, length, name}]
 let storeBusy = false; // an upload or a listing is going on
+// An upload is going on. Only this refuses a second upload: a listing
+// can run alongside, webusb.js puts the packets in order.
+let storeUploading = false;
 let storeNotice = ''; // how the last action went, said before the item count
 let storeListKey = null; // the items the rows show now
 
@@ -1295,7 +1394,9 @@ function makeIcon(name) {
 }
 
 // A row button; `label` is its accessible name when the visible text
-// alone does not say which item it is for
+// alone does not say which item it is for. An icon button gets it as
+// title only: title is the name then, and the tooltip, without a second
+// copy read as the description.
 function makeRowButton(action, text, label, icon) {
 	const btn = document.createElement('button');
 	btn.type = 'button';
@@ -1306,8 +1407,8 @@ function makeRowButton(action, text, label, icon) {
 		btn.title = label;
 	} else {
 		btn.textContent = text;
+		btn.setAttribute('aria-label', label);
 	}
-	btn.setAttribute('aria-label', label);
 	return btn;
 }
 
@@ -1322,7 +1423,6 @@ function buildStoreRow(item, key) {
 	const nameEl = document.createElement('span');
 	nameEl.className = 'store-name';
 	nameEl.textContent = name;
-	nameEl.title = name;
 	const meta = document.createElement('span');
 	meta.className = 'store-meta';
 	meta.textContent = `${ITEM_TYPE_NAMES[item.type] ?? 'Type ' + item.type} · ${formatBytes(storeItemBytes(item))}`;
@@ -1440,14 +1540,18 @@ function storeStatusChanged(status) {
 	const marks = !storeStatus || status.running !== storeStatus.running || status.boot !== storeStatus.boot;
 	if (storeBusy) return;
 	storeStatus = status;
+	// changed on the badge, or by live drawing: the notice is out of date
+	if (changed || marks) storeNotice = '';
 	if (changed && status.count !== undefined) refreshStore();
 	else if (marks) renderStore();
 }
 
-// The badge shows something else now: the editor stops sending to it
+// The badge shows something else now: the editor stops sending to it,
+// and the last action's notice in #store-status is out of date
 function handOverBadge() {
 	stopPlayback();
 	liveCancel();
+	storeNotice = '';
 }
 
 // Runs a store command. Errors show in `statusEl`; `done` says how it went.
@@ -1457,7 +1561,6 @@ async function storeAction(action, { statusEl = storeStatusEl, done = '' } = {})
 		return false;
 	}
 	handOverBadge();
-	storeNotice = '';
 	if (uiHasError(statusEl)) uiAnnounce(statusEl, '');
 	let ok = true;
 	try {
@@ -1480,7 +1583,7 @@ document.getElementById('store-add-input').addEventListener('change', async (ev)
 		uiError(storeStatusEl, 'Connect your badge first.');
 		return;
 	}
-	if (storeBusy) {
+	if (storeUploading) {
 		uiError(storeStatusEl, 'Wait until the badge is done with the last upload.');
 		return;
 	}
@@ -1509,12 +1612,21 @@ document.getElementById('store-add-input').addEventListener('change', async (ev)
 // A text item (text_item.js): the badge draws the text in its own font
 const textItemInput = document.getElementById('text-item-input');
 const textItemStatus = document.getElementById('text-item-status');
+const textItemCount = document.getElementById('text-item-count');
 const textItemBtn = document.getElementById('text-item-btn');
+let textItemOver = false; // "too long" was said; again only after it fits
+// The count is not a live region (it changes on every key); the textarea
+// points to it. Going over the limit is said once.
 function textItemCheck() {
 	const ascii = textItemAscii(textItemInput.value);
 	const room = patternBudgetBytes() - TEXT_ITEM.HEADER_BYTES;
-	const text = ascii ? `${ascii.length} characters${ascii.length > room ? `, ${room} fit on the badge now` : ''}.` : '';
-	uiAnnounce(textItemStatus, text, { throttleMs: 1500 });
+	const n = ascii ? ascii.length : 0;
+	const over = n > room;
+	const text = n ? `${n} character${n === 1 ? '' : 's'}${over ? `, ${room} fit on the badge now` : ''}.` : '';
+	if (textItemCount.textContent !== text) textItemCount.textContent = text;
+	if (over && !textItemOver) uiAnnounce(null, text);
+	textItemOver = over;
+	if (uiHasError(textItemStatus)) uiAnnounce(textItemStatus, '');
 	return ascii;
 }
 textItemInput.addEventListener('input', textItemCheck);
@@ -1524,7 +1636,7 @@ textItemBtn.addEventListener('click', async () => {
 		uiError(textItemStatus, 'Connect your badge first.');
 		return;
 	}
-	if (storeBusy) {
+	if (storeUploading) {
 		uiError(textItemStatus, 'Wait until the badge is done with the last upload.');
 		return;
 	}
@@ -1559,7 +1671,7 @@ async function addToBadge(type, name, bytes, replace = null, options = {}) {
 	const verb = replace === null ? 'Adding' : 'Updating';
 	handOverBadge();
 	storeBusy = true;
-	storeNotice = '';
+	storeUploading = true;
 	let ok = false;
 	try {
 		uiAnnounce(statusEl, `${verb} ${name}…`);
@@ -1579,6 +1691,7 @@ async function addToBadge(type, name, bytes, replace = null, options = {}) {
 		else onError(`Couldn't add ${name}: ${e.message}`);
 	} finally {
 		storeBusy = false;
+		storeUploading = false;
 		if (button) uiBusy(button, null);
 	}
 	await refreshStore();
@@ -1615,7 +1728,6 @@ function buildAppRow({ app, old, disabled }) {
 	const name = document.createElement('span');
 	name.className = 'store-name';
 	name.textContent = app.name;
-	name.title = app.name;
 	label.appendChild(name);
 	if (app.description) {
 		// one line: the first sentence; the whole text as a tooltip
@@ -1640,7 +1752,7 @@ function buildAppRow({ app, old, disabled }) {
 	btn.addEventListener('click', async () => {
 		if (uiIsBusy(btn)) return;
 		const showError = (message) => uiErrorFor(appLibraryEl, message);
-		if (storeBusy) {
+		if (storeUploading) {
 			showError('Wait until the badge is done with the last upload.');
 			return;
 		}
@@ -1703,8 +1815,17 @@ function renderRecommended() {
 	const tooOld = api !== undefined && api !== null && api < needs;
 	if (!uiIsBusy(btn)) btn.disabled = !apps.length || !device.connected || tooOld;
 	btn.removeAttribute('title');
+	// why the button is off, next to it (the list's reason is far above)
+	const reasonEl = document.getElementById('app-recommended-reason');
+	let reason = '';
+	if (apps.length && !device.connected) reason = 'Connect your badge to install the recommended apps.';
+	else if (apps.length && tooOld) reason = 'Update the badge firmware to install the recommended apps.';
+	if (reasonEl) {
+		if (reasonEl.textContent !== reason) reasonEl.textContent = reason;
+		reasonEl.hidden = !reason;
+	}
 	const describedBy = [];
-	if ((!device.connected || tooOld) && document.getElementById('app-library-reason')) describedBy.push('app-library-reason');
+	if (reason && reasonEl) describedBy.push('app-recommended-reason');
 	if (hint) describedBy.push('app-recommended-hint');
 	if (describedBy.length) btn.setAttribute('aria-describedby', describedBy.join(' '));
 	else btn.removeAttribute('aria-describedby');
@@ -1721,7 +1842,7 @@ async function installRecommended() {
 		uiErrorFor(btn, 'Connect your badge first.');
 		return;
 	}
-	if (storeBusy) {
+	if (storeUploading) {
 		uiErrorFor(btn, 'Wait until the badge is done with the last upload.');
 		return;
 	}
@@ -1734,7 +1855,7 @@ async function installRecommended() {
 	if (!sure) return;
 	handOverBadge();
 	storeBusy = true;
-	storeNotice = '';
+	storeUploading = true;
 	uiBusy(btn, 'Downloading…');
 	try {
 		// every download first, so a failed one erases nothing
@@ -1763,6 +1884,7 @@ async function installRecommended() {
 		uiErrorFor(btn, `The recommended apps did not install completely: ${e.message}`);
 	} finally {
 		storeBusy = false;
+		storeUploading = false;
 		uiBusy(btn, null);
 	}
 	await refreshStore();

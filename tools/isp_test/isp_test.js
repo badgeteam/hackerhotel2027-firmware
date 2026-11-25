@@ -428,21 +428,35 @@ class MockUsb extends EventTarget {
 	}
 }
 
-function element() {
+// A page element with the few properties the panel uses. focus() records
+// the element's id in focused, so the tests can follow the focus, and
+// texts keeps every text the page wrote, as a screen reader would hear it.
+function element(id, focused) {
 	const listeners = {};
-	return {
-		textContent: '', hidden: false, disabled: false, title: '', value: 0, files: [],
-		_span: { textContent: '' },
+	const node = (name) => {
+		let text = '';
+		return {
+			attributes: {}, texts: [],
+			get textContent() { return text; },
+			set textContent(value) { text = String(value); this.texts.push(text); },
+			setAttribute(key, value) { this.attributes[key] = String(value); },
+			focus() { focused.push(name); },
+		};
+	};
+	return Object.assign(node(id), {
+		hidden: false, disabled: false, title: '', value: 0, files: [],
+		_span: node(`${id} span`),
 		querySelector() { return this._span; },
 		addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
 		fire(type, ev = {}) { for (const fn of listeners[type] || []) fn({ target: this, ...ev }); },
-	};
+	});
 }
 
 // Loads webusb.js, wchisp.js and firmware_update.js as the page does, with
 // time running 100 times faster (5 s timeouts become 50 ms)
 async function panel(usb, siteImage, siteCommit) {
 	const els = {};
+	const focused = [];
 	const ctx = {
 		console: { ...console, error() {} }, // the USB errors the tests cause on purpose
 		TextEncoder, TextDecoder, EventTarget, Event, CustomEvent,
@@ -450,7 +464,7 @@ async function panel(usb, siteImage, siteCommit) {
 		clearTimeout,
 		location: { hostname: 'example.org' },
 		navigator: { usb },
-		document: { getElementById: (id) => (els[id] ||= element()) },
+		document: { getElementById: (id) => (els[id] ||= element(id, focused)) },
 		fetch: async (url) => {
 			if (url.startsWith('firmware/firmware.json')) return { ok: !!siteImage, json: async () => ({ commit: siteCommit, date: '2026-11-24' }) };
 			if (url.startsWith('firmware/ledmatrix.bin')) return { ok: !!siteImage, arrayBuffer: async () => siteImage.slice().buffer };
@@ -463,7 +477,7 @@ async function panel(usb, siteImage, siteCommit) {
 	vm.runInContext(fs.readFileSync(path.join(webui, 'firmware_update.js'), 'utf8'), ctx, { filename: 'firmware_update.js' });
 	const run = (code) => vm.runInContext(code, ctx);
 	await run('device.tryAutoReconnect()');
-	return { els, run, ctx };
+	return { els, run, ctx, focused };
 }
 
 async function updateFromPanel(usbOptions, what) {
@@ -471,19 +485,34 @@ async function updateFromPanel(usbOptions, what) {
 	const store = storeOf(flash);
 	const usb = new MockUsb(flash, usbOptions);
 	const img = image(21700, 'new5678');
-	const { els } = await panel(usb, img, 'new5678');
-	await until(() => els['fw-badge'].textContent === 'Badge: old0000 -- an update is available', `${what}: the badge's old version`);
+	const { els, focused } = await panel(usb, img, 'new5678');
+	await until(() => els['fw-badge'].textContent === 'Badge: old0000 – an update is available', `${what}: the badge's old version`);
+	eq(els['fw-update-btn'].textContent, 'Update firmware to new5678', `${what}: the button names the new version`);
+	eq(els['fw-update-btn'].disabled, false, `${what}: the button works`);
+	eq(els['fw-confirm']._span.attributes.tabindex, '-1', `${what}: the question can take focus`);
+	eq(els['fw-status'].attributes.tabindex, '-1', `${what}: the status can take focus`);
 	els['fw-update-btn'].fire('click');
 	ok(!els['fw-confirm'].hidden, `${what}: a confirmation is asked`);
 	ok(els['fw-confirm']._span.textContent.includes('new5678'), `${what}: it names the new version`);
+	eq(focused.at(-1), 'fw-confirm span', `${what}: focus moves to the question`);
+	els['fw-cancel-btn'].fire('click');
+	ok(els['fw-confirm'].hidden, `${what}: Cancel hides the question`);
+	eq(focused.at(-1), 'fw-update-btn', `${what}: Cancel hands focus back to the button`);
+	els['fw-update-btn'].fire('click');
+	els['fw-status'].texts.length = 0;
 	els['fw-go-btn'].fire('click');
+	eq(focused.at(-1), 'fw-status', `${what}: Flash now moves focus to the status`);
 	await until(() => els['fw-status'].textContent.startsWith('Done:') || els['fw-status'].textContent.startsWith('The update stopped'), `${what}: the update`);
 	ok(els['fw-status'].textContent.startsWith('Done:'), `${what}: ${els['fw-status'].textContent}`);
+	// The status is a live region: no more than a line per phase and 25% step
+	const progress = els['fw-status'].texts.filter((t) => t.includes('%'));
+	ok(progress.length >= 7 && progress.length <= 16, `${what}: ${progress.length} progress lines`);
 	checkWritten(flash, img, store, what);
-	await until(() => els['fw-badge'].textContent !== 'Badge: ...' && els['fw-badge'].textContent.includes('new5678') || els['fw-badge'].textContent.includes('older') || els['fw-badge'].textContent.includes('did not say'),
+	await until(() => els['fw-badge'].textContent.includes('new5678') || els['fw-badge'].textContent.includes('older') || els['fw-badge'].textContent.includes('did not say'),
 		`${what}: the badge's version after the update`);
-	eq(els['fw-badge'].textContent, 'Badge: new5678 -- up to date', `${what}: the badge's version after the update`);
-	eq(els['fw-update-btn'].disabled, false, `${what}: the button works again`);
+	eq(els['fw-badge'].textContent, 'Badge: new5678 – up to date', `${what}: the badge's version after the update`);
+	ok(els['fw-update-btn'].disabled, `${what}: an up-to-date badge needs no update`);
+	ok(els['fw-status'].textContent.startsWith('Done:'), `${what}: the result stays in view`);
 	return usb;
 }
 
@@ -506,13 +535,27 @@ test('panel: older firmware without FW_INFO, and a badge that does not answer', 
 	flash.fill(0x13, 0, 20000); // no marker: firmware from before FW_INFO
 	let { els } = await panel(new MockUsb(flash), image(21700, 'new5678'), 'new5678');
 	await until(() => els['fw-badge'].textContent.includes('older'), 'older firmware');
-	eq(els['fw-badge'].textContent, 'Badge: older firmware (it does not report its version).', 'older firmware');
+	eq(els['fw-badge'].textContent, 'Badge: older firmware. It does not report its version.', 'older firmware');
+	eq(els['fw-update-btn'].textContent, 'Update firmware to new5678', 'older firmware: the button names the new version');
+	eq(els['fw-update-btn'].disabled, false, 'older firmware: the button works');
 
 	const usb = new MockUsb(chip());
 	usb.badge.noReplies = true;
 	({ els } = await panel(usb, image(21700, 'new5678'), 'new5678'));
-	await until(() => els['fw-badge'].textContent !== 'Badge: ...', 'no answer');
+	await until(() => !els['fw-badge'].textContent.startsWith('Badge: asking'), 'no answer');
 	ok(els['fw-badge'].textContent.includes('did not say'), `no answer: ${els['fw-badge'].textContent}`);
+});
+
+test('panel: an up-to-date badge says why the button is off, a chosen file turns it on', async () => {
+	const { els } = await panel(new MockUsb(chip()), image(21700, 'old0000'), 'old0000');
+	await until(() => els['fw-badge'].textContent.includes('up to date'), 'up to date');
+	ok(els['fw-update-btn'].disabled, 'up to date: the button is off');
+	eq(els['fw-status'].textContent, "The badge already runs this site's firmware.", 'up to date: the reason is on the page');
+	const file = image(21700, 'mine999');
+	els['fw-file-input'].fire('change', { target: { files: [{ name: 'mine.bin', arrayBuffer: async () => file.slice().buffer }], value: '' } });
+	await until(() => els['fw-update-btn'].textContent === 'Flash mine.bin', 'a chosen file');
+	eq(els['fw-update-btn'].disabled, false, 'a chosen file: the button works');
+	eq(els['fw-status'].textContent, 'mine.bin is ready. Click "Flash mine.bin".', 'a chosen file: the status');
 });
 
 test('panel: only starfish firmware with the same item store is flashed', async () => {

@@ -4,8 +4,9 @@
 // them. B takes the last player away again. Then press D: the bottle in
 // the middle spins, slows down and stops pointing at a place. Is it a
 // player's place, that lights up from the centre outward: that one
-// fetches the beer. Is it an empty place, it blinks dimly: press D again.
-// Every place has the same chance. The badge keeps the number of players.
+// fetches the beer. Is it an empty place, that place and the bottle blink:
+// press D again. Every place has the same chance. The badge keeps the
+// number of players from the last spin.
 #include "hhapp.h"
 
 #define PLACES 10
@@ -14,6 +15,7 @@
 #define SPIN_TURNS 5    // whole turns before the last one
 #define SPIN_SPEED 80   // the spin takes 1 ms for every 80/65536 turn: about 4 s
 #define WIN_GROW_MS 700 // the winner's place lights up outward in this time
+#define WIN_R 180       // out to here: the tips and the outline's corners
 #define CHEER_MS 1500   // and rings on the grid this long
 #define MISS_MS 700     // an empty place blinks this long
 #define COUNT_MS 800    // after C or B the grid shows the number of players
@@ -117,15 +119,17 @@ static void tick(uint32_t elapsed_ms) {
         if (taken(p)) light(p, CALM_R, 255, 140, 0, 255);
         else light(p, CALM_R, 20, 20, 20, 20);
     } else if (state == MISS) {
-        if (t_ms / 175 % 2 == 0) light(place, CALM_R, 30, 30, 30, 30);
+        if (t_ms / 175 % 2 == 0) light(place, CALM_R, 150, 0, 0, 140);  // red, not a win's amber
     } else if (state == WIN) {
-        uint32_t r = 80 + t_ms * 100 / WIN_GROW_MS;  // outward from the centre
-        uint8_t v = r < 180 ? 255 : (uint8_t)(128 + hh->sin8((uint8_t)(t_ms / 4)) / 2);  // then a pulse
-        light(place, r > 255 ? 255 : (uint8_t)r, v, (uint8_t)(v / 2), 0, v);
+        // outward from where it already glows, then a pulse
+        bool grown = t_ms >= WIN_GROW_MS;
+        uint8_t r = grown ? 255 : (uint8_t)(CALM_R + t_ms * (WIN_R - CALM_R) / WIN_GROW_MS);
+        uint8_t v = grown ? (uint8_t)(128 + hh->sin8((uint8_t)((t_ms - WIN_GROW_MS) / 4 + 64)) / 2) : 255;
+        light(place, r, v, (uint8_t)(v / 2), 0, v);
     }
 
     // The grid: the number of players just after C or B, rings for the
-    // winner, "C+" asking for players, or else the bottle
+    // winner, "C+" asking for players, or else the bottle (blinking on a miss)
     if (count_ms) {
         hh->draw_number(HH_CENTER, 4, players, 255);
     } else if (state == WIN && t_ms < CHEER_MS) {
@@ -138,7 +142,7 @@ static void tick(uint32_t elapsed_ms) {
             }
     } else if (state == IDLE && players < 2 && t_ms % 2500 >= 1500) {
         hh->draw_text(HH_CENTER, 4, "C+", 255);
-    } else {
+    } else if (state != MISS || t_ms / 175 % 2 == 0) {
         bottle();
     }
 }

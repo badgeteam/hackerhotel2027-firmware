@@ -45,6 +45,28 @@ static void spin_to_end(void) {
     while (state == SPIN) run(1000, 0);
 }
 
+// How many of place p's slots are bright (a win's amber)
+static int bright(uint8_t p) {
+    uint8_t m[HH_SLOTS], keep[HH_SLOTS];
+    memcpy(keep, mock_leds, sizeof keep);
+    place_leds(p, 255, m);
+    memcpy(mock_leds, keep, sizeof keep);
+    int n = 0;
+    for (int s = 0; s < HH_SLOTS; s++) n += m[s] && mock_leds[s] > 200;
+    return n;
+}
+
+// The brightest grid pixel
+static uint8_t grid_max(void) {
+    uint8_t v = 0;
+    for (int y = 0; y < HH_GRID_H; y++)
+        for (int x = 0; x < HH_GRID_W; x++) {
+            uint16_t s = layout_grid[y][x];
+            if (s != HH_NONE && mock_leds[s] > v) v = mock_leds[s];
+        }
+    return v;
+}
+
 int main(void) {
     (void)mock_rgb;
     init(&mock_api);
@@ -127,7 +149,7 @@ int main(void) {
     for (int i = 0; state == SPIN && i < 4000; i++) {
         uint16_t was = angle;
         uint8_t was_players = players;
-        run(5, i % 7 == 0 ? HH_BTN_C | HH_BTN_B : i % 7 == 3 ? HH_BTN_D : 0);
+        run(5, i % 7 == 0 ? HH_BTN_C : i % 7 == 2 ? HH_BTN_B : i % 7 == 3 ? HH_BTN_D : 0);
         CHECK(players == was_players, "no players change while it spins");
         uint32_t step = (uint16_t)(angle - was);
         if (!first) first = step;
@@ -140,15 +162,22 @@ int main(void) {
     CHECK(last_step < 20, "to a stop: the last step %u", last_step);
     CHECK(turned >= 5 * 65536u && turned < 6 * 65536u, "%u turns", turned / 65536);
     CHECK(dur >= 4000 && dur <= 5000, "in %u ms", dur);
+    spin_to_end();
+    CHECK(mock_saves == 1, "a spin with the same players saves nothing (%u saves)", mock_saves);
+    run(10, HH_BTN_C);
+    spin_to_end();
+    CHECK(saved == 4 && mock_saves == 2, "one more player: saved again (%u saves)", mock_saves);
 
     // Fair: every place about as often, the bottle well inside it
     players = PLACES;  // every spin wins
     static int hits[PLACES];
-    int inside = 0, wins = 0, spins = 20000;
+    int inside = 0, wins = 0, spins = 20000, off_lo = 0, off_hi = 0;
     for (int i = 0; i < spins; i++) {
         spin_to_end();
         hits[place]++;
         int off = (int16_t)(angle - (uint16_t)((uint32_t)place * 65536 / PLACES));
+        if (off < off_lo) off_lo = off;
+        if (off > off_hi) off_hi = off;
         if (off < 0) off = -off;
         inside += off <= SECTOR / 3 + 1;
         wins += state == WIN;
@@ -160,6 +189,25 @@ int main(void) {
     }
     CHECK(lo > spins / PLACES * 9 / 10 && hi < spins / PLACES * 11 / 10, "each place within 10%% of %d: %d .. %d", spins / PLACES, lo, hi);
     CHECK(inside == spins, "the bottle stops in the middle 2/3 of a place (%d of %d)", inside, spins);
+    CHECK(off_lo < -SECTOR / 4 && off_hi > SECTOR / 4, "anywhere in that middle part (%d .. %d)", off_lo, off_hi);
+
+    // The winner's place never dims from the last spinning frame: it only grows
+    int drops = 0, checked = 0;
+    for (int i = 0; i < 30; i++) {
+        run(10, HH_BTN_D);
+        int last = 0;
+        while (state == SPIN) {
+            last = bright(place_of(angle));
+            run(5, 0);
+        }
+        uint8_t p = place;
+        for (int k = 0; k < 8; k++) {
+            drops += bright(p) < last;
+            run(25, 0);
+        }
+        checked += last > 0;
+    }
+    CHECK(checked == 30 && drops == 0, "the win lights outward from what is lit (%d drops in %d)", drops, checked);
     CHECK(wins == spins, "with all 10 places taken every spin wins (%d)", wins);
 
     // Wins only on a player's place, misses only on an empty one
@@ -185,12 +233,22 @@ int main(void) {
     while (state != MISS);
     uint8_t p = place;
     bool blinked = false;
+    uint8_t peak = 0, grid_hi = 0, grid_lo = 255;
+    uint8_t pm[HH_SLOTS];
+    place_leds(p, CALM_R, pm);
     for (int i = 0; i < MISS_MS / 25; i++) {
         run(25, 0);
         blinked = blinked || lit_now(p);
+        for (int s = 0; s < HH_SLOTS; s++)
+            if (pm[s] && mock_leds[s] > peak) peak = mock_leds[s];
+        uint8_t g = grid_max();
+        if (g > grid_hi) grid_hi = g;
+        if (g < grid_lo) grid_lo = g;
     }
     run(25, 0);
     CHECK(blinked && state == IDLE && !lit_now(p), "an empty place blinks, then it waits for D");
+    CHECK(peak >= 120 && peak < 200, "clearly, but less than a win (%d)", peak);
+    CHECK(grid_hi == 255 && grid_lo == 0, "and the bottle blinks with it (%d .. %d)", grid_lo, grid_hi);
 
     // A win on an arm: its LEDs light from the centre outward, then pulse
     do spin_to_end();
@@ -211,6 +269,14 @@ int main(void) {
         if (c6[0] > highest) highest = c6[0];
     }
     CHECK(highest - lowest > 60, "and pulses (%d .. %d)", lowest, highest);
+    // still lit to the tip after half a day without a button
+    lowest = 255;
+    for (t_ms = 42949000; t_ms < 42951000;) {
+        run(25, 0);
+        mock_rgb(tip, c6);
+        if (c6[0] < lowest) lowest = c6[0];
+    }
+    CHECK(lowest >= 100, "and still pulses at the tip after 12 hours (%d)", lowest);
     run(10, HH_BTN_C);
     CHECK(state == IDLE && players == 4, "C after a win: a new round with one more player");
 

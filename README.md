@@ -169,44 +169,53 @@ Then run `sudo udevadm control --reload` and plug the badge in again.
 
 ## Web interface
 
-WebUSB needs Chrome or Edge, and a secure context: localhost is
+WebUSB needs Chrome, Edge or Opera, and a secure context: localhost is
 sufficient.
 
 ```sh
 cd webui && python3 -m http.server 8027 --bind 127.0.0.1
 ```
 
-Open http://127.0.0.1:8027/ and click **Connect over WebUSB**. The
-**On the badge** panel shows what is stored on the badge. In that panel
-you can:
+Open http://127.0.0.1:8027/ and click **Connect badge**. In the
+browser's box, pick **Hackerhotel 2027 starfish**. The **Your badge**
+panel then shows the badge's state and lets you set your name
+(**Save name**). The **On your badge** panel shows what is stored on the
+badge. In that panel you can:
 
-- run an item,
-- choose the boot item (★),
-- delete an item (🗑),
-- add a `.hhapp`, a `.ledanim` or a text (typed, or a `.txt`),
-- add or update an app from the **App library**: the apps in `apps/`,
-  built into `webui/apps/` by `make -C apps webui`,
-- stop what runs,
-- erase the store,
-- set your name.
+- start an item (**Start**),
+- choose the item that starts at power-on (the star button),
+- delete an item (the trash button),
+- add a `.hhapp`, a `.ledanim` or a `.txt` (**Add from file…**),
+- type a text and add it (**Show a text**, **Add text to badge**),
+- stop what plays (**Stop playing**),
+- erase the store (**Erase the badge**, **Erase all items**).
 
-**Add to the badge & play on boot** stores the animation you made.
+The **App library** panel adds or updates the apps in `apps/`, built into
+`webui/apps/` by `make -C apps webui`.
 
-With **Live send** on, the badge shows what you draw and the frames of
-**▶ Play**. If the badge cannot keep up with the fps, it skips frames.
-**Run**, **Stop** and an upload in the **On the badge** panel stop
-**▶ Play**. The badge then runs that item until you draw again.
+In **Create an animation**, **Save to badge and play** stores the
+animation you made.
+
+With **Show on badge while drawing** on, the badge shows what you draw
+and the frames of **▶ Play**. If the badge cannot keep up with the speed,
+it skips frames. **Start**, **Stop playing** and an upload in the
+**On your badge** panel stop **▶ Play**. The badge then runs that item
+until you draw again.
 
 To put the web interface on a web server (HTTPS; WebUSB needs a secure
 context), use `tools/deploy_webui.sh HOST:PATH` (a dry run; add `--go`).
 It deploys the committed `webui/` of the current commit, and the page
 shows that commit in its footer. When a badge's firmware is older than
-the page expects, the page says so next to the badge's status.
+the page expects, the **Your badge** panel says so and shows an
+**Update firmware** button that takes you to the **Firmware** panel.
 
-The **Firmware** panel flashes new firmware: the firmware built from the
-page's own commit, or a `.bin` you pick. The items, the name and the
-settings stay. `docs/FIRMWARE_UPDATE.md` describes how it works. Served
-from this checkout, the panel flashes what `make webui-firmware` copied to
+The **Firmware** panel flashes new firmware. **Update firmware to
+VERSION** flashes the firmware built from the page's own commit;
+**Advanced: flash a .bin file** flashes a `.bin` you choose. Click
+**Flash now**, then pick "Unknown device from QinHeng Electronics" in the
+browser's box. The items, the name and the settings stay.
+`docs/FIRMWARE_UPDATE.md` describes how it works. Served from this
+checkout, the panel flashes what `make webui-firmware` copied to
 `webui/firmware/`.
 
 Only one program at a time can have the badge open. Click
@@ -282,12 +291,12 @@ The top 32 KB of flash is the item store (`store.h`):
   scores and the like).
 
 The record is kept twice, so a power loss while it is written leaves the
-previous copy. **Erase all** removes the items but keeps the record.
+previous copy. **Erase all items** removes the items but keeps the record.
 
 A **text** is stored as its characters, one byte each, so the store holds
 about 31 000 of them. The badge shows a text as the name tag shows your
 name: still if it fits, else scrolling. Add one in the web interface (**On
-the badge**, **Add a text**, or a `.txt` file) or with `tools/badge.py add
+your badge**, **Show a text**, or a `.txt` file) or with `tools/badge.py add
 FILE.txt`. The badge shows printable ASCII: the web interface drops
 accents, and shows other characters as `?`. The format is in `nametag.h`.
 

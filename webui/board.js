@@ -14,6 +14,17 @@ const MATRIX_ROWS = 16;
 const MATRIX_COLS = 24;
 const PIXEL_COUNT = MATRIX_ROWS * MATRIX_COLS;
 const LED_RADIUS = 1.05; // mm, tuned by eye against the board's LED pitch
+// Keyboard cursor ring, a little larger than an RGB diamond (half diagonal
+// LED_RADIUS * 1.8 / sqrt(2) = 1.34 mm) so it shows around either kind.
+const BOARD_CURSOR_RADIUS = 1.75;
+const BOARD_ANNOUNCE_MS = 250; // at most one #board-live update per this
+// Arrow key -> unit vector in board millimetres (y grows downwards)
+const BOARD_ARROWS = {
+	ArrowUp: [0, -1],
+	ArrowDown: [0, 1],
+	ArrowLeft: [-1, 0],
+	ArrowRight: [1, 0],
+};
 
 class BoardView {
 	constructor(container) {
@@ -28,10 +39,21 @@ class BoardView {
 		this._rgbRefsByCell = new Map();
 		this.onPaintAt = null; // (xMillimeters, yMillimeters) => void, called while the user draws
 		this.onSelectRgb = null; // (rgbLedInfo) => void, called on clicking an RGB LED
+		// (xMillimeters, yMillimeters) => void, like onPaintAt but always
+		// with the eraser. Delete/Backspace on the board uses it. When it is
+		// not set, the board turns on #erase-mode for one onPaintAt call.
+		this.onEraseAt = null;
 		// When true, the RGB LEDs are paint targets (dragging over them calls
 		// onPaintAt like anywhere else) instead of opening onSelectRgb.
 		this.rgbBrush = false;
 		this._painting = false;
+		// Keyboard cursor: every LED, white and RGB, as one list of targets
+		this._targets = [];
+		this._cursor = 0; // index into _targets
+		this._cursorEl = null;
+		this._announceTimer = null;
+		this._announceLast = 0;
+		this._announceText = '';
 		this._build();
 	}
 
@@ -51,6 +73,14 @@ class BoardView {
 		const svg = document.createElementNS(SVG_NS, 'svg');
 		svg.setAttribute('viewBox', `${minX} ${minY} ${w} ${h}`);
 		svg.classList.add('board-svg');
+		// One focusable widget with its own keys (see _wireKeyboard). The
+		// LEDs themselves stay out of the accessibility tree: the cursor
+		// position and LED state go out through #board-live instead.
+		svg.setAttribute('tabindex', '0');
+		svg.setAttribute('role', 'application');
+		svg.setAttribute('aria-roledescription', 'LED board');
+		svg.setAttribute('aria-label', 'Starfish LED board');
+		if (document.getElementById('board-help')) svg.setAttribute('aria-describedby', 'board-help');
 
 		const outline = document.createElementNS(SVG_NS, 'polygon');
 		outline.setAttribute(
@@ -82,12 +112,16 @@ class BoardView {
 		silkscreen.setAttribute('preserveAspectRatio', 'none');
 		silkscreen.setAttribute('clip-path', 'url(#board-clip)');
 		silkscreen.classList.add('board-silkscreen');
+		silkscreen.setAttribute('aria-hidden', 'true');
 		svg.appendChild(silkscreen);
 
 		// Lit LEDs glow through a per-LED CSS drop-shadow scaled by their
 		// level (see .led/.led-rgb in styles.css) -- a plain blur of a white
 		// LED would vanish against the white PCB.
 		const ledLayer = document.createElementNS(SVG_NS, 'g');
+		// The <title>s stay as hover tooltips, but 314 named graphics would
+		// drown a screen reader
+		ledLayer.setAttribute('aria-hidden', 'true');
 		for (const led of BOARD_DATA.leds) {
 			const c = document.createElementNS(SVG_NS, 'circle');
 			c.setAttribute('cx', led.x);
@@ -97,10 +131,11 @@ class BoardView {
 			c.dataset.row = led.row;
 			c.dataset.col = led.col;
 			const title = document.createElementNS(SVG_NS, 'title');
-			title.textContent = `${led.ref} -- row ${led.row}, col ${led.col}`;
+			title.textContent = `${led.ref}: row ${led.row}, column ${led.col}`;
 			c.appendChild(title);
 			ledLayer.appendChild(c);
 			this.dotByIndex[led.row * MATRIX_COLS + led.col] = c;
+			this._targets.push({ rgb: false, led });
 		}
 
 		for (const led of BOARD_DATA.rgb_leds) {
@@ -117,7 +152,7 @@ class BoardView {
 			c.setAttribute('transform', `rotate(45 ${led.x} ${led.y})`);
 			c.classList.add('led-rgb');
 			const title = document.createElementNS(SVG_NS, 'title');
-			title.textContent = `${led.ref} -- RGB accent LED, col ${led.col} (click to set color)`;
+			title.textContent = `${led.ref}: colour LED, column ${led.col}. Click to set its colour.`;
 			c.appendChild(title);
 			c.addEventListener('click', (ev) => {
 				ev.stopPropagation();
@@ -125,6 +160,7 @@ class BoardView {
 			});
 			ledLayer.appendChild(c);
 			this.rgbDotByRef.set(led.ref, c);
+			this._targets.push({ rgb: true, led });
 			// An RGB LED's three channels share one column (its shared anode
 			// group) but each channel is a different row -- see
 			// docs/LEDPWM_MATRIX.md and tools/extract_board_data.py.
@@ -136,7 +172,27 @@ class BoardView {
 		}
 		svg.appendChild(ledLayer);
 
+		// Keyboard cursor, on top of everything. Hidden until the board is
+		// used from the keyboard. The presentation attributes are a fallback
+		// for the .board-cursor rule in styles.css (--board-cursor #000).
+		const cursorLayer = document.createElementNS(SVG_NS, 'g');
+		cursorLayer.setAttribute('aria-hidden', 'true');
+		const cursor = document.createElementNS(SVG_NS, 'circle');
+		cursor.setAttribute('r', BOARD_CURSOR_RADIUS);
+		cursor.setAttribute('fill', 'none');
+		cursor.setAttribute('stroke', '#000');
+		cursor.setAttribute('stroke-width', '0.35');
+		cursor.setAttribute('pointer-events', 'none');
+		cursor.setAttribute('visibility', 'hidden');
+		cursor.classList.add('board-cursor');
+		cursorLayer.appendChild(cursor);
+		svg.appendChild(cursorLayer);
+		this._cursorEl = cursor;
+		this._cursor = this._centreTarget();
+		this._drawCursor();
+
 		this._wirePointerEvents(svg);
+		this._wireKeyboard(svg);
 
 		this.container.innerHTML = '';
 		this.container.appendChild(svg);
@@ -153,6 +209,12 @@ class BoardView {
 			this.onPaintAt(mm.x, mm.y);
 		};
 		svg.addEventListener('pointerdown', (ev) => {
+			// The keyboard carries on from where the pointer went down
+			const mm = this._clientToBoard(svg, ev.clientX, ev.clientY);
+			if (mm) {
+				this._cursor = this._nearestTarget(mm.x, mm.y);
+				this._showCursor(false);
+			}
 			// Capturing the pointer here (needed so drag-painting keeps
 			// working even once the cursor leaves the svg's bounds) would
 			// retarget the click synthesized from the matching pointerup to
@@ -172,6 +234,211 @@ class BoardView {
 				this._painting = false;
 			});
 		}
+	}
+
+	_clientToBoard(svg, clientX, clientY) {
+		const ctm = svg.getScreenCTM();
+		if (!ctm) return null;
+		const pt = svg.createSVGPoint();
+		pt.x = clientX;
+		pt.y = clientY;
+		return pt.matrixTransform(ctm.inverse());
+	}
+
+	// --- Keyboard ---------------------------------------------------
+	// Arrows move the cursor to the nearest LED in that direction, Shift+Arrow
+	// paints the LEDs it leaves and lands on, Space paints, Enter on a
+	// diamond opens the colour editor (paints in colour-brush mode),
+	// Delete/Backspace erases, Home goes back to the centre. Painting goes
+	// through onPaintAt like the pointer, so brush size, eraser and brush
+	// mode all apply.
+
+	_wireKeyboard(svg) {
+		svg.addEventListener('keydown', (ev) => {
+			if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+			const dir = BOARD_ARROWS[ev.key];
+			if (dir) {
+				ev.preventDefault();
+				this._showCursor(true);
+				const next = this._targetInDirection(this._cursor, dir);
+				if (next < 0) {
+					if (ev.shiftKey) this._paintCursor();
+					this._announce(`Edge of the board. ${this._describe(this._cursor)}`);
+					return;
+				}
+				if (ev.shiftKey) this._paintCursor();
+				this._cursor = next;
+				this._drawCursor();
+				if (ev.shiftKey) this._paintCursor();
+				this._announceCursor();
+				return;
+			}
+			switch (ev.key) {
+				case ' ':
+				case 'Spacebar':
+					ev.preventDefault();
+					if (ev.repeat) return;
+					this._showCursor(true);
+					this._paintCursor();
+					this._announceCursor();
+					break;
+				case 'Enter': {
+					ev.preventDefault();
+					if (ev.repeat) return;
+					this._showCursor(true);
+					const t = this._targets[this._cursor];
+					if (t && t.rgb && !this.rgbBrush) {
+						if (this.onSelectRgb) this.onSelectRgb(t.led);
+						return;
+					}
+					this._paintCursor();
+					this._announceCursor();
+					break;
+				}
+				case 'Delete':
+				case 'Backspace':
+					ev.preventDefault();
+					this._showCursor(true);
+					this._eraseCursor();
+					this._announceCursor();
+					break;
+				case 'Home':
+					ev.preventDefault();
+					this._showCursor(true);
+					this._cursor = this._centreTarget();
+					this._drawCursor();
+					this._announceCursor();
+					break;
+				default:
+					break;
+			}
+		});
+		svg.addEventListener('focus', () => {
+			// A mouse click focuses the svg too; only show the cursor for
+			// keyboard focus
+			let keyboard = true;
+			try {
+				keyboard = svg.matches(':focus-visible');
+			} catch (e) {
+				// no :focus-visible support: show it anyway
+			}
+			if (keyboard) {
+				this._showCursor(true);
+				this._announceCursor();
+			}
+		});
+		svg.addEventListener('blur', () => this._showCursor(false));
+	}
+
+	_showCursor(visible) {
+		if (!this._cursorEl) return;
+		this._cursorEl.setAttribute('visibility', visible ? 'visible' : 'hidden');
+		if (visible) this._drawCursor();
+	}
+
+	_drawCursor() {
+		const t = this._targets[this._cursor];
+		if (!t || !this._cursorEl) return;
+		this._cursorEl.setAttribute('cx', t.led.x);
+		this._cursorEl.setAttribute('cy', t.led.y);
+	}
+
+	_paintCursor() {
+		const t = this._targets[this._cursor];
+		if (t && this.onPaintAt) this.onPaintAt(t.led.x, t.led.y);
+	}
+
+	_eraseCursor() {
+		const t = this._targets[this._cursor];
+		if (!t) return;
+		if (this.onEraseAt) {
+			this.onEraseAt(t.led.x, t.led.y);
+			return;
+		}
+		if (!this.onPaintAt) return;
+		const eraser = document.getElementById('erase-mode');
+		if (!eraser) return;
+		const was = eraser.checked;
+		eraser.checked = true;
+		try {
+			this.onPaintAt(t.led.x, t.led.y);
+		} finally {
+			eraser.checked = was;
+		}
+	}
+
+	// The LED nearest the middle of the board
+	_centreTarget() {
+		const b = this.bounds;
+		return this._nearestTarget(b.minX + b.width / 2, b.minY + b.height / 2);
+	}
+
+	_nearestTarget(x, y) {
+		let best = 0;
+		let bestDist = Infinity;
+		this._targets.forEach((t, i) => {
+			const d = Math.hypot(t.led.x - x, t.led.y - y);
+			if (d < bestDist) {
+				bestDist = d;
+				best = i;
+			}
+		});
+		return best;
+	}
+
+	// Nearest LED within 45 degrees of the direction, scored by distance
+	// plus twice the sideways offset, so the cursor stays on its line.
+	// Returns -1 when there is none.
+	_targetInDirection(from, [ux, uy]) {
+		const origin = this._targets[from];
+		if (!origin) return -1;
+		let best = -1;
+		let bestScore = Infinity;
+		this._targets.forEach((t, i) => {
+			if (i === from) return;
+			const dx = t.led.x - origin.led.x;
+			const dy = t.led.y - origin.led.y;
+			const along = dx * ux + dy * uy;
+			const side = Math.abs(dx * uy - dy * ux);
+			if (along <= 0 || side > along) return;
+			const score = Math.hypot(dx, dy) + 2 * side;
+			if (score < bestScore) {
+				bestScore = score;
+				best = i;
+			}
+		});
+		return best;
+	}
+
+	_describe(index) {
+		const t = this._targets[index];
+		if (!t) return '';
+		if (t.rgb) {
+			const [r, g, b] = this.getRgb(t.led);
+			return `${t.led.ref}, colour LED, colour ${r} ${g} ${b}`;
+		}
+		const n = this.frame[t.led.row * MATRIX_COLS + t.led.col];
+		return `${t.led.ref}, white LED, level ${n} of 255`;
+	}
+
+	_announceCursor() {
+		this._announce(this._describe(this._cursor));
+	}
+
+	// Writes to #board-live at most once per BOARD_ANNOUNCE_MS; the last
+	// message in a burst always gets through
+	_announce(text) {
+		this._announceText = text;
+		if (this._announceTimer) return;
+		const wait = this._announceLast + BOARD_ANNOUNCE_MS - Date.now();
+		const flush = () => {
+			this._announceTimer = null;
+			this._announceLast = Date.now();
+			const live = document.getElementById('board-live');
+			if (live) live.textContent = this._announceText;
+		};
+		if (wait <= 0) flush();
+		else this._announceTimer = setTimeout(flush, wait);
 	}
 
 	setPixel(row, col, brightness) {

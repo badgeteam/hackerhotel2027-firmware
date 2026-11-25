@@ -15,6 +15,34 @@ The stored items, the name and the settings stay. They are in the top
 32 KB of flash, from 0x7800. The boot ROM erases from address 0 only, and
 `wchisp.js` refuses to erase or program at 0x7800 or above.
 
+## What you do
+
+1. Click **Connect badge** and pick **Hackerhotel 2027 starfish**. If the
+   badge has older firmware, **Your badge** says so and shows an
+   **Update firmware** button. It takes you to the **Firmware** panel.
+2. In the **Firmware** panel, click **Update firmware to VERSION**. To
+   flash a `.bin` of your own, open **Advanced: flash a .bin file** and
+   click **Choose .bin file…** first. The button then reads
+   **Flash NAME.bin**.
+3. Read the question that appears, and click **Flash now**. **Cancel**
+   closes it and changes nothing.
+4. In the browser's box, pick "Unknown device from QinHeng Electronics"
+   and click **Connect**.
+5. Keep the badge plugged in until the status line starts with **Done:**.
+
+When the badge already runs this site's firmware, the button is off and
+the status line says why. The same goes for a browser without WebUSB and
+for the emulator.
+
+For keyboard and screen reader users:
+
+- **Update firmware** moves focus to the question, **Flash now** to the
+  status line, and **Cancel** back to **Update firmware**.
+- The status line and the badge's version line are live regions. During
+  the update the status line changes once per phase and per 25%, so a
+  screen reader does not read every packet. The progress bar shows every
+  step.
+
 ## The flow
 
 1. The panel asks the badge for its version (`FW_INFO`, 0x41). The reply
@@ -22,8 +50,9 @@ The stored items, the name and the settings stay. They are in the top
    store. Firmware without `FW_INFO` is older firmware.
 2. The panel checks the image: at most 30 KB, at least 1 KB, it contains
    the `HH27-STARFISH-FW` marker, and its store layout is the badge's.
-3. The user clicks twice: once to see what happens, once to start. Chrome
-   opens its device chooser only from a click.
+3. The user clicks twice: **Update firmware** to see what happens,
+   **Flash now** to start. Chrome opens its device chooser only from a
+   click.
 4. The panel sends `BOOT_ROM` (0x40). The badge replies, writes a pending
    change to the persistent record, and restarts into the boot ROM
    (`1a86:55e0`).
@@ -146,4 +175,5 @@ node tools/isp_test/isp_test.js
   Each time, the item store must stay and a new update must work.
 - Sends late replies, a half-filled page buffer, and a stuck flash bit.
 - Runs the Firmware panel through a whole update, with a mock badge and a
-  mock `navigator.usb`.
+  mock `navigator.usb`. It checks the texts, where the focus goes, and how
+  often the status line changes.

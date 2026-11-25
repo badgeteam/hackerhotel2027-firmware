@@ -206,7 +206,13 @@ interface first.
 
 ## Deploy the web interface
 
-The web interface is at <https://scene.rs/star/>. To publish it:
+The web interface has two homes:
+
+- **<https://badge.team/hackerhotel2027-tool/>**: the public site.
+- **<https://scene.rs/star/>**: acceptance, for public testing before a
+  change goes to the public site.
+
+To publish it:
 
 ```sh
 tools/deploy_webui.sh HOST:PATH         # dry run: shows what would change

@@ -268,7 +268,9 @@ static void tick(uint32_t elapsed_ms) {
             hh->set(hh->grid[Y0 + r][X0 + 2 * c + 1], b);
         }
     if (!winner && !lost && my_turn() && !(mode == LOCAL && n % 2)) {
-        uint8_t b = t / 270 % 3 ? 255 : 90;
+        // The cursor sits right on the top row, so it blinks fully off:
+        // over a full column it must not look like a seventh disc
+        uint8_t b = t / 200 % 3 ? 255 : 0;
         hh->set(hh->grid[CURSOR_Y][X0 + 2 * cursor], b);
         hh->set(hh->grid[CURSOR_Y][X0 + 2 * cursor + 1], b);
     }

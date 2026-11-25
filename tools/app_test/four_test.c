@@ -52,9 +52,13 @@ int main(void) {
     // The cursor: two LEDs over its column; C and D move it
     run(5, HH_BTN_C);
     CHECK(cursor == 2, "C moves the cursor left (%d)", cursor);
-    mock_ms = 0;  // the cursor is bright then
+    mock_ms = 200;  // the cursor is on then
     run(5, 0);
-    CHECK(px(CURSOR_Y, X0 + 4) && px(CURSOR_Y, X0 + 5) && !px(CURSOR_Y, X0 + 3) && !px(CURSOR_Y, X0 + 6), "the cursor lights both LEDs of column 3");
+    CHECK(px(CURSOR_Y, X0 + 4) == 255 && px(CURSOR_Y, X0 + 5) == 255 && !px(CURSOR_Y, X0 + 3) && !px(CURSOR_Y, X0 + 6),
+          "the cursor lights both LEDs of column 3");
+    mock_ms = 0;  // and off then: it blinks, unlike a disc
+    run(5, 0);
+    CHECK(!px(CURSOR_Y, X0 + 4) && !px(CURSOR_Y, X0 + 5), "the cursor blinks fully off");
     run(5, HH_BTN_D);
     CHECK(cursor == 3, "D moves it right (%d)", cursor);
 

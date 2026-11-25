@@ -27,10 +27,10 @@ earn its place. This is how the space is split, and what uses it now:
 
 | Memory | Size | Use | In use now |
 |---|---|---|---|
-| Flash | 30 KB | firmware | 27.6 KB |
+| Flash | 30 KB | firmware | 28.5 KB |
 | Flash | 31 KB | item store: animations, texts and apps | what you store |
 | Flash | 1 KB | persistent record: name, brightness, boot item, app data | 2 × 512 B |
-| RAM | 8 KB | firmware data and stack | 4.7 KB data, the rest is stack |
+| RAM | 8 KB | firmware data and stack | 4.9 KB data, the rest is stack |
 | RAM | 12 KB | the app that runs (its code and data); while an animation plays, the animation decoder | snake: 1.4 KB code + 0.6 KB data; the decoder 3.5 KB |
 
 How we juggle space and usability:
@@ -79,6 +79,7 @@ C bottom left, D bottom right.
 |---|---|
 | **Hold A** | the menu, also from an app (hold it for a second there) |
 | **B** / **D** | brighter / dimmer (when no app runs) |
+| **Hold C + D** for 3 s | the USB boot ROM, from anywhere: see UPDATE below |
 
 **The menu** lists the name tag, SAY HI, every stored animation, text and
 app, and the badge's settings. The name of the entry shows on the grid,
@@ -117,6 +118,11 @@ The settings in the menu:
 - **SLEEP:** standby until you press a button. USB disconnects while the
   badge sleeps.
 - **UPDATE:** reboot into the USB boot ROM, to flash new firmware.
+  Holding C and D together for 3 s does the same from anywhere: on the
+  name tag, in the menu, in an app or in the factory test. An arrow runs
+  down the grid for a second, then the boot ROM starts. This also works
+  on a badge whose menu does not work, and with C + D held while the
+  badge powers on.
 
 Further:
 
@@ -154,7 +160,8 @@ waits about 5 s for a host. Do the steps in this order:
    ch32fun/minichlink/minichlink -w ledmatrix.bin flash -b
    ```
 
-2. On the badge, open the menu (hold **A**) and choose **UPDATE**.
+2. On the badge, open the menu (hold **A**) and choose **UPDATE**, or
+   hold **C** + **D** for 3 s.
 
 Flashing the firmware does not erase the stored items, the name or the
 other settings: minichlink writes only the firmware's own pages.
@@ -168,6 +175,12 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="d643", MODE="0666"
 ```
 
 Then run `sudo udevadm control --reload` and plug the badge in again.
+
+On Windows, the badge needs no driver: its firmware tells Windows to use
+WinUSB (a Microsoft OS 2.0 descriptor). A badge with firmware from before
+that change needs the WinUSB driver once, for example with
+[Zadig](https://zadig.akeo.ie/). The boot ROM (`1a86:55e0`) is a separate
+device and always needs it once.
 
 ## Flash with a WCH-Link probe
 
@@ -375,7 +388,8 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `docs/FIRMWARE_UPDATE.md` | the firmware update from the web interface, and the boot ROM's protocol |
 | `docs/OLD_FIRMWARE.md` | what the old firmware had, feature by feature, and where each feature stands now |
 | `webusb_protocol.h` | the USB protocol |
-| `tools/badge.py` | the item store, the name, run and stop, from the command line (needs pyusb); `bringup` lights the LEDs one at a time and prints their designators |
+| `usb_descriptors.h` | the USB descriptors: WinUSB for Windows (Microsoft OS 2.0), the WebUSB landing page, the serial number |
+| `tools/badge.py` | the item store, the name, run and stop, from the command line (needs pyusb); `--serial` picks one of several badges; `bringup` lights the LEDs one at a time and prints their designators |
 | `tools/deploy_webui.sh` | publishes `webui/` of the current commit to a web server |
 | `tools/extract_board_data.py` | makes `webui/board_data.js` from the KiCad board in the hardware repository |
 | `tools/gen_layout.py` | makes `layout.c`, `la04_tables.h` and `webui/layout_data.js` from `webui/board_data.js` |
@@ -387,6 +401,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/board_test/run.sh` | checks that `tools/extract_board_data.py` makes the committed `webui/board_data.js` from the board (SKIP without it) |
 | `tools/bringup_test/run.sh` | checks `tools/badge.py bringup` on the emulator: the LED of each printed designator lights, and the badge shows its name tag after |
 | `tools/nametag_test/run.sh` | checks how the name tag shows banana shots, on the emulator |
+| `tools/usb_test/run.sh` | checks the USB descriptors' lengths on the PC, and the C + D boot ROM chord on the emulator |
 | `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge, banana shots, on emulators |
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, USB power and charging, a fresh start, the text on the grid |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |

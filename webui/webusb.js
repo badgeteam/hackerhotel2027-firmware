@@ -72,6 +72,12 @@ class LedMatrixDevice extends EventTarget {
 		return !!this.device?.emulator;
 	}
 
+	// The badge's USB serial number: 16 hex digits from the chip's unique ID
+	// ("001" on older firmware). Empty for the emulator.
+	get serialNumber() {
+		return (this.device?.serialNumber || '').replace(/\0+$/, '');
+	}
+
 	// The emulator (tools/emu/emu.py --web) serves this page and takes the
 	// packets on POST /usb instead of over WebUSB. True if it is there.
 	static async emulatorPresent() {

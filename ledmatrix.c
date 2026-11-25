@@ -10,6 +10,7 @@
 #include "greet.h"
 #include "infrared.h"
 #include "app_host.h"
+#include "layout.h"
 #include "menu.h"
 #include "nametag.h"
 #include "pattern_player.h"
@@ -64,6 +65,31 @@ static void enter_boot_rom(void) {
     AppHost_Stop();
     Persist_Flush(PERSIST_SETTLE_MS);
     jump_to_bootloader();
+}
+
+// Hold C + D this long, anywhere, for the boot ROM: also on a badge whose
+// menu does not work. No app makes people hold both for this long.
+#define BOOT_HOLD_MS 3000
+#define BOOT_ARROW_MS 1000  // then the arrow runs this long
+
+// An arrow runs down the grid for a second, so people see that the held
+// C + D works. Then the badge goes into the boot ROM.
+static void boot_rom_arrow(void) {
+    for (uint32_t ms = 0; ms < BOOT_ARROW_MS; ms += TICK_MS) {
+        LEDMatrix_Clear();
+        int shift = (int)(ms * 4 / BOOT_ARROW_MS);  // 4 rows in the second
+        // the shaft 3 wide and 9 high, then the head: 7, 5, 3 and 1 wide
+        for (int y = 0; y < 13; y++) {
+            int half = y < 9 ? 1 : 12 - y;
+            for (int x = HH_GRID_W / 2 - half; x <= HH_GRID_W / 2 + half; x++) {
+                uint16_t slot = layout_grid[y + shift][x];
+                if (slot < HH_SLOTS) LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, 255);
+            }
+        }
+        LEDMatrix_Show();
+        Delay_Ms(TICK_MS);
+    }
+    enter_boot_rom();
 }
 
 // In APP_MODE_FLASH_PATTERN: a text item plays (nametag.h), not an animation.
@@ -124,6 +150,7 @@ int main(void) {
 
     uint32_t last_tick = funSysTick32();
     uint32_t hold_ms = 0;   // how long A has been down
+    uint32_t boot_ms = 0;   // how long C + D have been down together
     uint8_t last_mode = 0;  // to start the name tag when it comes on
     bool menu_open = false;
     bool greeting = false;  // greet.h has the LEDs; what they showed before is saved
@@ -149,6 +176,11 @@ int main(void) {
 
         uint8_t buttons = buttons_poll();
         uint8_t held = buttons_down();
+
+        // Hold C + D: the boot ROM, from the name tag, the menu, an app or
+        // the factory test
+        boot_ms = (held & (HH_BTN_C | HH_BTN_D)) == (HH_BTN_C | HH_BTN_D) ? boot_ms + elapsed_ms : 0;
+        if (boot_ms >= BOOT_HOLD_MS) boot_rom_arrow();
 
         // Banana shots: outside apps (which take their own) they are taken
         // every pass, so none shows later; the name tag shows them, only

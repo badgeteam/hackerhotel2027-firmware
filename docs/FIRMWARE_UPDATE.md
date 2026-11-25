@@ -69,7 +69,9 @@ For keyboard and screen reader users:
    asks up to three times.
 
 Without a connected badge, the user starts the boot ROM on the badge: hold
-**A** for the menu, press **C** to reach **UPDATE**, and tap **A**.
+**A** for the menu, press **C** to reach **UPDATE**, and tap **A**. Or
+hold **C** + **D** for 3 s, until an arrow has run down the grid. That
+works from anywhere, also when the menu does not.
 
 ## Write order
 

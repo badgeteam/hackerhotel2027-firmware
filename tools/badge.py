@@ -2,7 +2,8 @@
 """Talk to the badge's item store over USB, the same protocol as the web
 interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
 
-  tools/badge.py list                      the items, which one runs, which one boots
+  tools/badge.py list                      the badge's serial number, the items, which one
+                                           runs, which one boots
   tools/badge.py add FILE [NAME]           store a .hhapp, .ledanim or .txt; it starts at once
                                            (.txt: --speed COLUMNS_PER_S, --plain)
   tools/badge.py run INDEX [--boot]        start an item (--boot: also at power-on)
@@ -27,6 +28,9 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
                                            x: mark it bad, q: quit. --lines lights a whole COM
                                            line or PWM channel at a time, to find shorts.
                                            At the end the badge shows its name tag again.
+
+With more than one badge plugged in, pick one with --serial SERIAL before
+the command (list shows each badge's serial number).
 """
 import argparse
 import json
@@ -47,13 +51,31 @@ ERRORS = {1: "bad command or index", 2: "the store is full", 3: "no such item", 
 NONE = 0xFF
 
 
+def serial_of(dev):
+    """The serial number: 16 hex digits from the chip's unique ID (older
+    firmware: 001)"""
+    import usb.core
+    import usb.util
+    try:
+        # older firmware also sends the string's terminator
+        return (usb.util.get_string(dev, dev.iSerialNumber) or "").rstrip("\0") or "?"
+    except (usb.core.USBError, ValueError):
+        return "?"  # no permission to read it
+
+
 class Badge:
-    def __init__(self):
+    def __init__(self, serial=None):
         import usb.core  # here, so the tests can import this file without pyusb
         import usb.util
-        self.dev = usb.core.find(idVendor=VID, idProduct=PID)
-        if self.dev is None:
-            sys.exit("no badge found (USB %04x:%04x)" % (VID, PID))
+        devs = list(usb.core.find(find_all=True, idVendor=VID, idProduct=PID))
+        if serial:
+            devs = [d for d in devs if serial_of(d).upper() == serial.upper()]
+        if not devs:
+            sys.exit("no badge %sfound (USB %04x:%04x)" % ("with serial %s " % serial if serial else "", VID, PID))
+        if len(devs) > 1:
+            sys.exit("%d badges found; pick one with --serial: %s" % (len(devs), ", ".join(serial_of(d) for d in devs)))
+        self.dev = devs[0]
+        self.serial = serial_of(self.dev)
         if self.dev.is_kernel_driver_active(0):
             self.dev.detach_kernel_driver(0)
         try:
@@ -352,6 +374,7 @@ def bringup(badge, steps, start=0, auto=None, count=None, level=255, ask=input, 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--serial", help="the badge with this serial number, when more than one is plugged in")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
     a = sub.add_parser("add")
@@ -386,16 +409,7 @@ def main():
     b.add_argument("--level", type=int, default=255, help="the LED value, 1..255 (default 255)")
     args = p.parse_args()
 
-    if args.cmd == "bringup":
-        if not 1 <= args.level <= 255:
-            sys.exit("--level: 1 to 255")
-        if (args.auto is not None and args.auto <= 0) or (args.count is not None and args.count < 1):
-            sys.exit("--auto and --count: more than 0")
-        steps = bringup_steps(args.kind, args.lines)
-        start = find_step(steps, args.start) if args.start else 0
-        bringup(Badge(), steps, start, args.auto, args.count, args.level, header=bringup_header(steps, args.lines))
-        return
-    badge = Badge()
+    badge = Badge(args.serial)
     if args.cmd == "irlog":
         badge.ir_raw()  # drop what came in before
         irlog(badge, args.seconds)
@@ -448,6 +462,8 @@ def main():
         s = badge.send(0x31, *args.text.encode()[:32]) if args.text is not None else badge.send(0x30)
         print("name: %r" % s["name"])
 
+    if args.cmd == "list":
+        print("serial %s" % badge.serial)
     s = badge.send(0xFF)
     print("mode %s, %d items, %d bytes free, app API %d" % (MODES.get(s["mode"], s["mode"]), s["count"], s["free"], s["api"]))
     if args.cmd == "list":

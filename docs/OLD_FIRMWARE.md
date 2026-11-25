@@ -51,8 +51,8 @@ notes.
 |---|---|---|
 | Hold A (0.6 s): the menu, also in a game ([USAGE][u-always]) | done: [#34] | Hold A 0.7 s, or 1 s in an app. The app also gets that press of A. |
 | Tap, hold and chord rules: a chord never taps or holds ([USAGE][u-buttons]) | partly | A held together with another button still opens the menu. Each app reads `pressed()` and `held()` and makes its own rules. |
-| Hold ◀ + ▶ for 3 s: reboot into the USB boot ROM, after an arrow runs down the grid for a second ([USAGE][u-always]) | replaced: [#34], [#33] | UPDATE in the menu, or the firmware update in the web interface (`CMD_BOOT_ROM`). There is no chord and no arrow. |
-| The same chord, held while USB is plugged in ([BRINGUP][bringup], steps 3 and 10) | untracked | To reach the boot ROM, the menu must work. A button held at power-on is now the safe start: the badge skips the boot item ([#1]). |
+| Hold ◀ + ▶ for 3 s: reboot into the USB boot ROM, after an arrow runs down the grid for a second ([USAGE][u-always]) | done: `ledmatrix.c` | Hold C + D for 3 s: on the name tag, in the menu, in an app and in the factory test. The same arrow, then the boot ROM. UPDATE in the menu ([#34]) and the web interface's firmware update ([#33]) also reach it. |
+| The same chord, held while USB is plugged in ([BRINGUP][bringup], steps 3 and 10) | done: `ledmatrix.c` | C + D held at power-on first make the safe start (the badge skips the boot item, [#1]). After 3 s the arrow runs and the boot ROM starts. |
 | Hold A + B for 3 s: the bring-up test ([USAGE][u-bringup]) | partly: [#59] | The same two switches now only leave the factory test. See [Bring-up test](#bring-up-test). |
 | Tap A on the name tag or an animation: brightness ([USAGE][u-nametag]) | replaced | Outside apps, B is brighter and D dimmer. |
 | ◀ / ▶ on the name tag or an animation: previous / next screen ([USAGE][u-nametag]) | untracked | Only the menu changes what runs. C does nothing outside apps. |
@@ -155,8 +155,8 @@ apps, the item store and firmware updates.
 | Pick what the badge shows | replaced: [#1] | **Start** next to the item in the web interface, or `tools/badge.py run N`. |
 | Set the brightness | untracked | The status line shows the brightness, but the USB protocol has no command to set it. |
 | Read the state every second: what shows, the brightness, charging | partly | The page asks every second: mode, brightness, store, app API. There is no charging bit ([#9]). |
-| Windows: Microsoft OS 2.0 descriptor, WinUSB, no driver to install ([README][r-setup]) | untracked | `usb_config.h` has no BOS descriptor (bcdUSB 2.00). Not checked on Windows. |
-| USB serial number made from the chip's unique ID ([BRINGUP][bringup], step 2) | untracked | The serial number is always `001`. |
+| Windows: Microsoft OS 2.0 descriptor, WinUSB, no driver to install ([README][r-setup]) | done: `usb_descriptors.h` | USB 2.1 with a BOS descriptor: the Microsoft OS 2.0 set (WINUSB and a DeviceInterfaceGUIDs property) and the WebUSB landing page. `tools/usb_test` checks every length. Not yet checked on Windows. |
+| USB serial number made from the chip's unique ID ([BRINGUP][bringup], step 2) | done: `usb_descriptors.h` | 16 hex digits, from the first 8 bytes of the unique ID. `tools/badge.py list` and the web interface show it, and `tools/badge.py --serial` picks a badge. |
 | USB ID 1209:D035 | replaced | Now 1209:D643. |
 
 ## UART console
@@ -314,12 +314,14 @@ decision first: is it worth the flash, and is it worth the work?
    BRIGHTNESS.
 3. **Browse without the menu.** C (or C / D) on the name tag steps
    through the items, as ◀ / ▶ did.
-4. **A boot ROM chord.** C + D for 3 s reboots into the boot ROM, so a
-   badge with a broken menu can still be flashed over USB.
-5. **WinUSB on Windows.** A BOS descriptor with the Microsoft OS 2.0
-   descriptor, so Windows needs no driver install.
-6. **A unique USB serial number**, from the chip's unique ID, so two
-   badges on one PC can be told apart.
+4. **A boot ROM chord.** Done: C + D for 3 s reboots into the boot ROM
+   (`ledmatrix.c`), so a badge with a broken menu can still be flashed
+   over USB.
+5. **WinUSB on Windows.** Done: a BOS descriptor with the Microsoft OS
+   2.0 descriptor (`usb_descriptors.h`), so Windows needs no driver
+   install for the badge. The boot ROM still needs one.
+6. **A unique USB serial number.** Done: from the chip's unique ID
+   (`usb_descriptors.h`), so two badges on one PC can be told apart.
 7. **Pull up the unused pads** (PC6–PC9, PC12, PC13, PC20, and PC0–PC2,
    PC14, PC15). Could be part of [#14].
 8. **Factory test overrides.** A way to pass IR untested, as B on `IR?`

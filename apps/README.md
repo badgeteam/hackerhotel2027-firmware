@@ -94,6 +94,9 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   do not make a long press of A do something. The badge also leaves
   the app when the web interface sends a command (a frame, Stop, Run), or
   when the app calls `exit()`. After an app, the badge shows the name tag.
+- **The boot ROM.** Holding C and D together for 3 s reboots the badge
+  into its USB boot ROM, also from an app. Do not make people hold both
+  for that long.
 - **Saving.** `name()` gives the owner's name, which is set in the web
   interface or by an app with `set_name()`. An app can keep up to 28
   bytes with `save()` and `load()`, for example its high scores. The data

@@ -319,6 +319,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `docs/ANIMATION_FORMAT.md` | the `.ledanim` animation format, LA04 |
 | `docs/LEDPWM_MATRIX.md` | how the LEDs are wired, and the slot numbers |
 | `docs/FIRMWARE_UPDATE.md` | the firmware update from the web interface, and the boot ROM's protocol |
+| `docs/OLD_FIRMWARE.md` | what the old firmware had, feature by feature, and where each feature stands now |
 | `webusb_protocol.h` | the USB protocol |
 | `tools/badge.py` | the item store, the name, run and stop, from the command line (needs pyusb) |
 | `tools/deploy_webui.sh` | publishes `webui/` of the current commit to a web server |

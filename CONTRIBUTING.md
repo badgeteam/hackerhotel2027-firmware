@@ -109,6 +109,7 @@ node tools/isp_test/isp_test.js
 | `tools/ir_test/run.sh` | the infrared codec, and the name swap on two emulators |
 | `tools/four_test/run.sh` | 4 in a row: rules on the PC, and whole games on two emulators |
 | `tools/factory_test/run.sh` | the factory test on the emulator |
+| `tools/board_test/run.sh` | `tools/extract_board_data.py` makes the same `webui/board_data.js` from the KiCad board (SKIP without the board) |
 | `tools/emu/rv32_test/run.sh` | the emulator's RISC-V interpreter |
 | `tools/isp_test/isp_test.js` | the web interface's firmware update, offline |
 
@@ -167,6 +168,18 @@ python3 tools/gen_layout.py
 
 and commit the result. CI checks that the committed tables match what
 the generator makes.
+
+For new hardware: set `HW_REV` in `tools/extract_board_data.py` to the
+new commit of badgeteam/hackerhotel2027-hardware (full SHA), then run
+
+```sh
+python3 tools/extract_board_data.py
+python3 tools/gen_layout.py
+```
+
+and commit `webui/board_data.js` and the tables together. This changes
+the firmware tables. `tools/board_test/run.sh` (CI fetches the board at
+`HW_REV`) checks that `webui/board_data.js` is what the script makes.
 
 ## No compatibility shims before the code freeze
 

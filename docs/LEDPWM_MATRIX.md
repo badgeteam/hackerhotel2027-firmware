@@ -42,8 +42,12 @@ a pin.
 ## Where the LEDs are
 
 `webui/board_data.js` gives each LED its position on the board (in mm)
-and its row and column. The file was made from the PCB with
-`tools/extract_board_data.py`, which is not in this repository.
+and its row and column. `tools/extract_board_data.py` makes it from
+`hackerhotel2027.kicad_pcb` in the public repository
+badgeteam/hackerhotel2027-hardware, at the commit its `HW_REV` names.
+It needs Python 3 only, no KiCad. `tools/board_test/run.sh` checks that
+the committed file matches the board. "Layout tables" in
+`CONTRIBUTING.md` says how to follow a hardware change.
 
 `tools/gen_layout.py` makes the layout tables from `board_data.js`:
 

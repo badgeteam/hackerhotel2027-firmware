@@ -157,6 +157,14 @@ Further:
   then does not start the boot item, so an app that hangs cannot lock up
   the badge.
 - **Brightness.** The badge keeps the brightness when it is powered off.
+- **Charging.** When the battery starts to charge (plug in USB, also with
+  the badge already on), a battery on the grid fills up row by row, over
+  and over. The badge cannot tell how full the battery is. Tap any button
+  to hide it: that tap does nothing else, so B and D do not change the
+  brightness. It goes by itself when charging stops, and comes back only
+  when charging starts again. It does not show over an app, a picture
+  from the web interface, the menu, the factory test or a greeting. Apps
+  can ask with `charging()` (`docs/APP_API.md`).
 
 ## Build
 

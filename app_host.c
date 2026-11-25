@@ -11,6 +11,7 @@
 #include "layout.h"
 #include "menu.h"
 #include "persist.h"
+#include "power.h"
 #include "store.h"
 #include "standby.h"
 #ifdef HH_EMU
@@ -171,6 +172,7 @@ static const hh_api_t s_api = {
     .ir_receive_shot = api_ir_receive_shot,
     .ir_send_shot = api_ir_send_shot,
     .ir_send_raw = api_ir_send_raw,
+    .charging = Power_Charging,
 };
 _Static_assert(HH_IR_PACKET_MAX == IR_PACKET_DATA_MAX, "hhapp.h and infrared.h agree on the packet size");
 _Static_assert(IR_RAW_CARRIER_MIN == 20000 && IR_RAW_CARRIER_MAX == 60000, "hhapp.h gives the raw carrier range");

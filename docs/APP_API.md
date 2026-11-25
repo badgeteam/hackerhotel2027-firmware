@@ -38,6 +38,7 @@ badge is older than the page.
 | 5 | `ir_send_packet`, `ir_receive_packet` |
 | 6 | `ir_receive_shot` |
 | 7 | `ir_send_raw` |
+| 8 | `charging` |
 
 | Member | Version |
 |---|---|
@@ -299,6 +300,16 @@ In the emulator, each raw frame shows in the terminal, and
 | `void standby(void)` | Sleep until a button wakes the badge; returns after. That press is not passed on. |
 | `void exit(void)` | Leave the app once this tick returns. The badge shows the name tag. |
 | `void print(const char *text)` | Debug output over SWIO (`minichlink -T`); in the emulator, its log. |
+
+## Power (8)
+
+| Member | |
+|---|---|
+| `bool charging(void)` | True while the battery charges. The firmware reads the charger's CHRG line and takes a change only after it holds for 500 ms, so a line that toggles (no battery) keeps the state it had before it started to toggle. |
+
+The badge cannot tell how full the battery is. Outside apps the firmware
+shows a charging screen when charging starts; it never shows over an app,
+so an app that wants to show that it charges must draw it itself.
 
 ## Persistent data
 

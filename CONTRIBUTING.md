@@ -103,7 +103,7 @@ node tools/isp_test/isp_test.js
 
 | Test | What it checks |
 |---|---|
-| `tools/app_test/run.sh` | the apps: game rules on the PC, then every app in the emulator with random buttons |
+| `tools/app_test/run.sh` | the apps: game rules on the PC, no text drawn over in the same tick (every app alone for a while), then every app in the emulator with random buttons |
 | `tools/codec_test/run.sh` | the web interface and the firmware decode animations the same way |
 | `tools/text_test/run.sh` | text items, from the web interface to the emulator |
 | `tools/ir_test/run.sh` | the infrared codec, and the name swap on two emulators |

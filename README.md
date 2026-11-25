@@ -324,7 +324,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/deploy_webui.sh` | publishes `webui/` of the current commit to a web server |
 | `tools/gen_layout.py` | makes `layout.c`, `la04_tables.h` and `webui/layout_data.js` from `webui/board_data.js` |
 | `tools/codec_test/run.sh` | checks that the web interface and the firmware decode animations the same way |
-| `tools/app_test/run.sh` | checks the apps: game rules on the PC (`mock_hh.h` stands in for the firmware), then every app in the emulator with random buttons |
+| `tools/app_test/run.sh` | checks the apps: game rules on the PC (`mock_hh.h` stands in for the firmware), that no app draws over its own text in the same tick (`overdraw_run.c`, `MOCK_OVERDRAW=all` lists the octagon's clipped pixels too), then every app in the emulator with random buttons |
 | `tools/text_test/run.sh` | checks text items: the web interface's payloads, played on the emulator |
 | `tools/four_test/run.sh` | checks 4 in a row: its rules on the PC, and whole games on two emulators |
 | `tools/ir_test/run.sh` | checks the infrared codec with a model of the receiver, and the name swap on two emulators |

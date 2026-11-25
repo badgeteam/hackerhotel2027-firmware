@@ -8,6 +8,7 @@ static void run(uint32_t ms, uint8_t pressed) {
     mock_ms += ms;
     mock_pressed_now = pressed;
     tick(ms);
+    mock_tick_end();
     mock_pressed_now = 0;
 }
 

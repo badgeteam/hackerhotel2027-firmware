@@ -276,10 +276,9 @@ static void draw(void) {
         hh->draw_number(HH_CENTER, TEXT_Y, lines, 255);
         for (int i = 0; i < HH_EDGE_COUNT; i++) hh->set(hh->edge[i], i < best ? 40 : 0);
     }
-    for (int r = 0; r < H; r++) {
+    for (int r = 0; r < H && !over; r++) {  // at the end only the number: the walls would cut into it
         hh->set(hh->grid[R0 + r][C0 - 1], 25);  // the well's walls
         hh->set(hh->grid[R0 + r][C0 + W], 25);
-        if (over) continue;
         bool blink = clearing >> r & 1;
         for (int c = 0; c < W; c++)
             if (well[r] >> c & 1) hh->set(hh->grid[R0 + r][C0 + c], !blink ? 170 : clear_t % 3 < 2 ? 255 : 40);

@@ -11,6 +11,7 @@ static void run(uint32_t ms, uint8_t pressed, uint8_t held) {
     mock_ms += ms;
     mock_pressed_now = pressed;
     tick(ms);
+    mock_tick_end();
     mock_pressed_now = 0;
 }
 
@@ -130,6 +131,25 @@ int main(void) {
     run(OVER_MS, 0, 0);
     run(10, HH_BTN_D, 0);
     CHECK(!over && lines == 0, "a second later, a button starts again");
+
+    // The end shows the lines whole: nothing (the walls) draws over the
+    // number, or lights its gaps (the overdraw report of mock_hh.h, on here)
+    int report_was = od_enabled();
+    od_on = 1;
+    static const int32_t shown[] = {7, 42, 88, 100, 123, 999};
+    for (int k = 0; k < 6; k++) {
+        unsigned long hit = 0;
+        over = true, over_ms = 0, demo = false, lines = shown[k];
+        mock_tick_end();  // a clean tick: only this frame's text counts
+        for (int i = 0; i < od_nfinds; i++) hit -= od_finds[i].kind == 0 || od_finds[i].kind == 3 ? od_finds[i].frames : 0;
+        run(10, 0, 0);
+        for (int i = 0; i < od_nfinds; i++) hit += od_finds[i].kind == 0 || od_finds[i].kind == 3 ? od_finds[i].frames : 0;
+        char want[12];
+        snprintf(want, sizeof want, "%d", (int)shown[k]);
+        CHECK(over && !strcmp(mock_text, want), "the end shows %s lines (\"%s\")", want, mock_text);
+        CHECK(hit == 0, "and nothing draws over \"%s\" (%lu)", mock_text, hit);
+    }
+    od_on = report_was;
 
     over = true, over_ms = 0;  // a game that just ended
     run(15000, 0, 0);

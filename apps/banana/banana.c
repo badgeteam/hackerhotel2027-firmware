@@ -131,9 +131,12 @@ static void tick(uint32_t elapsed_ms) {
     uint32_t t = hh->millis();
     uint8_t pulse = hh->sin8((uint8_t)(t / 4));
 
-    // The grid: a line of text, the team's name, GAME OVER, the hits, the
-    // credits, or the banana
+    // The grid: the rings first, then a line of text, the team's name, GAME
+    // OVER, the hits, the credits, or the banana over them: a shot's ring
+    // must not cut pixels out of the text
     hh->clear();
+    if (since_hit < HIT_MS) ring(since_hit, false, 255);
+    if (since_shot < HIT_MS / 2) ring(since_shot, true, 200);
     if (text_len) {
         if (scroll(text, text_ms)) {
             if (text_done) text_len = 0, text_done = false;
@@ -151,10 +154,8 @@ static void tick(uint32_t elapsed_ms) {
         uint8_t v = (uint8_t)(90 + (pulse >> 2));
         for (int r = 0; r < HH_GRID_H; r++)
             for (int col = 0; col < HH_GRID_W; col++)
-                if (BANANA[r] >> col & 1) hh->set(hh->grid[r][col], v);
+                if (BANANA[r] >> col & 1 && hh->get(hh->grid[r][col]) < v) hh->set(hh->grid[r][col], v);  // the rings stay on top
     }
-    if (since_hit < HIT_MS) ring(since_hit, false, 255);
-    if (since_shot < HIT_MS / 2) ring(since_shot, true, 200);
 
     // The outline: the hits, a fifth of it each; after GAME OVER, all of it pulses
     unsigned lit = over ? HH_EDGE_COUNT : (unsigned)hits * HH_EDGE_COUNT / LIVES;

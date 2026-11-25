@@ -37,7 +37,9 @@ static const anim_t ANIMS[] = {
 static void run(const anim_t* a, uint32_t ms, uint8_t pressed) {
     mock_ms += ms;
     mock_pressed_now = pressed;
+    mock_app = a->name;
     a->tick(ms);
+    mock_tick_end();
     mock_pressed_now = 0;
 }
 

@@ -36,7 +36,8 @@ In scope:
   `webusb_protocol.h`, `fsusb.c`): a command from the host that crashes
   the badge, corrupts the item store or the persistent record, or reads
   or writes memory that it should not.
-- **The web interface** (`webui/`, deployed at <https://scene.rs/star/>):
+- **The web interface** (`webui/`, at <https://badge.team/hackerhotel2027-tool/>,
+  and for testing at <https://scene.rs/star/>):
   for example script injection through a file, an item name or a text
   that the page shows.
 - **The app loader** (`app_host.c`, `apps/hhapp.h`): a `.hhapp` whose

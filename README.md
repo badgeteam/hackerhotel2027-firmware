@@ -169,6 +169,42 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="d643", MODE="0666"
 
 Then run `sudo udevadm control --reload` and plug the badge in again.
 
+## Flash with a WCH-Link probe
+
+With a WCH-LinkE (or another WCH-Link) on the badge's SWD pads, you can
+flash with [wlink](https://github.com/ch32-rs/wlink)
+(`cargo install wlink`). This also works on a badge whose firmware does
+not start, or that has no firmware yet, where the USB way above cannot.
+
+1. Put the probe in RISC-V mode. `lsusb` must show
+   `1a86:8010 QinHeng Electronics WCH-Link`. If it shows `1a86:8012`, the
+   probe is in DAP mode; switch it once with:
+
+   ```sh
+   wlink mode-switch --rv
+   ```
+
+   `1a86:55e0` is not the probe: that is the CH643's own USB boot ROM,
+   used by the USB way above.
+2. Connect GND, SWDIO and 3V3. If the probe's 3V3 is not enough for the
+   badge, power the badge from USB as well.
+3. Flash:
+
+   ```sh
+   wlink --speed low --chip CH643 reset   # must print "Attached chip: CH643"
+   wlink --speed low --chip CH643 flash --address 0x08000000 ledmatrix.bin
+   ```
+
+   - `--speed low` is needed: at the default speed the probe gives
+     `WCH-Link underlying protocol error: 0x55`.
+   - Reset first, otherwise the flash can fail.
+   - The same `0x55` error also means the chip did not answer: no
+     contact on a pin, or no power.
+
+`wlink flash` does not erase the chip first. `wlink erase` (or
+`wlink flash --erase`) erases all of it: the stored items, the name and
+the settings too.
+
 ## Web interface
 
 WebUSB needs Chrome, Edge or Opera, and a secure context: localhost is

@@ -107,12 +107,12 @@ int main(void) {
     // the badge starts without it (in case it is an app that hangs).
     // Without a boot item, the name tag.
     g_app_mode = APP_MODE_NAMETAG;
-    // A badge whose factory test has not passed yet runs that first (not in
-    // the emulator, which starts with a fresh record every time)
+    // A badge whose factory test has not passed yet runs that first (the
+    // emulator only when asked: its tests start on a new flash file)
 #ifndef HH_EMU
     bool factory = !Persist_FactoryPassed();
 #else
-    bool factory = false;
+    bool factory = emu_factory_at_power_on && !Persist_FactoryPassed();
 #endif
     if (factory) {
         Factory_Start();

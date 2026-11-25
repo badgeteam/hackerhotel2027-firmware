@@ -5,7 +5,12 @@ on the centre grid with the glyphs from font.c.
 hh27-emu talks on stdin/stdout as tools/emu/emu.py does (hw.c lists the
 lines): "u <hex>" a USB packet and "U <hex>" its reply, "b <hex>" the
 buttons held, "F <hex>" a frame, "P <hex>" / "p <hex>" an IR packet sent /
-received, "s <team> <trigger> <command> <parameter>" a banana shot received.
+received, "s <team> <trigger> <command> <parameter>" a banana shot received,
+"v 1" / "v 0" USB power in or out, "c 0" / "c 1" / "c 2" the battery does
+not charge / charges / is not there.
+
+Emu(flash, fresh=True) starts as a newly flashed badge: it erases the
+persistent record in that flash file, so the factory test runs at power-on.
 """
 import os
 import queue
@@ -52,8 +57,13 @@ GRID_SLOTS = {s for row in GRID for s in row if s is not None}
 
 
 class Emu:
-    def __init__(self, flash, exe=EXE):
-        self.p = subprocess.Popen([exe, flash, "0"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+    def __init__(self, flash, exe=EXE, fresh=False, factory=False):
+        """fresh: erase the persistent record first (the items stay), and run
+        the factory test at power-on. factory: run the factory test at
+        power-on if it has not passed yet, as the badge does (fresh does too)."""
+        power_on = ["fresh"] if fresh else ["factory"] if factory else []
+        self.p = subprocess.Popen([exe, flash, "0"] + power_on, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                  text=True, bufsize=1)
         self.replies = queue.Queue()
         self.frame = None
         self.frames = 0
@@ -99,6 +109,21 @@ class Emu:
     def shot(self, team, command, parameter=0, trigger=1):
         """A banana shot comes in (with a good CRC)"""
         self.send("s %d %d %d %d" % (team, trigger, command, parameter))
+
+    def usb_power(self, on):
+        """USB power (VBUS, PC3) in or out. While it is out, the badge gets no
+        USB packets, and the charger is off."""
+        self.send("v %d" % bool(on))
+
+    def charging(self, on):
+        """The battery starts (on) or stops charging: CHRG (PB22) low or high,
+        while USB power is in"""
+        self.send("c %d" % bool(on))
+
+    def no_battery(self):
+        """No battery: CHRG toggles every 100 ms while USB power is in, as the
+        charger does without a battery. charging() puts a battery back."""
+        self.send("c 2")
 
     def set_name(self, name):
         return self.usb(NAME_SET, *name.encode())

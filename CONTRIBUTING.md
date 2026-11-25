@@ -108,7 +108,7 @@ node tools/isp_test/isp_test.js
 | `tools/text_test/run.sh` | text items, from the web interface to the emulator |
 | `tools/ir_test/run.sh` | the infrared codec, and the name swap on two emulators |
 | `tools/four_test/run.sh` | 4 in a row: rules on the PC, and whole games on two emulators |
-| `tools/factory_test/run.sh` | the factory test on the emulator |
+| `tools/factory_test/run.sh` | the factory test on the emulator, with USB power and charging switched on and off, and at power-on after a fresh start |
 | `tools/board_test/run.sh` | `tools/extract_board_data.py` makes the same `webui/board_data.js` from the KiCad board (SKIP without the board) |
 | `tools/emu/rv32_test/run.sh` | the emulator's RISC-V interpreter |
 | `tools/isp_test/isp_test.js` | the web interface's firmware update, offline |
@@ -125,7 +125,8 @@ python3 tools/emu/emu.py --web
 ```
 
 For automatic tests, `tools/emu/headless.py` drives the emulator without
-a window: USB, buttons, infrared, and the text on the grid. The tests in
+a window: USB, buttons, infrared, USB power and charging, a fresh start,
+and the text on the grid. The tests in
 `tools/text_test`, `tools/ir_test` and `tools/four_test` show how to use
 it.
 

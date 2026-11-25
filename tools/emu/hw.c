@@ -3,6 +3,7 @@
 // The firmware's own files run unchanged (see the Makefile); this file
 // stands in for the parts that touch the chip: the LED matrix, the IR
 // driver, standby, the boot ROM jump, flash, the USB endpoint, the clock.
+// power.c runs as it is, on the pins that set_pins() below drives.
 //
 // hh27-emu talks to the frontend (emu.py) over stdin and stdout, one line
 // per message:
@@ -15,9 +16,19 @@
 //                    a packet: type, length, data (no CRC)
 //                                        s <team> <trigger> <command> <parameter>
 //                                          (a banana shot received, ir_codec.h)
+//                                        v 1 / v 0  (USB power in / out)
+//                                        c 0 / c 1 / c 2  (the battery: not
+//                                          charging / charging / not there)
 //   S 1 / S 0  (standby on / off)
 //   L <text>   (the firmware's log)
 //   B          (jumped to the boot ROM; the program then exits)
+//
+//   hh27-emu [flash file [buttons held at power-on, hex [fresh | factory]]]
+//
+// The emulator skips the factory test at power-on, because the tests start
+// it on a new flash file. "factory" powers on as the badge does: the
+// factory test runs if it has not passed yet. "fresh" also erases the
+// persistent record first, as on a newly flashed badge (the items stay).
 //
 // "Interrupts": the firmware holds s_lock while it runs and lets go only
 // in Delay_Ms(); the reader thread takes it to hand over a USB packet,
@@ -41,7 +52,6 @@
 #include "emu_usb.h"
 #include "infrared.h"
 #include "pattern_player.h"
-#include "power.h"
 #include "standby.h"
 #include "webusb_protocol.h"
 
@@ -169,17 +179,37 @@ static void send_frame(void) {
     out_hex('F', f, sizeof f);  // the frontend splits off the brightness
 }
 
-// --- Buttons -----------------------------------------------------------------
+// --- Buttons, USB power and the charger -----------------------------------------
 
-// buttons.c reads the pins: PB20 (A), PC4 (C), PC5 (B), PB18 (D), low when pressed
-static void set_buttons(uint8_t held) {
+// buttons.c reads the pins: PB20 (A), PC4 (C), PC5 (B), PB18 (D), low when pressed.
+// power.c reads PC3 (VBUS), high while USB powers the badge, and PB22 (the
+// XT4054 charger's CHRG, open drain with a pull-up), low while the battery
+// charges. Without USB power the charger is off, so CHRG is high. Without a
+// battery the charger starts and stops all the time, and CHRG toggles.
+#define CHRG_TOGGLE_MS 100  // without a battery: CHRG changes this often
+
+typedef enum { BATTERY_IDLE, BATTERY_CHARGING, BATTERY_NONE } battery_t;  // "c 0" / "c 1" / "c 2"
+
+static uint8_t s_held;
+static bool s_vbus = true;  // the emulated badge starts on USB, with a battery that does not charge
+static battery_t s_battery = BATTERY_IDLE;
+
+static void set_pins(void) {
     uint32_t b = 0xFFFFFFFFu, c = 0xFFFFFFFFu;
-    if (held & HH_BTN_A) b &= ~(1u << 20);
-    if (held & HH_BTN_D) b &= ~(1u << 18);
-    if (held & HH_BTN_C) c &= ~(1u << 4);
-    if (held & HH_BTN_B) c &= ~(1u << 5);
+    if (s_held & HH_BTN_A) b &= ~(1u << 20);
+    if (s_held & HH_BTN_D) b &= ~(1u << 18);
+    if (s_held & HH_BTN_C) c &= ~(1u << 4);
+    if (s_held & HH_BTN_B) c &= ~(1u << 5);
+    if (!s_vbus) c &= ~(1u << 3);
+    bool toggle = now_us() / (CHRG_TOGGLE_MS * 1000u) % 2;
+    if (s_vbus && (s_battery == BATTERY_CHARGING || (s_battery == BATTERY_NONE && toggle))) b &= ~(1u << 22);
     GPIOB->INDR = b;
     GPIOC->INDR = c;
+}
+
+static void set_buttons(uint8_t held) {
+    s_held = held;
+    set_pins();
 }
 
 static bool any_button(void) { return (~GPIOB->INDR & (1u << 20 | 1u << 18)) || (~GPIOC->INDR & (1u << 4 | 1u << 5)); }
@@ -234,11 +264,6 @@ static void ir_received(uint16_t address, uint8_t command) {
 // keeps 3, as infrared.c does
 static infrared_packet_t s_ir_packets[3];
 static unsigned s_ir_packet_head, s_ir_packet_tail;
-
-// power.h: the emulated badge is on USB, not charging
-void Power_Init(void) {}
-bool Power_Usb(void) { return true; }
-bool Power_Charging(void) { return false; }
 
 static bool s_ir_loopback;  // infrared_set_loopback: our own packets come back
 static void ir_packet_received(const uint8_t* p, int n);
@@ -365,6 +390,7 @@ void Delay_Ms(uint32_t ms) {
     struct timespec t = {ms / 1000, (long)(ms % 1000) * 1000000L};
     nanosleep(&t, NULL);
     pthread_mutex_lock(&s_lock);
+    set_pins();  // CHRG toggles without a battery
 }
 
 static int hex_bytes(const char* s, uint8_t* out, int max) {
@@ -388,7 +414,8 @@ static void* reader(void* arg) {
         } else if (line[0] == 'u') {
             uint8_t p[64];
             int n = hex_bytes(line + 2, p, sizeof p);
-            if (n > 0) WebUSBBulkDataOut(p, n);
+            if (n > 0 && !s_vbus) emu_log("USB is unplugged: packet dropped");
+            else if (n > 0) WebUSBBulkDataOut(p, n);
         } else if (line[0] == 'p') {
             uint8_t p[2 + IR_PACKET_DATA_MAX];
             ir_packet_received(p, hex_bytes(line + 2, p, sizeof p));
@@ -398,6 +425,12 @@ static void* reader(void* arg) {
         } else if (line[0] == 's') {
             unsigned t, g, c, v;
             if (sscanf(line + 2, "%u %u %u %u", &t, &g, &c, &v) == 4) ir_shot_received(t, g, c, v);
+        } else if (line[0] == 'v') {
+            s_vbus = line[2] == '1';
+            set_pins();
+        } else if (line[0] == 'c') {
+            s_battery = line[2] == '1' ? BATTERY_CHARGING : line[2] == '2' ? BATTERY_NONE : BATTERY_IDLE;
+            set_pins();
         }
         pthread_mutex_unlock(&s_lock);
     }
@@ -406,6 +439,11 @@ static void* reader(void* arg) {
 
 int firmware_main(void);  // ledmatrix.c's main()
 
+bool emu_factory_at_power_on;  // ledmatrix.c: the factory test at power-on, as on the badge
+
+// "fresh": the persistent record (persist.c) erased, as on a newly flashed badge
+static void erase_record(void) { memset((void*)(uintptr_t)PERSIST_FLASH_BASE, 0xFF, PERSIST_FLASH_SIZE); }
+
 int main(int argc, char** argv) {
     const char* flash = argc > 1 ? argv[1] : "hh27-emu-flash.bin";
     map_flash(flash);
@@ -413,6 +451,9 @@ int main(int argc, char** argv) {
     map_ram(EMU_ROM_BASE, EMU_ROM_SIZE);  // the API table for apps (app.c)
     emu_esig.UID0 = (uint32_t)now_us() ^ (uint32_t)getpid() * 2654435761u;
     set_buttons(argc > 2 ? (uint8_t)strtoul(argv[2], NULL, 16) : 0);  // held at power-on
+    const char* power_on = argc > 3 ? argv[3] : "";
+    if (!strcmp(power_on, "fresh")) erase_record();
+    emu_factory_at_power_on = !strcmp(power_on, "fresh") || !strcmp(power_on, "factory");
 
     pthread_mutex_lock(&s_lock);
     pthread_t t;

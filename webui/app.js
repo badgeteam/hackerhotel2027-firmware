@@ -1938,8 +1938,11 @@ const brightnessStatus = document.getElementById('badge-brightness-status');
 let brightnessDragging = false; // a pointer holds the slider: the badge's value waits
 let brightnessSending = false;
 
+// <output> is a live region: write it only when the text changes, so the
+// status poll every second does not make a screen reader repeat it
 function showBrightness(value) {
 	const text = `${value} of 255`;
+	if (brightnessReadout.textContent === text) return;
 	brightnessReadout.textContent = text;
 	brightnessInput.setAttribute('aria-valuetext', text);
 }
@@ -1979,7 +1982,8 @@ brightnessInput.addEventListener('change', async () => {
 device.addEventListener('status', (ev) => {
 	const { brightness } = ev.detail;
 	if (brightness === undefined || brightnessDragging || brightnessSending) return;
-	brightnessInput.value = String(brightnessLevel(brightness));
+	const level = String(brightnessLevel(brightness));
+	if (brightnessInput.value !== level) brightnessInput.value = level;
 	showBrightness(brightness);
 });
 

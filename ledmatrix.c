@@ -102,12 +102,18 @@ static void run_item(uint8_t index) {
 
 // A tap of C outside apps: the next stop in the ring of the name tag, then
 // every store item in store order (as the menu lists them, apps too),
-// then the name tag again. From the host's drawing (custom mode) it goes
-// to the first item.
+// then the name tag again. On the name tag it goes on after the item that
+// ran last, so an app (which keeps C) is no dead end: leave it with the
+// menu's NAME TAG, and a tap starts the item after it. After the last item,
+// or if none ran yet (g_running_item is STORE_NONE), the name tag goes on
+// to the first. From the host's drawing (custom mode): the first item.
 static void browse_next(void) {
-    int next = (g_app_mode == APP_MODE_FLASH_PATTERN ? g_running_item : -1) + 1;
+    int next = 0;
+    if (g_app_mode == APP_MODE_FLASH_PATTERN || g_app_mode == APP_MODE_NAMETAG) next = g_running_item + 1;
     if (next < Store_Count()) {
         run_item((uint8_t)next);
+    } else if (g_app_mode == APP_MODE_NAMETAG) {
+        run_item(0);  // the name tag shows already: on to the first item
     } else {
         AppHost_Stop();
         g_app_mode = APP_MODE_NAMETAG;
@@ -176,8 +182,9 @@ int main(void) {
         last_tick += elapsed_ms * DELAY_MS_TIME;
         level_ms = level_ms > elapsed_ms ? level_ms - elapsed_ms : 0;
 
-        // keep what the host, the app or the buttons changed
-        Persist_SetBrightness(LEDMatrix_GetBrightness());
+        // keep what the host, the app or the buttons changed (not the
+        // factory test's full brightness: factory.c puts the badge's back)
+        if (!factory) Persist_SetBrightness(LEDMatrix_GetBrightness());
         Persist_Flush(elapsed_ms);
 
         if (WebUSB_BootRomDue(elapsed_ms)) enter_boot_rom();

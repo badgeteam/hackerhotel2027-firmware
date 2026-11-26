@@ -86,14 +86,19 @@ When no app runs and the menu is closed:
 - **B** and **D** show the brightness level for a second at the bottom of
   the grid, over what runs: six dots, one for each level, bright up to
   the level now.
-- **A tap of C** starts the next item: from the name tag the first stored
-  animation, text or app, then each next one in the menu's order, and
-  after the last one the name tag again. A tap is shorter than half a
-  second, and acts when you let go of C. C with D down at any moment of
-  the press is no tap. Only C steps through the items, and only forward:
-  B and D stay the brightness. The menu's BUTTONS setting changes only
-  the menu and the name editor, not this. An app gets C itself: to leave
-  an app, hold A for the menu.
+- **A tap of C** starts the next item, in the menu's order. After the
+  last one comes the name tag, and after the name tag the first stored
+  animation, text or app. On the name tag, C goes on after the item that
+  ran last. A tap is shorter than half a second, and acts when you let
+  go of C. C with D down at any moment of the press is no tap.
+- **An app gets C itself**, so C does not browse while an app runs. That
+  includes the app a badge starts at power-on (the recommended set starts
+  the NAMETAG app). To go on from an app, hold A for the menu and pick
+  NAME TAG: a tap of C then starts the item after the app.
+- Only C steps through the items, and only forward: B and D stay the
+  brightness. C goes forward even though it is "previous" in the menu:
+  with one button, forward is the way round the ring. The menu's BUTTONS
+  setting changes only the menu and the name editor, not this.
 
 **The menu** lists the name tag, SAY HI, every stored animation, text and
 app, and the badge's settings. The name of the entry shows on the grid,
@@ -388,7 +393,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/nametag_test/run.sh` | checks how the name tag shows banana shots, on the emulator |
 | `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge, banana shots, on emulators |
 | `tools/brightness_test/run.sh` | checks the brightness on the emulator: the start value, the USB command and `tools/badge.py brightness`, the level on the grid |
-| `tools/browse_test/run.sh` | checks that a tap of C steps through the items on the emulator, and that long presses and C + D do not |
+| `tools/browse_test/run.sh` | checks that a tap of C steps through the items on the emulator (past an app, left through the menu), and that long presses and C + D do not |
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, the text on the grid |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

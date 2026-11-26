@@ -114,7 +114,10 @@ int Menu_BrightnessLevel(void) {
     return i;
 }
 
-static void set_slot(uint16_t slot, uint8_t v) { LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, v); }
+// HH_NONE (a grid cell without a LED) and anything past the LEDs: nothing
+static void set_slot(uint16_t slot, uint8_t v) {
+    if (slot < HH_SLOTS) LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, v);
+}
 
 void Menu_DrawBrightness(void) {
     for (int y = MENU_LEVEL_Y - 1; y <= MENU_LEVEL_Y + 1; y++)

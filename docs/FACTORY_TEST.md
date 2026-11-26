@@ -11,6 +11,9 @@ back. Erasing the whole flash brings it back.
 
 To run it again on purpose, use `tools/badge.py factory` (USB command `0x52`).
 
+The test runs at full brightness, so a weak LED or a wrong colour shows.
+After it, the badge has its own brightness again (12.5 % on a new badge).
+
 Each step shows its name for a second first. The outline fills up as the
 steps go by. Only KEY needs a hand: the rest runs by itself, and the
 volunteer watches.

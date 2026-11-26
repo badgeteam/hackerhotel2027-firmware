@@ -86,9 +86,21 @@ static void fail(const char* why) {
     debug_log("factory FAIL ", NAME[s_step], ": ", why, NULL);
 }
 
+// The test runs at full brightness, whatever the badge's own (a new
+// badge's is 12.5 %), so a weak LED or a wrong colour shows; the badge's
+// own comes back when the test ends
+static uint8_t s_brightness;
+
 void Factory_Start(void) {
+    s_brightness = LEDMatrix_GetBrightness();
+    LEDMatrix_SetBrightness(255);
     s_leave_ms = 0;
     start(LED);
+}
+
+static factory_status_t done(void) {
+    LEDMatrix_SetBrightness(s_brightness);
+    return FACTORY_DONE;
 }
 
 // ROW: the COM line of each grid row top to bottom, then the PWM channel of
@@ -128,14 +140,14 @@ factory_status_t Factory_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held
     if (s_leave_ms >= LEAVE_MS) {
         infrared_set_loopback(false);
         debug_log("factory left", NULL);
-        return FACTORY_DONE;
+        return done();
     }
 
     if (s_state == PASS) {
         arms(0, 255, 40);
         for (int j = 0; j < HH_EDGE_COUNT; j++) set(layout_edge[j], 200);
         center("OK", 4, 255);
-        return now == 0 ? FACTORY_PASSED : now >= PASS_MS ? FACTORY_DONE : FACTORY_BUSY;
+        return now == 0 ? FACTORY_PASSED : now >= PASS_MS ? done() : FACTORY_BUSY;
     }
     if (s_state == FAIL) {
         arms(blink ? 255 : 60, 0, 0);

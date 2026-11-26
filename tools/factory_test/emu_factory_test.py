@@ -3,7 +3,8 @@
 started over USB as on a freshly flashed badge: each step's name, LED and
 ROW going on by themselves, KEY failing without all four buttons and B
 trying it again, USB, IR on its own echo, OK, then the badge again.
-Holding A + B leaves the test.
+Holding A + B leaves the test. The test runs at full brightness and puts
+the badge's own back after it, also when the power goes during the test.
 
   python3 tools/factory_test/emu_factory_test.py
 """
@@ -43,11 +44,17 @@ def logged(emu, text):
     return any(text in line for line in emu.log)
 
 
+def brightness(emu):
+    return emu.usb(QUERY)[1]
+
+
 def run(e):
     e.wait_frames()
     e.set_name("ALICE")
+    check(brightness(e) == 32, "a new badge: brightness 32")
     e.usb(FACTORY)
     check(wait_for(lambda: shows_still(e.wait_frames(), "LED"), 2), "USB 0x52 starts it: LED")
+    check(brightness(e) == 255, "the test runs at full brightness")
     time.sleep(1.2)
     check(lit(e) >= 370, "LED: every LED on (%d lit)" % lit(e))
     e.buttons(BTN_A)  # A held: no menu, and LED goes on by itself
@@ -76,6 +83,7 @@ def run(e):
     check(wait_for(lambda: shows_still(e.wait_frames(), "OK"), 1), "OK")
     check(wait_for(lambda: scroll_offset(e.wait_frames(), "ALICE") is not None or shows_still(e.wait_frames(), "ALICE"), 6),
           "then the name tag")
+    check(brightness(e) == 32, "and the badge's own brightness again: 32")
 
     # Leaving: A + B held for 3 s
     e.usb(FACTORY)
@@ -86,13 +94,25 @@ def run(e):
     check(wait_for(lambda: logged(e, "factory left"), 1), "A + B held 3 s leaves it")
     check(wait_for(lambda: scroll_offset(e.wait_frames(), "ALICE") is not None or shows_still(e.wait_frames(), "ALICE"), 3),
           "back to the name tag")
+    check(brightness(e) == 32, "at the badge's own brightness")
+
+    # The power goes during the test: the full brightness was never kept
+    e.usb(FACTORY)
+    time.sleep(1.5)  # the persistent record is written 1 s after a change
 
 
 def main():
     with tempfile.TemporaryDirectory() as tmp:
-        e = Emu(os.path.join(tmp, "a.bin"))
+        flash = os.path.join(tmp, "a.bin")
+        e = Emu(flash)
         try:
             run(e)
+        finally:
+            e.stop()
+        e = Emu(flash)
+        try:
+            e.wait_frames()
+            check(brightness(e) == 32, "power cut during the test, then on: brightness 32, not 255")
         finally:
             e.stop()
     print("%s  factory test: %d failures" % ("FAIL" if failures else "ok  ", failures))

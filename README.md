@@ -371,6 +371,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `apps/README.md` | write and build an app (`apps/hhapp.h` is the interface) |
 | `docs/ANIMATION_FORMAT.md` | the `.ledanim` animation format, LA04 |
 | `docs/LEDPWM_MATRIX.md` | how the LEDs are wired, and the slot numbers |
+| `docs/BRINGUP.md` | the checklist for a newly assembled board: power, the charger, the first flash, USB, the LED walk, buttons, IR, standby |
 | `docs/FIRMWARE_UPDATE.md` | the firmware update from the web interface, and the boot ROM's protocol |
 | `docs/OLD_FIRMWARE.md` | what the old firmware had, feature by feature, and where each feature stands now |
 | `webusb_protocol.h` | the USB protocol |

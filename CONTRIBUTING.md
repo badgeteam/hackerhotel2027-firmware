@@ -139,6 +139,9 @@ flash, timing), try it on a badge, and say in the pull request that you
 did and what you saw. If you have no badge, say so, and ask someone with
 a badge to test it.
 
+For a newly assembled board, follow the checklist in `docs/BRINGUP.md`
+first.
+
 ## The app API
 
 `apps/hhapp.h` is the interface between the firmware and the apps, and

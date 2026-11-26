@@ -174,7 +174,7 @@ wants the UART's RX pin.
 | `show N` | replaced: [#1] | `tools/badge.py run N`. |
 | `level N` | untracked | No way to set the brightness over USB (see above). |
 | `hello` | partly: [#37] | SAY HI in the menu. No USB command. |
-| `test` | tracked: [#11] | |
+| `test` | partly: [#11] | `tools/badge.py bringup` walks the LEDs from the host. `docs/BRINGUP.md` has the rest as a checklist. |
 | `factory` | replaced: [#59] | `tools/badge.py factory` (USB command `0x52`). |
 | `factory skip` | untracked | |
 | `sponsors` | tracked: [#12] | |
@@ -202,13 +202,15 @@ This one is in `docs/FACTORY_TEST.md`.
 
 The old bring-up test ([USAGE][u-bringup], [`src/selftest.rs`][selftest])
 checked a new board step by step, with a log on J3. Issue [#11] tracks it.
-The factory test now covers some of the steps.
+The factory test now covers some of the steps, `tools/badge.py bringup`
+walks the LEDs from the host, and `docs/BRINGUP.md` is the checklist for
+a new board.
 
 | Old step | Status now | Notes |
 |---|---|---|
-| COM: all 24 PWM channels on one COM line, PB0..PB15 in turn | partly: [#59] | The factory ROW step walks the rows and columns in the order you see, not in wire order. |
-| PWM: one PWM channel on all COM lines, PA0..PA23 in turn | partly: [#59] | The same. |
-| LED: one LED at a time, with its designator in the log (`slot 41: PB1 PA17 D35 green`) | tracked: [#11] | `webui/board_data.js` has the designators (`ref`), so a host tool could walk the LEDs over USB. |
+| COM: all 24 PWM channels on one COM line, PB0..PB15 in turn | done: [#59], `tools/badge.py` | The factory ROW step walks the rows and columns in the order you see. `tools/badge.py bringup --lines rows` walks them in wire order, with the designators on each line. |
+| PWM: one PWM channel on all COM lines, PA0..PA23 in turn | done: [#59], `tools/badge.py` | The same, with `--lines cols`. |
+| LED: one LED at a time, with its designator in the log (`slot 41: PB1 PA17 D35 green`) | done: `tools/badge.py` | `tools/badge.py bringup` lights one LED at a time over USB and prints its designator from `webui/board_data.js`, its colour, COM line, PWM channel and column resistor. No firmware bytes. `docs/BRINGUP.md`, step 9. |
 | ALL: every LED on at the current brightness, to measure the current | partly: [#59] | The factory LED step lights every LED, but only for 4.5 s. |
 | GRY: a grey ramp on the grid, the arms in five colours | tracked: [#11] | |
 | KEY: the buttons held | done: [#59] | The factory KEY step. |
@@ -327,11 +329,14 @@ decision first: is it worth the flash, and is it worth the work?
 10. **Emulator: a fresh start.** Done (`tools/emu`): `--fresh` runs the
     factory test at power-on, on a copy of the flash file with the
     persistent record erased.
-11. **Bring-up from the host.** A tool that walks the LEDs one at a time
-    over USB and prints each designator from `webui/board_data.js`. It
-    needs no firmware bytes. Could be part of [#11].
+11. **Bring-up from the host.** Done: `tools/badge.py bringup` walks
+    the LEDs one at a time over USB and prints each designator from
+    `webui/board_data.js`, with its COM line, PWM channel and column
+    resistor. `--lines` lights whole COM lines or PWM channels. It needs
+    no firmware bytes.
 12. **A bring-up checklist** for this firmware, as the old BRINGUP.md
-    was: what to measure on a new board, and in which order.
+    was. Done: `docs/BRINGUP.md`, from visual inspection to the standby
+    current, with the parts and nets from the KiCad files.
 13. **More tests:** a USB protocol fuzz test, and 4 in a row on two
     emulators with lost packets.
 14. **GIFs in the docs**, recorded from the emulator.

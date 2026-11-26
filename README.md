@@ -374,7 +374,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `docs/FIRMWARE_UPDATE.md` | the firmware update from the web interface, and the boot ROM's protocol |
 | `docs/OLD_FIRMWARE.md` | what the old firmware had, feature by feature, and where each feature stands now |
 | `webusb_protocol.h` | the USB protocol |
-| `tools/badge.py` | the item store, the name, run and stop, from the command line (needs pyusb) |
+| `tools/badge.py` | the item store, the name, run and stop, from the command line (needs pyusb); `bringup` lights the LEDs one at a time and prints their designators |
 | `tools/deploy_webui.sh` | publishes `webui/` of the current commit to a web server |
 | `tools/extract_board_data.py` | makes `webui/board_data.js` from the KiCad board in the hardware repository |
 | `tools/gen_layout.py` | makes `layout.c`, `la04_tables.h` and `webui/layout_data.js` from `webui/board_data.js` |
@@ -384,6 +384,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/four_test/run.sh` | checks 4 in a row: its rules on the PC, and whole games on two emulators |
 | `tools/ir_test/run.sh` | checks the infrared codec with a model of the receiver, and the name swap on two emulators |
 | `tools/board_test/run.sh` | checks that `tools/extract_board_data.py` makes the committed `webui/board_data.js` from the board (SKIP without it) |
+| `tools/bringup_test/run.sh` | checks `tools/badge.py bringup` on the emulator: the LED of each printed designator lights, and the badge shows its name tag after |
 | `tools/nametag_test/run.sh` | checks how the name tag shows banana shots, on the emulator |
 | `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge, banana shots, on emulators |
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, USB power and charging, a fresh start, the text on the grid |

@@ -109,6 +109,7 @@ node tools/isp_test/isp_test.js
 | `tools/ir_test/run.sh` | the infrared codec, and the name swap on two emulators |
 | `tools/four_test/run.sh` | 4 in a row: rules on the PC, and whole games on two emulators |
 | `tools/factory_test/run.sh` | the factory test on the emulator |
+| `tools/bringup_test/run.sh` | `tools/badge.py bringup` lights the LED of each designator it prints, on the emulator |
 | `tools/board_test/run.sh` | `tools/extract_board_data.py` makes the same `webui/board_data.js` from the KiCad board (SKIP without the board) |
 | `tools/emu/rv32_test/run.sh` | the emulator's RISC-V interpreter |
 | `tools/isp_test/isp_test.js` | the web interface's firmware update, offline |

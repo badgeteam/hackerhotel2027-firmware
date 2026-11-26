@@ -297,7 +297,9 @@ Some may be out of date for the current hardware revision.
 - **Early silicon.** Chip ID (0x1FFFF704) bits 7:4 are the silicon
   revision. On revision 0, GPIO CFGHR cannot be read back.
 - **Standby current.** The old Rust firmware drew 2.84 mA in standby,
-  not the datasheet's 55 µA ([#14]).
+  not the datasheet's 55 µA ([#14]). But the IR receiver S1 is always on
+  (VCC through R28), and its listing gives up to 2.5 mA: it can account
+  for most of that. See `docs/BRINGUP.md`, step 12.
 
 ## Untracked gaps
 

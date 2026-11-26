@@ -8,6 +8,7 @@ the badge shows its name tag again.
 """
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -150,6 +151,38 @@ def run(e):
     slots = [st.slots[0] for st in steps]
     check(sorted(slots) == list(range(384)), "384 steps, every slot once")
     check([len(badge.bringup_steps(k)) for k in ("grid", "edge", "rgb")] == [208, 71, 105], "208 grid, 71 outline, 105 RGB")
+
+    # The header's columns line up with the steps, also with fewer than 100
+    for kind in (None, "grid", "edge", "rgb"):
+        st = badge.bringup_steps(kind)
+        head = badge.bringup_header(st)
+        check(head.index("part") == st[0].text.index(st[0].refs[0]), "header lines up (%s)" % (kind or "all"))
+
+    # The arm and the place on it agree with layout.c (gen_layout.py)
+    leds, _ = badge.bringup_leds()
+    rgb = re.findall(r"\{\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\}, // (D\d+)",
+                     open(os.path.join(ROOT, "layout.c")).read())
+    wrong = [ref for r, g, bl, arm, rank, ref in rgb
+             if leds[int(r)] != (ref, "red", "rgb", "%s, %d from the centre" % (badge.ARMS[int(arm)], int(rank) + 1))
+             or leds[int(g)][:2] != (ref, "green") or leds[int(bl)][:2] != (ref, "blue")]
+    check(len(rgb) == 35 and not wrong, "35 RGB LEDs: arm and place as in layout.c %s" % wrong)
+
+    # A USB error half way: a note, and still the bad list
+    class Lost(EmuBadge):
+        calls = 0
+
+        def transfer(self, data, timeout):
+            Lost.calls += 1
+            if Lost.calls > 20:
+                raise OSError("no such device")
+            return super().transfer(data, timeout)
+    lines = []
+    keys = ["x"]
+    bad = badge.bringup(Lost(e), steps, 0, out=lines.append, ask=lambda p: keys.pop(0) if keys else "")
+    check(len(bad) == 1 and any(l.startswith("lost the badge") for l in lines) and "marked bad:" in lines,
+          "a USB error: a note, then the bad list")
+    check(any(l.startswith("could not give the badge back") for l in lines), "and a note that STOP failed")
+    b.send(badge.STOP)
 
 
 def main():

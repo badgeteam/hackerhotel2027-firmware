@@ -225,7 +225,8 @@ def bringup_leds():
         leds[slot] = leds[slot][:3] + ("outline %d of %d, clockwise from the top" % (n + 1, len(edge)),)
 
     # The arm an RGB LED is on, by its angle from the grid's centre, and
-    # its place on the arm, counted from the centre
+    # its place on the arm, counted from the centre, as tools/gen_layout.py
+    # works them out for layout.c (tools/bringup_test checks that they agree)
     gx = [l["x"] for l in board["leds"] if leds[l["row"] * COLS + l["col"]][2] == "grid"]
     gy = [l["y"] for l in board["leds"] if leds[l["row"] * COLS + l["col"]][2] == "grid"]
     cx, cy = (min(gx) + max(gx)) / 2, (min(gy) + max(gy)) / 2
@@ -273,7 +274,7 @@ def bringup_header(steps, lines=None):
     """The line above the walk that names the columns"""
     if lines:
         return ""
-    width = len("%d/%d" % (len(steps), len(steps)))
+    width = len("%3d/%d" % (len(steps), len(steps)))  # as bringup_steps numbers them
     return "%*s  " % (width, "step") + LED_LINE % ("part", "colour", "kind", "COM", "PWM", "res", "slot", "place")
 
 
@@ -335,6 +336,8 @@ def bringup(badge, steps, start=0, auto=None, count=None, level=255, ask=input, 
             i += 1
     except (KeyboardInterrupt, EOFError):
         out("")
+    except Exception as e:  # unplugged, or a USB error: still list the bad ones
+        out("lost the badge: %s" % e)
     finally:
         try:
             badge.send(STOP)

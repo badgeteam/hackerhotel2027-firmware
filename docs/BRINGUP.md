@@ -14,6 +14,13 @@ badgeteam/hackerhotel2027-hardware at f6015de, "Prototype 1
 old firmware's notes. Nobody has measured them on this board with this
 firmware yet. When you measure one, write the value here.
 
+The hardware changed after f6015de: 8b5bb00 has a different battery
+connector for J2, and d4e221e moves the battery polarity mark. Both
+boards say "Prototype 1" on the silkscreen. A board from f6015de has a
+single `+` mark near J2. A later board has a `-` and `+` mark: on that
+board, examine J2 and its polarity yourself before you trust the J2 text
+below.
+
 The old firmware had its own bring-up document ([BRINGUP.md][old]). This
 checklist replaces it. Its console commands (`level`, `test`) do not
 exist in this firmware.
@@ -24,24 +31,36 @@ exist in this firmware.
 - A multimeter. A scope is useful, but not necessary.
 - A USB-C cable and a Linux PC with the udev rule from `README.md`,
   "Flash over USB".
+- A USB-C power meter, to put between the PC and the badge (steps 4, 5
+  and 8).
 - `ledmatrix.bin` (`make MINICHLINK=ch32fun/minichlink ledmatrix.bin`),
   minichlink (`make -C ch32fun/minichlink`) and pyusb for
   `tools/badge.py` (see `CONTRIBUTING.md`, "Build").
 - For SWD: a WCH-LinkE with [wlink](https://github.com/ch32-rs/wlink),
   and a 1 × 6 pin header at 1.27 mm pitch for J3. J3 is not in the BOM,
   so the assembled boards come without it.
-- A single-cell Li-ion or LiPo battery with a JST PH 2.0 plug.
+- A single-cell Li-ion or LiPo battery with a JST PH 2.0 plug and a
+  built-in protection circuit (PCM). **Use only a protected cell.** The
+  board has no battery protection, no power switch and no undervoltage
+  cutoff. Without USB, Q1 connects the battery to VCC all the time, also
+  in standby. A battery left on J2 keeps draining, and a short on VCC has
+  no current limit.
 - For the standby current: a Nordic PPK2 or another µA meter.
 
 ## The board
 
 There are no test points. Measure on the pads of the parts below.
 
+The names C1 to C16 are used two times on this board. The capacitors are
+C1 to C5, C7 and C8 (there is no capacitor C6). The COM lines of the LED
+matrix are the nets C1 to C16. This document writes "capacitor C1" or
+"net C1".
+
 | Net | What it is | Where to measure |
 |---|---|---|
-| VBAT | The battery, J2 pin 1 (+). The silkscreen has a `+` mark. | J2 pin 1, C3 (10 µF) |
-| VBUS | USB 5 V from J1 | C1 (10 µF), C2 (100 nF), R37 |
-| VCC | The supply of everything: the CH643 (pins 31 and 64), the LEDs, the IR parts | J3 pin 5, C7 (10 µF), C8 (1 µF), C4 and C5 (100 nF at the VDD pins) |
+| VBAT | The battery, J2 pin 1 (+). The silkscreen has a `+` mark. | J2 pin 1, capacitor C3 (10 µF) |
+| VBUS | USB 5 V from J1 | capacitors C1 (10 µF) and C2 (100 nF), R37 |
+| VCC | The supply of everything: the CH643 (pins 31 and 64), the LEDs, the IR parts | J3 pin 5, capacitors C7 (10 µF), C8 (1 µF), C4 and C5 (100 nF at the VDD pins) |
 | GND | | J3 pin 6, J2 pin 2 |
 
 There is no voltage regulator. The CH643 (U1) runs on VCC directly:
@@ -64,7 +83,7 @@ Other parts in this checklist:
 | J1, R31, R33, U2 | USB-C. R31 and R33 (5.1 kΩ) on CC1 and CC2 tell a USB-C charger to give 5 V. U2 (TPD4E05U06) is the ESD protection. | D− PC16 (43), D+ PC17 (44) |
 | SW1..SW4 | Buttons A, B, C, D. Pull-ups R25, R26, R29, R30 (10 kΩ) to VCC. Low when pressed. | A PB20 (50), B PC5 (20), C PC4 (19), D PB18 (38) |
 | D315, R32 | IR LED. Anode to VCC through R32 (200 Ω), cathode to the CH643. | PB21 (51) |
-| S1, R28, R27 | IR receiver (DY-IRMHF384, 38 kHz). Supply from VCC through R28 (47 Ω). Output pulled up by R27 (10 kΩ). | PB19 (39) |
+| S1, R28, R27 | IR receiver (DY-IRMHF384, 38 kHz). Supply from VCC through R28 (47 Ω), always on: nothing switches it off. Output pulled up by R27 (10 kΩ). | PB19 (39) |
 | J3 | Debug header, 1 × 6 at 1.27 mm, not fitted: 1 RX, 2 TX, 3 SWIO, 4 SWCK, 5 VCC, 6 GND | RX PB17 (37), TX PB16 (36), SWIO PC18 (45), SWCK PC19 (47) |
 
 **J3 pin 5 is VCC, not 3.3 V.** On USB it is about 4.7 V. Do not
@@ -78,7 +97,8 @@ its own 200 Ω column resistor. The rule on this board:
 
 - PWM channel PA*n* goes through resistor R*n+1*. For example, PA0 is
   R1 and PA23 is R24.
-- COM line PB*n* is net C*n+1*. For example, PB0 is C1 and PB15 is C16.
+- COM line PB*n* is net C*n+1*. For example, PB0 is net C1 and PB15 is
+  net C16.
 
 | PWM | PA0 | PA1 | PA2 | PA3 | PA4 | PA5 | PA6 | PA7 | PA8 | PA9 | PA10 | PA11 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -109,8 +129,9 @@ its own 200 Ω column resistor. The rule on this board:
 4. Examine J2 (battery). Both signal pins and both mounting pads must be
    soldered.
 5. Look along the LEDs. No LED may be missing, turned, or standing up on
-   one end. The 35 RGB LEDs (NH-B1515RGBA, on the arms) have four pads:
-   a turned one shows the wrong colours in step 9.
+   one end. The 35 RGB LEDs (NH-B1515RGBA, on the arms) have four pads.
+   Pin 2 is the common anode. Compare the orientation of each one with
+   the PCB in KiCad.
 6. Examine D315 (IR LED), S1 (IR receiver) and SW1 to SW4.
 
 **You should see:** clean joints, every part in its place, the right way
@@ -121,12 +142,13 @@ can damage parts in step 3.
 
 ## 2. Resistance, without power
 
-1. Set the multimeter to resistance. Measure from VCC (J3 pin 5 or C7)
-   to GND.
-2. Measure from VBUS (C1) to GND.
+1. Set the multimeter to resistance. Measure from VCC (J3 pin 5 or
+   capacitor C7) to GND.
+2. Measure from VBUS (capacitor C1) to GND.
 3. Measure from VBAT (J2 pin 1) to GND.
-4. Set the multimeter to diode test. Put the + probe on VBUS (C1) and
-   the − probe on VCC (C7). This measures D316.
+4. Set the multimeter to diode test. Put the + probe on VBUS
+   (capacitor C1) and the − probe on VCC (capacitor C7). This measures
+   D316.
 
 **You should see:**
 
@@ -134,12 +156,13 @@ can damage parts in step 3.
   up while the meter charges the capacitors. The final values are
   **(to confirm on prototype 1)**.
 - In step 4, about 0.2 to 0.3 V: a Schottky diode in the forward
-  direction.
+  direction **(to confirm on prototype 1)**.
 
 **If not:**
 
-- Below about 10 Ω: a short. Do not apply power. Look again at U1, U2,
-  U3, Q1 and the capacitors C1 to C8.
+- Below about 10 Ω **(to confirm on prototype 1)**: a short. Do not
+  apply power. Look again at U1, U2, U3, Q1 and the capacitors C1 to
+  C5, C7 and C8.
 - D316 reads open, or about 0.6 V or more: D316 is turned, missing, or
   the wrong part.
 
@@ -149,7 +172,7 @@ can damage parts in step 3.
 2. Turn the output off. Connect + to J2 pin 1 (VBAT) and − to J2 pin 2
    (GND). Do not connect USB.
 3. Turn the output on. Read the current at once.
-4. Measure VCC (J3 pin 5 or C7).
+4. Measure VCC (J3 pin 5 or capacitor C7).
 
 **You should see:**
 
@@ -160,10 +183,12 @@ can damage parts in step 3.
 **If not:**
 
 - The supply goes into current limit and its voltage drops: a short on
-  VBAT or VCC. Turn the output off at once. Touch U1, U3, Q1, C3 and C7
-  carefully, or use a thermal camera, to find the warm part.
-- VCC is 0 V: Q1 does not conduct. Examine the orientation of Q1, and
-  R37 (it pulls the gate of Q1 to GND).
+  VBAT or VCC. Turn the output off at once. Touch U1, U3, Q1, and
+  capacitors C3 and C7 carefully, or use a thermal camera, to find the
+  warm part.
+- VCC is 0 V: there is no path from J2 to VCC. Even a Q1 that is off
+  lets current through its body diode. Examine the joints of J2, and
+  Q1 pins 2 and 3 (missing, or a joint that is open).
 - VCC is about 0.5 V lower than VBAT: only the body diode of Q1
   conducts. Examine R37 and the gate of Q1.
 - The current is tens of mA: a partial short or a turned part. Find
@@ -176,8 +201,8 @@ can damage parts in step 3.
    it.
 2. Connect the board to the PC with the USB-C cable. A USB power meter
    between them shows the current.
-3. Measure VBUS (C1).
-4. Measure VCC (J3 pin 5 or C7).
+3. Measure VBUS (capacitor C1).
+4. Measure VCC (J3 pin 5 or capacitor C7).
 5. On a board without firmware, run `lsusb -d 1a86:55e0`.
 
 **You should see:**
@@ -212,6 +237,11 @@ matters.
 4. Connect USB.
 5. Measure CHRG at R34 (the side that is not VCC), or on U3 pin 1.
 6. Leave it to charge, and measure VBAT now and then.
+
+The charge current and the LED current both come from VBUS. Together
+they can be about 800 mA. A USB 2.0 port must supply only 500 mA.
+Use a USB-C charger or a USB 3 port while a battery is on J2. Do not
+leave a battery on J2 when you do not use it: see "What you need".
 
 **You should see:**
 
@@ -255,13 +285,16 @@ A blank chip stays in the boot ROM (step 4), so you need no button.
 Use this way when the boot ROM does not show up, or on a board whose
 firmware does not start.
 
-1. Solder the 1 × 6 header on J3.
-2. Connect the probe's GND to J3 pin 6 and its SWDIO to J3 pin 3
+1. Connect the WCH-LinkE to the PC. `lsusb` must show `1a86:8010` (RISC-V
+   mode). If it shows `1a86:8012`, run `wlink mode-switch --rv` (see
+   `README.md`, "Flash with a WCH-Link probe", step 1).
+2. Solder the 1 × 6 header on J3.
+3. Connect the probe's GND to J3 pin 6 and its SWDIO to J3 pin 3
    (SWIO). **Do not connect the probe's 3V3 to J3 pin 5**: pin 5 is VCC,
    about 4.7 V on USB.
-3. Connect the board to USB. Flash only on USB power: on prototype 1,
+4. Connect the board to USB. Flash only on USB power: on prototype 1,
    flashing failed on PPK2 power and left the chip half written.
-4. Flash as `README.md`, "Flash with a WCH-Link probe", says:
+5. Flash as `README.md`, "Flash with a WCH-Link probe", says:
 
    ```sh
    wlink --speed low --chip CH643 reset   # must print "Attached chip: CH643"
@@ -271,7 +304,7 @@ firmware does not start.
    minichlink also knows the CH643 and the WCH-LinkE
    (`ch32fun/minichlink/minichlink -w ledmatrix.bin flash -b`)
    **(to confirm on prototype 1)**.
-5. To read the firmware's log, keep the probe on and run
+6. To read the firmware's log, keep the probe on and run
    `ch32fun/minichlink/minichlink -T`.
 
 **You should see:** the flash tool reports success. The badge restarts,
@@ -313,7 +346,8 @@ on.
   (A6, A7, B6, B7). USB works only on USB power: the CH643's USB uses
   its 5 V setup, with VDD from VBUS.
 - `dmesg` shows `device descriptor read` errors: USB runs from the
-  CH643's internal oscillator (HSI, ±2 %). Suspect the clock first.
+  CH643's internal oscillator (HSI, −2.0 to +1.8 % from 0 to 70 °C,
+  CH643 datasheet, table 3-9). Suspect the clock first.
 - `tools/badge.py` says `the badge is in use`: close or disconnect the
   web interface.
 
@@ -322,15 +356,18 @@ on.
 1. Power the badge from USB. After the first flash, the test starts by
    itself. Else run `tools/badge.py factory`.
 2. Do the steps on the card in `docs/FACTORY_TEST.md`.
-3. During the LED step (every LED on, at full brightness), read the
+3. Before the LED step, disconnect the battery from J2, or wait until
+   CHRG is high (step 5). Else the meter also shows the charge current.
+4. During the LED step (every LED on, at full brightness), read the
    current on the USB power meter, and measure VCC and VBUS (step 4).
 
 **You should see:** the green arms and `OK`. Then the name tag.
 
 The current with every LED on is **(to confirm on prototype 1)**. One
-COM line can drive 24 LEDs at once, about 13 mA each on USB, so the
-peak is about 320 mA. The CH643 allows 550 mA in total through its VDD
-pins.
+COM line can drive 24 LEDs at once. With 200 Ω column resistors that is
+about 13 mA each on USB, so the peak is about 320 mA **(an estimate, to
+confirm on prototype 1)**. The CH643Q allows 550 mA in total through its
+VDD pins (CH643 datasheet, table 3-1, IVDD).
 
 **If not:** go to the step of this checklist for the part that failed:
 
@@ -392,7 +429,8 @@ gives, in the colour that it gives.
 | A whole COM line stays dark in `--lines rows` | U1's pin for that PB line, and net C*n+1* |
 | A whole PWM channel stays dark in `--lines cols` | The column resistor R*n+1*, and U1's pin for that PA line |
 | A line lights LEDs of another line too | A short between those two lines |
-| An RGB LED shows the wrong colour | The RGB LED is turned |
+| An RGB LED stays dark in all three colours, or lights in a step of another LED | The RGB LED is turned: its common anode (pin 2) is then on a COM net **(to confirm on prototype 1)** |
+| An RGB LED shows the wrong colour, or two colours swap | A bridge between its COM nets, or the wrong part |
 
 ## 10. Buttons
 
@@ -429,26 +467,38 @@ pull-up: R25 (A), R26 (B), R29 (C) or R30 (D).
 - Nothing received: examine the orientation of S1, R28 (supply), R27
   (pull-up). PB19 must be high (VCC) when no IR arrives.
 - D315 does not flash: examine its orientation and R32. PB21 sinks the
-  current, about 15 mA.
+  current: about 12 mA on the battery and 17 mA on USB, with 200 Ω
+  **(an estimate, to confirm on prototype 1)**.
 
 ## 12. Standby current
 
 This is issue #14. The CH643 datasheet gives 55 µA typical for the chip
-in standby. The old firmware drew 2.84 mA on prototype 1.
+in standby, with the watchdog and AWU off (table 3-8). The old firmware
+drew 2.84 mA on prototype 1.
 
-1. Disconnect USB and the SWD probe.
+The badge cannot get down to the chip's figure. The IR receiver S1 is
+always on: R28 connects it to VCC, and nothing switches it off. Its shop
+listing gives a supply current of up to 2.5 mA. S1 can account for
+most of the 2.84 mA.
+
+1. Disconnect USB and the SWD probe. Disconnect the battery from J2.
 2. Set the PPK2 to source meter, 3.7 V. Connect it to J2 as a battery:
    VOUT to pin 1, GND to pin 2.
 3. Hold **A**, step to **SLEEP**, and tap **A**. The badge goes dark.
 4. Read the average current over 10 s.
 5. Press a button. The badge wakes up.
 
-**You should see:** a current in µA, not in mA
-**(to confirm on prototype 1)**. Write the value in issue #14.
+**You should see:** the current of S1 plus the CH643's standby
+current. Expect up to about 2.5 mA **(to confirm on prototype 1)**.
+Write the value in issue #14.
 
-**If not:** pads of the CH643 that float can draw current. Gap 7 in
-`docs/OLD_FIRMWARE.md` lists them. Use the PPK2 only to measure: do not
-flash on PPK2 power (step 6).
+**If not:**
+
+- More than about 2.6 mA: examine S1 and R28 first. Then the pads of
+  the CH643 that float: gap 7 in `docs/OLD_FIRMWARE.md` lists them.
+- For the CH643 alone, lift R28 and measure again. Then S1 gets no
+  power, and you should see about the datasheet's 55 µA.
+- Use the PPK2 only to measure: do not flash on PPK2 power (step 6).
 
 ## When a board passes
 

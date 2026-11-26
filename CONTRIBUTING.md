@@ -125,7 +125,8 @@ python3 tools/emu/emu.py --web
 ```
 
 For automatic tests, `tools/emu/headless.py` drives the emulator without
-a window: USB, buttons, infrared, and the text on the grid. The tests in
+a window: USB, buttons, infrared, USB power and charging, a fresh start,
+and the text on the grid. The tests in
 `tools/text_test`, `tools/ir_test` and `tools/four_test` show how to use
 it.
 

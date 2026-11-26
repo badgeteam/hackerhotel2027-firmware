@@ -188,7 +188,7 @@ This one is in `docs/FACTORY_TEST.md`.
 
 | Old feature | Status now | Notes |
 |---|---|---|
-| Runs at every power-on until it passes once; kept in flash | done: [#59] | Not in the emulator, which skips it at power-on. |
+| Runs at every power-on until it passes once; kept in flash | done: [#59] | The emulator skips it at power-on, except after `--fresh` (`tools/emu/emu.py`). |
 | LED and ROW: the volunteer taps B (good) or A (bad) | replaced: [#62] | Both run by themselves. A bad LED or row means the repair pile. |
 | KEY, fails after 20 s | done: [#59] | `make FACTORY_KEYS=0` leaves it out ([#62]). |
 | USB, fails after 10 s | done: [#59] | Also shows `CHG` while the battery charges. |
@@ -231,10 +231,10 @@ The factory test now covers some of the steps.
 | Old feature | Status now | Notes |
 |---|---|---|
 | The firmware on the PC, the buttons drawn on the board ([USAGE][u-emu]) | done: [#3] | Apps run in a RISC-V interpreter. Keys A, B, C, D, or click. |
-| `C`: USB power on and off (charging) | untracked | `tools/emu/hw.c`: the emulated badge is always on USB and never charges. |
+| `C`: USB power on and off (charging) | done: `tools/emu` | `V` plugs USB power in and out (PC3). `U` makes the battery charge, stop, or go away: then CHRG (PB22) toggles, as the charger does without a battery. Buttons under the board do the same, and `tools/emu/headless.py` has `usb_power()`, `charging()` and `no_battery()`. |
 | `R`: reset | done: [#3] | `R` powers off and on; a key held then is held at power-on (safe start). |
 | A name kept over `R`, lost when the emulator closes | done: [#3] | The flash is a file, so everything stays. |
-| `--fresh`: the factory test, then the sponsor reel | untracked | The emulator skips the factory test at power-on. `tools/factory_test` starts it over USB. |
+| `--fresh`: the factory test, then the sponsor reel | partly: `tools/emu` | `--fresh` erases the persistent record (the items stay), so the factory test runs at power-on. It runs on a copy of the flash file; `--keep` erases the record in the file itself. There is no sponsor reel yet ([#12]). |
 | One shared infrared room (UDP 127.255.255.255:8028) | done: [#3], [#37] | |
 | stdin is the UART console | tracked: [#10] | stdin carries the emulator's own protocol now. |
 | `--web`: the setup page on localhost, any browser | done: [#3] | The whole web interface. |
@@ -321,9 +321,12 @@ decision first: is it worth the flash, and is it worth the work?
 8. **Factory test overrides.** A way to pass IR untested, as B on `IR?`
    did, and to mark the test as passed (`factory skip`). This is a
    decision for the organisers of the flashing table.
-9. **Emulator: USB and charging.** A key that turns USB power on and off
-   and makes the badge charge, for [#9] and the factory test's USB step.
-10. **Emulator: a fresh start** that runs the factory test at power-on.
+9. **Emulator: USB and charging.** Done (`tools/emu`): `V` turns USB
+   power on and off, and `U` makes the battery charge, stop, or go away
+   (CHRG then toggles), for [#9] and the factory test's USB step.
+10. **Emulator: a fresh start.** Done (`tools/emu`): `--fresh` runs the
+    factory test at power-on, on a copy of the flash file with the
+    persistent record erased.
 11. **Bring-up from the host.** A tool that walks the LEDs one at a time
     over USB and prints each designator from `webui/board_data.js`. It
     needs no firmware bytes. Could be part of [#11].

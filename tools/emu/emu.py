@@ -2,7 +2,7 @@
 """The badge emulator: runs the firmware on the PC and draws the badge.
 
   make -C tools/emu
-  python3 tools/emu/emu.py [--web] [--flash FILE] [--no-ir]
+  python3 tools/emu/emu.py [--web] [--flash FILE] [--no-ir] [--fresh [--keep]]
 
 hh27-emu (built by the Makefile) is the real firmware, built for the PC:
 the main loop, the item store, the persistent record, the animation
@@ -11,12 +11,33 @@ program starts hh27-emu, draws its LEDs on the badge's outline from
 webui/board_data.js, and passes it the buttons.
 
 Keys: A, B, C, D = the buttons (by their silkscreen letters), or click
-them on the board. R = power off and on (buttons held then are held at
-power-on: hold one for a safe start). Esc = quit.
+them on the board. V = USB power in and out. U = the battery: it does not
+charge, it charges, or there is none. R = power off and on (buttons held
+then are held at power-on: hold one for a safe start). Esc = quit. The
+buttons under the board do the same as V and U.
+
+USB power and the battery: the emulated badge starts on USB power, with a
+battery that does not charge. The firmware reads them as on the badge
+(power.c): PC3 high while USB power is in, and the charger's CHRG (PB22)
+low while the battery charges. Without USB power the charger is off, and
+the badge gets no USB packets (the web interface then shows it as
+disconnected, as when a badge is unplugged; Connect emulator again after V).
+Without a battery, CHRG toggles every 100 ms, as the charger does when no
+battery is in. (A real badge with neither is off; the emulator runs on.)
 
 The flash (items, name, settings) is kept in a file, by default
 ~/.cache/hh27-emu/flash.bin, so it survives R and a restart. The
 firmware's log appears in this terminal.
+
+--fresh starts as a newly flashed badge: the persistent record (the name,
+the settings, the boot item, whether the factory test passed, and what
+apps saved, such as high scores) erased, the items kept, so
+the factory test runs at power-on. It runs on a copy of the flash file,
+which goes when the emulator closes: your flash file stays as it was.
+With --keep, it erases the record in the flash file itself, and keeps
+what happens after. In both, R runs the factory test again until it
+passes, as on the badge. Without --fresh the emulator skips it at
+power-on (USB command 0x52, tools/badge.py factory, starts it).
 
 --web serves the web interface (webui/) on http://127.0.0.1:8027/ (--port
 to change) and opens it (--no-browser not). Click "Connect emulator" there: the page then talks to the
@@ -31,9 +52,12 @@ import argparse
 import json
 import os
 import queue
+import shutil
+import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import tkinter as tk
@@ -65,9 +89,10 @@ def load_board():
 class Badge:
     """hh27-emu as a child process; its lines go to a queue."""
 
-    def __init__(self, flash, held=0):
-        self.p = subprocess.Popen([str(EMU), str(flash), "%x" % held], stdin=subprocess.PIPE,
-                                  stdout=subprocess.PIPE, text=True, bufsize=1)
+    def __init__(self, flash, held=0, power_on=None):
+        # power_on: "fresh" or "factory" (hw.c), or None: skip the factory test
+        self.p = subprocess.Popen([str(EMU), str(flash), "%x" % held] + ([power_on] if power_on else []),
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
         self.lines = queue.Queue()
         self.usb_replies = queue.Queue()
         threading.Thread(target=self._read, daemon=True).start()
@@ -115,6 +140,8 @@ class WebBridge:
                 if self.path.rstrip("/") != "/usb":
                     return self.send_error(404)
                 packet = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                if not app.vbus:
+                    return self.send_error(503, "USB is unplugged in the emulator (V plugs it in)")
                 reply = bridge.usb(app, packet)
                 if reply is None:
                     return self.send_error(504, "the emulator did not reply")
@@ -186,15 +213,29 @@ class IrRoom:
                 yield "p " + data[5:].hex()
 
 
+# the battery (U), as hw.c's "c" line takes it
+BATTERY = ["does not charge", "charges", "none"]
+
+
 class App:
-    def __init__(self, flash, web, ir, port=WEB_PORT, browser=True):
+    def __init__(self, flash, web, ir, port=WEB_PORT, browser=True, fresh=False):
         self.flash, self.ir = flash, ir
+        self.power_word = "fresh" if fresh else None  # the first power-on; then "factory" (see power_on)
+        self.vbus, self.battery = True, 0
         self.board = board = load_board()
         self.root = root = tk.Tk()
         root.title("Hacker Hotel 2027 badge emulator")
         root.configure(bg="black")
         self.canvas = c = tk.Canvas(root, width=SIZE, height=SIZE, bg="black", highlightthickness=0)
         c.pack()
+        bar = tk.Frame(root, bg="black")
+        bar.pack(fill="x")
+        style = dict(takefocus=0, bg="#222", fg="#ddd", activebackground="#444", activeforeground="#fff",
+                     highlightthickness=0, font=("sans", 10))
+        self.vbus_btn = tk.Button(bar, command=self.toggle_vbus, **style)
+        self.vbus_btn.pack(side="left", padx=4, pady=2)
+        self.battery_btn = tk.Button(bar, command=self.next_battery, **style)
+        self.battery_btn.pack(side="left", padx=4, pady=2)
         self.status = tk.Label(root, text="", fg="#bbb", bg="black", font=("sans", 10), anchor="w", width=1)
         self.status.pack(fill="x")
 
@@ -259,12 +300,33 @@ class App:
     def power_on(self):
         if self.badge:
             self.badge.stop()
-        self.badge = Badge(self.flash, self.held)
+        self.badge = Badge(self.flash, self.held, self.power_word)
+        if self.power_word:  # after a fresh start, the next power-ons are as on the badge
+            self.power_word = "factory"
+        self.send_power()
         self.state = "on"
+        self.show_status()
+
+    def send_power(self):
+        if self.badge:
+            self.badge.send("v %d" % self.vbus)
+            self.badge.send("c %d" % self.battery)
+
+    def toggle_vbus(self):
+        self.vbus = not self.vbus
+        self.send_power()
+        self.show_status()
+
+    def next_battery(self):
+        self.battery = (self.battery + 1) % len(BATTERY)
+        self.send_power()
         self.show_status()
 
     def show_status(self):
         what = {"on": "running", "standby": "standby: any button wakes it", "boot": "USB boot ROM (restarting)"}[self.state]
+        self.vbus_btn.config(text="V: USB power %s" % ("in" if self.vbus else "out"))
+        charger_off = " (charger off: no USB power)" if not self.vbus and BATTERY[self.battery] == "charges" else ""
+        self.battery_btn.config(text="U: battery %s%s" % (BATTERY[self.battery], charger_off))
         self.status.config(text="  %s   |   A B C D: buttons   R: power off and on   Esc: quit" % what)
 
     def tick(self):
@@ -339,6 +401,10 @@ class App:
                 self.root.after_cancel(timer)
             elif not self.held & (1 << BUTTONS[key][0]):
                 self.press(key)
+        elif key == "V":
+            self.toggle_vbus()
+        elif key == "U":
+            self.next_battery()
         elif key == "R":
             self.power_on()
         elif key == "ESCAPE":
@@ -372,11 +438,29 @@ def main():
     p.add_argument("--port", type=int, default=WEB_PORT, help="port for --web (default %d)" % WEB_PORT)
     p.add_argument("--no-browser", action="store_true", help="with --web: do not open the browser")
     p.add_argument("--no-ir", action="store_true", help="stay out of the shared infrared room")
+    p.add_argument("--fresh", action="store_true",
+                   help="start as a newly flashed badge (the record erased, the factory test at power-on), on a copy of the flash file")
+    p.add_argument("--keep", action="store_true", help="with --fresh: erase the record (name, settings, apps' saved data) in the flash file itself, and keep the changes")
     args = p.parse_args()
+    if args.keep and not args.fresh:
+        p.error("--keep goes with --fresh")
     if not EMU.exists():
         sys.exit("%s is missing: run make -C tools/emu first" % EMU)
     Path(args.flash).parent.mkdir(parents=True, exist_ok=True)
-    App(args.flash, args.web, not args.no_ir, args.port, not args.no_browser).root.mainloop()
+    flash, scratch = args.flash, None
+    if args.fresh and not args.keep:  # a copy, so the flash file stays as it was
+        scratch = tempfile.mkdtemp(prefix="hh27-emu-")
+        flash = os.path.join(scratch, "flash.bin")
+        if os.path.exists(args.flash):
+            shutil.copyfile(args.flash, flash)
+        print("fresh start on a copy of %s" % args.flash)
+        for s in (signal.SIGTERM, signal.SIGHUP):  # killed or the terminal closed: still remove the copy
+            signal.signal(s, lambda *a: sys.exit(0))
+    try:
+        App(flash, args.web, not args.no_ir, args.port, not args.no_browser, args.fresh).root.mainloop()
+    finally:
+        if scratch:
+            shutil.rmtree(scratch, ignore_errors=True)
 
 
 main()

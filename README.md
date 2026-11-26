@@ -276,8 +276,12 @@ The window shows the badge. Use these keys:
 | Key | |
 |---|---|
 | **A**, **B**, **C**, **D** | the buttons (you can also click them) |
+| **V** | USB power in and out |
+| **U** | the battery: it does not charge, it charges, or there is none |
 | **R** | power off and on; a button held then is held at power-on, for a safe start |
 | **Esc** | quit |
+
+The two buttons under the board do the same as **V** and **U**.
 
 - **Flash.** The emulated flash is a file, `~/.cache/hh27-emu/flash.bin`
   by default (`--flash` to change). Your items, name and settings stay
@@ -288,6 +292,19 @@ The window shows the badge. Use these keys:
   WebUSB.
 - **Infrared.** All emulators on one PC share an infrared "room", so apps
   on two emulators can reach each other.
+- **USB power and the battery.** The emulated badge starts on USB power,
+  with a battery that does not charge. The firmware reads both from the
+  same pins as on the badge: PC3 for USB power, the charger's CHRG (PB22)
+  for charging. Without USB power the charger is off, and the badge gets
+  no USB packets: the web interface shows the badge as disconnected, as
+  when you unplug a badge. Without a battery, CHRG toggles every 100 ms,
+  as the charger does.
+- **Fresh start.** The emulator skips the factory test at power-on.
+  `--fresh` starts as a newly flashed badge: the persistent record (name,
+  settings, boot item, factory test passed, and what apps saved, such as
+  high scores) is erased and the items stay, so the factory test runs. It
+  runs on a copy of the flash file, so your own file stays as it was.
+  `--fresh --keep` erases the record in the file itself.
 - **Log.** The firmware's log appears in the terminal.
 
 `tools/emu/rv32_test/run.sh` checks the interpreter against the same
@@ -369,7 +386,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/board_test/run.sh` | checks that `tools/extract_board_data.py` makes the committed `webui/board_data.js` from the board (SKIP without it) |
 | `tools/nametag_test/run.sh` | checks how the name tag shows banana shots, on the emulator |
 | `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge, banana shots, on emulators |
-| `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, the text on the grid |
+| `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, USB power and charging, a fresh start, the text on the grid |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |
 

@@ -155,18 +155,12 @@ static void draw_menu(void) {
     uint8_t item = 0;
     int kind = entry_kind(s_cursor, &item);
     const store_item_t* it = kind == ENTRY_ITEM ? Store_Item(item) : NULL;
-    switch (kind) {
-        case ENTRY_NAMETAG: copy_label(label, "NAME TAG", sizeof label - 1); break;
-        case ENTRY_SAY_HI: copy_label(label, "SAY HI", sizeof label - 1); break;
-        case ENTRY_ITEM: copy_label(label, it ? it->name : "?", STORE_NAME_LEN); break;
-        case ENTRY_EDIT: copy_label(label, "EDIT NAME", sizeof label - 1); break;
-        case ENTRY_BRIGHTNESS: copy_label(label, "BRIGHTNESS", sizeof label - 1); break;
-        case ENTRY_KEYS:
-            copy_label(label, Persist_Keys() == MENU_KEYS_VERTICAL ? "BUTTONS B D" : "BUTTONS C D", sizeof label - 1);
-            break;
-        case ENTRY_SLEEP: copy_label(label, "SLEEP", sizeof label - 1); break;
-        default: copy_label(label, "UPDATE", sizeof label - 1); break;
-    }
+    // by entry kind; an item shows its name ("?" if it has gone)
+    static const char* const LABELS[] = {"NAME TAG", "SAY HI", "?", "EDIT NAME", "BRIGHTNESS", "BUTTONS C D", "SLEEP", "UPDATE"};
+    const char* text = LABELS[kind];
+    if (it) text = it->name;
+    if (kind == ENTRY_KEYS && Persist_Keys() == MENU_KEYS_VERTICAL) text = "BUTTONS B D";
+    copy_label(label, text, STORE_NAME_LEN);
     Text_DrawLabel(label, TEXT_Y, s_shown_ms, 255);
     if (kind == ENTRY_BRIGHTNESS) Menu_DrawBrightness();
     outline(s_cursor, s_cursor + 1, entry_count());

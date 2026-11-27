@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 #define HH_APP_MAGIC 0x50414848u  // "HHAP"
-#define HH_API_VERSION 6  // 2: draw_text, text_width; 3: polar; 4: the helpers; 5: IR packets; 6: shots
+#define HH_API_VERSION 7  // 2: draw_text, text_width; 3: polar; 4: the helpers; 5: IR packets; 6: shots; 7: raw IR
 
 #define HH_APP_RAM_BASE 0x20002000u
 #define HH_APP_RAM_SIZE 0x3000u  // 12 KB: the image and its .bss
@@ -204,6 +204,17 @@ typedef struct {
     // mode 0, and a shoot only from another team; its 5th hit is game over
     // until its owner holds btn1, so send only when the player asks.
     bool (*ir_send_shot)(const hh_ir_shot_t *shot);
+
+    // Raw infrared (HH_API_VERSION 7), for remote controls that ir_send()
+    // does not speak (Sony, RC5, RC6, ...): count marks (carrier on) and
+    // spaces, alternating and starting with a mark, us[i] microseconds
+    // each, on a carrier of carrier_hz (20000 .. 60000; most remotes use
+    // 36000 to 40000). End with a space to keep quiet that long before the
+    // next frame. The firmware reads us[] while it sends, so leave it as
+    // it is until then (a const table is simplest). False while something
+    // still goes out, or for count 0 or a carrier out of range. When the
+    // app stops, a frame still going out stops too.
+    bool (*ir_send_raw)(const uint16_t *us, uint16_t count, uint32_t carrier_hz);
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.

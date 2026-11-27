@@ -5,7 +5,8 @@ on the centre grid with the glyphs from font.c.
 hh27-emu talks on stdin/stdout as tools/emu/emu.py does (hw.c lists the
 lines): "u <hex>" a USB packet and "U <hex>" its reply, "b <hex>" the
 buttons held, "F <hex>" a frame, "P <hex>" / "p <hex>" an IR packet sent /
-received, "s <team> <trigger> <command> <parameter>" a banana shot received.
+received, "s <team> <trigger> <command> <parameter>" a banana shot received,
+"R <carrier> <us>..." a raw IR frame sent.
 """
 import os
 import queue
@@ -64,6 +65,7 @@ class Emu:
         self.frame = None
         self.frames = 0
         self.ir_sent = []  # the IR packets it sent, as bytes (type, length, data)
+        self.ir_raw = []   # the raw IR frames it sent: (carrier Hz, [us, ...])
         self.log = []      # the firmware's log lines ("L"), apps' print() too
         self.peers = []    # emulators that receive its IR packets (link())
         self.lock = threading.Lock()
@@ -83,6 +85,9 @@ class Emu:
                 self.ir_sent.append(bytes.fromhex(rest))
                 for peer in self.peers:
                     peer.send("p " + rest)
+            elif kind == "R":
+                v = list(map(int, rest.split()))
+                self.ir_raw.append((v[0], v[1:]))
             elif kind == "Q":
                 self.pin_replies.put(tuple(v == "1" for v in rest.split()))
 

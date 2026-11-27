@@ -16,7 +16,8 @@ enum {
     M_SET, M_GET, M_CLEAR, M_SET_BRIGHTNESS, M_BRIGHTNESS, M_GRID, M_EDGE, M_RGB, M_PRESSED, M_HELD,
     M_MILLIS, M_RANDOM, M_IR_SEND, M_IR_RECEIVE, M_STANDBY, M_EXIT, M_PRINT, M_NAME, M_SET_NAME, M_LOAD,
     M_SAVE, M_DRAW_TEXT, M_TEXT_WIDTH, M_POLAR, M_SET_RGB, M_SET_LINEAR, M_SIN8, M_HSV, M_ISQRT, M_ATAN8,
-    M_DRAW_NUMBER, M_STEP_BRIGHTNESS, M_IR_SEND_PACKET, M_IR_RECEIVE_PACKET, M_IR_RECEIVE_SHOT, M_IR_SEND_SHOT, M_COUNT
+    M_DRAW_NUMBER, M_STEP_BRIGHTNESS, M_IR_SEND_PACKET, M_IR_RECEIVE_PACKET, M_IR_RECEIVE_SHOT, M_IR_SEND_SHOT,
+    M_IR_SEND_RAW, M_COUNT
 };
 _Static_assert(sizeof(hh_api_t) == 8 + 8 * M_COUNT, "app.c lists every member of hh_api_t");
 
@@ -123,6 +124,10 @@ static void trap(rv_cpu* cpu, unsigned m) {
             break;
         case M_IR_SEND_SHOT:
             r = in_ram(a0, sizeof(hh_ir_shot_t)) && s_api->ir_send_shot((const hh_ir_shot_t*)(uintptr_t)a0);
+            break;
+        case M_IR_SEND_RAW:
+            r = !(a0 & 1) && in_ram(a0, 2 * (uint16_t)a1) &&
+                s_api->ir_send_raw((const uint16_t*)(uintptr_t)a0, (uint16_t)a1, x[12]);
             break;
         default: emu_log("the app called hh_api_t member %u, which is not a function", m); break;
     }

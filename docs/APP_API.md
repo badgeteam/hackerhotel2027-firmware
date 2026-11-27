@@ -37,6 +37,7 @@ badge is older than the page.
 | 4 | `set_rgb`, `set_linear`, `sin8`, `hsv`, `isqrt`, `atan8`, `draw_number`, `step_brightness`; `HH_CENTER` for `draw_text` |
 | 5 | `ir_send_packet`, `ir_receive_packet` |
 | 6 | `ir_receive_shot` |
+| 7 | `ir_send_raw` |
 
 | Member | Version |
 |---|---|
@@ -249,6 +250,45 @@ On air a shot is 16 bits with JVC timing (leader 8.4 ms + 4.2 ms), with no
 edge after its stop mark: the firmware takes it as a shot after 4 ms of
 silence. `apps/banana` is an example; `tools/badge.py irlog` shows what any
 remote or blaster sends.
+
+### Raw frames (7)
+
+| Member | |
+|---|---|
+| `bool ir_send_raw(const uint16_t *us, uint16_t count, uint32_t carrier_hz)` | Sends `count` marks and spaces, alternating and starting with a mark, `us[i]` microseconds each, on a carrier of `carrier_hz`. False while something still goes out, for `count` 0, or for a carrier outside 20000 .. 60000. |
+
+For remote controls that `ir_send()` does not speak: Sony (40 kHz), RC5
+and RC6 (36 kHz), Panasonic, and so on. A mark is the carrier on, a space
+off; each lasts at least one carrier period. End with a space to keep the
+line quiet that long before the next frame: `send` returns false until it
+is over.
+
+The firmware reads `us[]` while the frame goes out, so leave the array as
+it is until then; a `const` table is simplest. When the app stops (the
+menu, the web interface, `exit()`), a frame that still goes out stops
+too. The badge has one small IR LED, so expect a few metres, not a room.
+The receiver only decodes the frames above; `tools/badge.py irlog` on
+another badge shows the marks and spaces of a 38 kHz frame.
+
+```c
+// B: a Sony "power" (12 bits, command 21, device 1), three times
+static const uint16_t sony_power[] = {
+    2400, 600,                                     // leader
+    1200, 600, 600, 600, 1200, 600, 600, 600,      // command 21 = 1010100, LSB first
+    1200, 600, 600, 600, 600, 600,
+    1200, 600, 600, 600, 600, 600, 600, 600,       // device 1 = 10000
+    600, 25000,                                    // the last bit, then the gap
+};
+static int left;
+
+static void tick(uint32_t elapsed_ms) {
+    if (hh->pressed() & HH_BTN_B) left = 3;
+    if (left && hh->ir_send_raw(sony_power, sizeof sony_power / sizeof *sony_power, 40000)) left--;
+}
+```
+
+In the emulator, each raw frame shows in the terminal, and
+`tools/emu/headless.py` keeps them in `ir_raw`.
 
 ## System
 

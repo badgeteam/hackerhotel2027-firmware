@@ -260,6 +260,60 @@ int main(void) {
         send(&rx, &r, &f, 0, 0, -1);
         CHECK(r.nec == 1 && r.shots == 0 && IrRx_Silence(&rx, 40000) == IR_RX_NOTHING, "a NEC frame gives no shot");
     }
+    // Raw frames (IrFrame_Raw): any marks and spaces, on a carrier of their own
+    {
+        // a NEC frame written out as marks and spaces, sent raw
+        uint16_t nec[2 + 2 * 32 + 1];
+        IrFrame_Nec(&f, 0xF708FB04u);
+        uint16_t n = IrFrame_Segments(&f);
+        for (uint16_t i = 0; i < n; i++) nec[i] = IrFrame_SegmentUs(&f, i);
+        ir_frame_t raw;
+        CHECK(IrFrame_Raw(&raw, nec, n, 38000) && raw.raw == nec && raw.carrier_hz == 38000,
+              "a raw frame is built on the caller's array, at its carrier");
+        int same = IrFrame_Segments(&raw) == n;
+        for (uint16_t i = 0; i < n; i++) same &= IrFrame_SegmentUs(&raw, i) == nec[i];
+        CHECK(same, "a raw frame's marks and spaces are the ones given");
+        result_t r = {0};
+        IrRx_Reset(&rx);
+        send(&rx, &r, &raw, 100, 60, -1);
+        CHECK(r.nec == 1 && r.nec_data == 0xF708FB04u, "a NEC frame sent raw comes in as NEC (%08x)", r.nec_data);
+
+        CHECK(!IrFrame_Raw(&raw, nec, 0, 38000), "a raw frame of no marks is refused");
+        CHECK(!IrFrame_Raw(&raw, nec, n, IR_RAW_CARRIER_MIN - 1) && !IrFrame_Raw(&raw, nec, n, IR_RAW_CARRIER_MAX + 1),
+              "a carrier out of range is refused");
+        CHECK(IrFrame_Raw(&raw, nec, 1, IR_RAW_CARRIER_MIN) && IrFrame_Raw(&raw, nec, 2, IR_RAW_CARRIER_MAX),
+              "the ends of the carrier range are taken");
+
+        // after a raw frame, the other frames are their own again, at 38 kHz
+        int plain = 1;
+        for (int kind = 0; kind < 4; kind++) {
+            IrFrame_Raw(&f, nec, n, 56000);
+            if (kind == 0) IrFrame_Nec(&f, 0x12ED34CBu);
+            if (kind == 1) IrFrame_NecRepeat(&f);
+            if (kind == 2) IrFrame_Shot(&f, 0x4119);
+            if (kind == 3) IrFrame_Packet(&f, 'H', (const uint8_t*)"HI", 2);
+            static const uint16_t segments[] = {2 + 2 * 32 + 1, 2 + 1, 2 + 2 * 16 + 1, 2 + 2 * 40 + 1};
+            plain &= f.raw == NULL && f.carrier_hz == IR_CARRIER_HZ && IrFrame_Segments(&f) == segments[kind];
+        }
+        CHECK(plain, "NEC, repeat, shot and packet after a raw frame: 38 kHz and their own segments");
+
+        // Carrier periods: the NEC timings as before (rounded at 38 kHz), at
+        // least 1, and no overflow at the longest and highest
+        static const uint16_t timings[] = {IR_NEC_LEADER_MARK,  IR_NEC_LEADER_SPACE,  IR_NEC_REPEAT_SPACE,
+                                           IR_PACKET_LEADER_SPACE, IR_SHOT_LEADER_MARK, IR_SHOT_LEADER_SPACE,
+                                           IR_SHOT_BIT_MARK,    IR_SHOT_ONE_SPACE,    IR_BIT_MARK,
+                                           IR_ONE_SPACE};
+        int unchanged = 1;
+        for (unsigned i = 0; i < sizeof timings / sizeof *timings; i++)
+            unchanged &= Ir_CarrierPeriods(timings[i], 38000) == (timings[i] * 38000u + 500000) / 1000000;
+        CHECK(unchanged, "the frames' timings in 38 kHz periods, as before");
+        CHECK(Ir_CarrierPeriods(0, 38000) == 1 && Ir_CarrierPeriods(10, 38000) == 1,
+              "a mark or space is at least one period");
+        CHECK(Ir_CarrierPeriods(2400, 40000) == 96, "a Sony leader at 40 kHz: 96 periods (%u)",
+              Ir_CarrierPeriods(2400, 40000));
+        CHECK(Ir_CarrierPeriods(65535, IR_RAW_CARRIER_MAX) == 3932, "65.535 ms at %d Hz: 3932 periods (%u)",
+              IR_RAW_CARRIER_MAX, Ir_CarrierPeriods(65535, IR_RAW_CARRIER_MAX));
+    }
 
     printf("%s  ir_codec: %d of %d checks\n", failures ? "FAIL" : "ok  ", checks - failures, checks);
     return failures != 0;

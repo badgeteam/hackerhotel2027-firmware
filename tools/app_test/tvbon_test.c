@@ -11,7 +11,9 @@
 
 // The frames that went out, decoded: a brand's code and its carrier
 typedef struct {
-    char kind;  // 'N' NEC (9 ms leader), 'S' Samsung (4.5 ms), 'Y' Sony, 'P' Panasonic, 'R' RC5, 'C' RC6, '?' none
+    // 'N' NEC (9 ms leader), 'S' Samsung (4.5 ms), 'Y' Sony, 'P' Panasonic, 'R' RC5, 'C' RC6, 'X' Xiaomi,
+    // '?' none of these
+    char kind;
     uint64_t code;  // the bits in the order they went out, the first the highest
     uint32_t carrier;
     uint32_t us;  // the whole frame, with its gap
@@ -99,6 +101,24 @@ static bool rc6_frame(const uint16_t* f, int n, uint64_t* code) {
     return true;
 }
 
+// Xiaomi: a 1000 us mark and a 580 us space, 10 symbols of a 580 us mark
+// and a space of 580, 870, 1160 or 1450 us (2 bits, MSB first), a stop
+// mark: 8 bits address, 8 bits command, and a check nibble, which is all
+// their nibbles XORed
+static bool xiaomi_frame(const uint16_t* f, int n, uint64_t* code) {
+    if (n != 24 || !near(f[0], 1000) || !near(f[1], 580) || !near(f[22], 580) || f[23] < 5000) return false;
+    *code = 0;
+    for (int i = 0; i < 10; i++) {
+        int sym = (f[3 + 2 * i] - 580 + 145) / 290;
+        if (!near(f[2 + 2 * i], 580) || sym < 0 || sym > 3 || !near(f[3 + 2 * i], (uint16_t)(580 + sym * 290)))
+            return false;
+        *code = *code << 2 | (unsigned)sym;
+    }
+    int x = 0;
+    for (int i = 4; i < 20; i += 4) x ^= (int)(*code >> i & 15);
+    return x == (int)(*code & 15);
+}
+
 static void decode(const uint16_t* f, int n, uint32_t hz) {
     sent_t* s = &sent[nsent++ % 256];
     s->carrier = hz, s->us = 0, s->kind = '?';
@@ -109,6 +129,7 @@ static void decode(const uint16_t* f, int n, uint32_t hz) {
     else if (sony_frame(f, n, &s->code)) s->kind = 'Y';
     else if (rc5_frame(f, n, &s->code)) s->kind = 'R';
     else if (rc6_frame(f, n, &s->code)) s->kind = 'C';
+    else if (xiaomi_frame(f, n, &s->code)) s->kind = 'X';
 }
 
 // One tick, with the transmitter busy while a frame goes out
@@ -158,6 +179,7 @@ typedef struct {
 } want_t;
 static const want_t WANT[] = {
     {'N', NEC_BYTES(0xEAC717E8u), NEC_BYTES(0xEAC717E8u), 38000, 1},  // TCL: EA C7, 17 E8
+    {'X', 0x3CCCF, 0x3CCCF, 38000, 1},  // Xiaomi: device 0x3C, power 0xCC, check 0xF (JP1 forum)
     {'N', NEC_BYTES(0x00BF0DF2u), NEC_BYTES(0x00BF0DF2u), 38000, 1},  // Hisense, newer
     {'N', NEC_BYTES(0x007F0AF5u), NEC_BYTES(0x007F0AF5u), 38000, 1},  // Sharp
     {'N', NEC_BYTES(0x027D46B9u), NEC_BYTES(0x027D46B9u), 38000, 1},  // Toshiba, newer
@@ -214,7 +236,14 @@ static const char* const GRID[HH_GRID_H] = {
     "  .#.#.#...#...  ", "   #.#.##..##.   ", "    ##.#...#.    ", "      .....      ",
 };
 
+// A real Xiaomi remote's Up (Flipper-IRDB, TVs/Xiaomi), its first frame
+static const uint16_t XIAOMI_UP[] = {987, 605, 587, 1177, 587, 588, 587, 882, 587, 1176, 588, 588, 587,
+                                     588, 587, 882, 587, 883, 587, 1177, 586, 1470, 587, 13998};
+
 int main(void) {
+    uint64_t up;
+    CHECK(xiaomi_frame(XIAOMI_UP, 24, &up) && up == 0x8605B, "the Xiaomi decoder reads a real remote's Up (%llx)",
+          (unsigned long long)up);
     init(&mock_api);
     idle(100);
 

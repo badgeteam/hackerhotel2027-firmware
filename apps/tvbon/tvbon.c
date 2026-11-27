@@ -2,8 +2,9 @@
 // badge sends the power-on code of each TV brand it knows (Samsung, LG,
 // Hisense, Sony, Panasonic, Philips, Toshiba), and the arm to A fills up
 // green as they go out. Press B: the power-off codes, and the arm to B
-// fills up red. Brands with only a power toggle (TCL, newer Hisense,
-// Philips and Toshiba, Sharp, Telefunken and others by Vestel, Hitachi)
+// fills up red. Brands with only a power toggle (TCL, Xiaomi, newer
+// Hisense, Philips and Toshiba, Sharp, Telefunken and others by Vestel,
+// Hitachi)
 // get it with A and with B, first, so a TV that knows both ends with its
 // own on or off. Philips's off is the standby button, which toggles on
 // newer Philips TVs. A press takes about two seconds.
@@ -18,10 +19,12 @@
 #define SONY_FRAME_US 45000  // a Sony frame starts every 45 ms
 #define RC5_HALF_US 889      // half an RC5 bit
 #define RC6_UNIT_US 444      // an RC6 half bit
+#define XIAOMI_UNIT_US 290   // Xiaomi's timing unit
+#define XIAOMI_FRAME_US 30000  // a Xiaomi frame starts every 30 ms
 #define RC_GAP_US 65000      // after RC5 and RC6 (RC5 repeats every 114 ms; a space holds at most 65 ms)
 #define FRAME_MAX 100        // a Panasonic frame: leader, 48 bits, stop mark, gap
 
-enum { NEC, SAMSUNG, SONY, PANASONIC, RC5, RC6 };
+enum { NEC, SAMSUNG, SONY, PANASONIC, RC5, RC6, XIAOMI };
 enum { IDLE, ON, OFF };
 
 // The brands: a protocol, how often each frame goes out, the address and
@@ -30,7 +33,7 @@ enum { IDLE, ON, OFF };
 // Samsung send the address bytes a0 a1, then the command and its inverse.
 // Sony sends the command's 7 bits, then a1 bits of the address a0.
 // Panasonic sends its vendor code, a0 a1, the command and a check byte.
-// RC5 and RC6 (Philips) send the address a0 and the command. A toggle has
+// RC5, RC6 (Philips) and Xiaomi send the address a0 and the command. A toggle has
 // the same command for on and off, and goes out once: twice could count as
 // two presses. The toggles go first. LG goes before Hisense: on an LG,
 // Hisense's on and off are the green and red buttons, so after LG's off
@@ -42,6 +45,7 @@ typedef struct {
 } brand_t;
 static const brand_t BRANDS[] = {
     {NEC, 1, 0xEA, 0xC7, 0x17, 0x17},  // TCL and other Roku TVs
+    {XIAOMI, 1, 0x3C, 0, 0xCC, 0xCC},  // Xiaomi
     {NEC, 1, 0x00, 0xBF, 0x0D, 0x0D},  // Hisense, newer
     {NEC, 1, 0x00, 0x7F, 0x0A, 0x0A},  // Sharp, Blaupunkt
     {NEC, 1, 0x02, 0x7D, 0x46, 0x46},  // Toshiba and Telefunken, newer
@@ -152,6 +156,28 @@ static uint16_t rc6(uint16_t* f, uint8_t address, uint8_t command) {
     return rc_gap(f, k);
 }
 
+// A Xiaomi frame (a kind of RC-MM): a 1 ms mark and a 2 unit space, then
+// the address, the command and a check nibble (all their nibbles XORed),
+// MSB first, two bits to a symbol: a 2 unit mark and a space of 2 to 5
+// units; then a stop mark, and quiet until the next frame is due
+static uint16_t xiaomi(uint16_t* f, uint8_t address, uint8_t command) {
+    uint8_t check = (address >> 4 ^ address ^ command >> 4 ^ command) & 15;
+    uint32_t bits = (uint32_t)address << 12 | (uint32_t)command << 4 | check;
+    uint16_t k = 0;
+    uint32_t total = 1000 + 2 * XIAOMI_UNIT_US;
+    f[k++] = 1000;
+    f[k++] = 2 * XIAOMI_UNIT_US;
+    for (int i = 18; i >= 0; i -= 2) {
+        f[k++] = 2 * XIAOMI_UNIT_US;
+        f[k] = (uint16_t)((2 + (bits >> i & 3)) * XIAOMI_UNIT_US);
+        total += f[k - 1] + f[k];
+        k++;
+    }
+    f[k++] = 2 * XIAOMI_UNIT_US;
+    f[k++] = (uint16_t)(XIAOMI_FRAME_US - total - 2 * XIAOMI_UNIT_US);
+    return k;
+}
+
 // Frame i of a run: the brands in order, each its number of repeats
 static uint16_t build(uint16_t* f, uint8_t i, uint8_t m, uint32_t* hz) {
     const brand_t* b = BRANDS;
@@ -173,6 +199,9 @@ static uint16_t build(uint16_t* f, uint8_t i, uint8_t m, uint32_t* hz) {
         case RC6:
             *hz = 36000;
             return rc6(f, b->a0, c);
+        case XIAOMI:
+            *hz = 38000;  // the JP1 forum's capture says 36 kHz, Xiaomi's own Mi Remote database 38
+            return xiaomi(f, b->a0, c);
         case SAMSUNG:
             *hz = 38000;
             return distance(f, 4500, 4500, 560, 1690, bytes, 4);

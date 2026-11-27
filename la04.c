@@ -244,7 +244,13 @@ static inline unsigned tt_key(unsigned a, unsigned b) {
 }
 
 // One segment (si: 0 the grid, 1 the outline, 2 RGB) of this frame,
-// positions start..end-1, under mode md (and outline rotation rot)
+// positions start..end-1, under mode md (and outline rotation rot). The
+// decoder's hot loop: it moves loop invariants out of the loop, which the
+// Makefile turns off for the rest of the firmware (the PC tests build this
+// file with Clang too, which has no such attribute)
+#ifndef __clang__
+__attribute__((optimize("move-loop-invariants")))
+#endif
 static void segment(unsigned si, unsigned md, int rot, int start, int end) {
     unsigned mode = md & 15;
     uint8_t* cur = s_cur;

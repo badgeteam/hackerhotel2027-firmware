@@ -62,8 +62,8 @@ void Store_SetBootItem(uint8_t index) { Persist_SetBootItem(index); }
 
 // The new item's first page (header and the start of the payload) stays
 // in s_first until Store_Commit(); later pages go through s_page.
-static uint8_t s_first[FLASH_PAGE_SIZE];
-static uint8_t s_page[FLASH_PAGE_SIZE];
+static uint8_t s_first[FLASH_PAGE_SIZE] __attribute__((aligned(4)));  // read as a store_item_t
+static uint8_t s_page[FLASH_PAGE_SIZE] __attribute__((aligned(4)));
 static uint32_t s_start;     // offset of the new item
 static uint32_t s_received;  // payload bytes so far
 static bool s_writing;

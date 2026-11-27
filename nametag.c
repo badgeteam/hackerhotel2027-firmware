@@ -1,4 +1,5 @@
 #include "nametag.h"
+#include "app_util.h"
 #include "ch643_ledpwm.h"
 #include "font.h"
 #include "layout.h"
@@ -19,7 +20,6 @@ static const char* s_text; // a text item's text; NULL: the owner's name
 static unsigned s_len;
 static uint8_t s_speed = NAME_SPEED;
 static uint8_t s_style = TEXT_STYLE_NAMETAG;
-static uint32_t s_rand = 0x20275EA5u;
 static uint32_t s_shot_left;  // of the last shot's effect; 0: none
 static uint8_t s_shot_team, s_shot_command;
 
@@ -28,12 +28,7 @@ static const uint8_t TEAM[8][3] = {
     {255, 0, 0}, {0, 255, 0}, {0, 60, 255}, {255, 200, 0}, {255, 0, 200}, {0, 200, 255}, {255, 255, 255}, {255, 90, 0},
 };
 
-static uint8_t random8(void) {
-    s_rand ^= s_rand << 13;
-    s_rand ^= s_rand >> 17;
-    s_rand ^= s_rand << 5;
-    return (uint8_t)(s_rand >> 24);
-}
+static uint8_t random8(void) { return (uint8_t)(AppUtil_Random() >> 24); }
 
 static void set_slot(uint16_t slot, uint8_t v) { LEDMatrix_SetSlot(slot, v); }
 static uint8_t get_slot(uint16_t slot) { return LEDMatrix_GetSlot(slot); }
@@ -43,12 +38,8 @@ static uint8_t triangle(uint8_t x) { return (uint8_t)(x < 128 ? 2 * x : 2 * (255
 
 // Hue h (0..255 is one turn), full value v, saturation 200 of 255
 static void hue(uint8_t h, uint8_t v, uint8_t rgb[3]) {
-    uint8_t region = h / 43, rem = (uint8_t)((h - region * 43) * 6);
-    uint8_t lo = (uint8_t)(v * 55 / 255);  // v * (255 - saturation)
-    uint8_t down = (uint8_t)(v - (v - lo) * rem / 255), up = (uint8_t)(lo + (v - lo) * rem / 255);
-    static const uint8_t order[6][3] = {{0, 1, 2}, {1, 0, 2}, {1, 2, 0}, {2, 1, 0}, {2, 0, 1}, {0, 2, 1}};
-    uint8_t parts[3] = {v, region & 1 ? down : up, lo};  // the strong, the moving and the weak channel
-    for (int c = 0; c < 3; c++) rgb[order[region][c]] = parts[c];
+    uint32_t c = AppUtil_Hsv(h, 200, v);  // the apps' HSV: no second copy in the firmware
+    rgb[0] = (uint8_t)(c >> 16), rgb[1] = (uint8_t)(c >> 8), rgb[2] = (uint8_t)c;
 }
 
 // The text: still and centred if it fits, else scrolling to the left, with

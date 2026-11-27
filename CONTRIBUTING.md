@@ -75,18 +75,27 @@ Python 3 and Node.js. For `tools/badge.py` you need pyusb
 
 The firmware has 30 KB of flash. The item store and the persistent record
 have the rest, so the firmware cannot grow past 30 KB: the link fails.
-In November 2026 the firmware is about 27.5 KB, so there is little room.
+In November 2026 the firmware is about 25.8 KB, so there is little room.
 
 Check the `FLASH` line that the build prints:
 
 ```
-           FLASH:       27560 B        30 KB     89.71%
+           FLASH:       26448 B        30 KB     86.09%
 ```
 
 Put the old and the new number in the pull request. If a feature does
 not have to be in the firmware, make it an app: an app takes space only
 on the badges that store it. Shared code that many apps need belongs in
 the firmware, once, through the app API.
+
+To save flash, the firmware does not print a crash report. On a crash
+(an illegal instruction, a bad address) it stops, and the debug output
+over SWIO (`minichlink -T`) stays silent. To find a crash, set
+`FUNCONF_DEBUG_HARDFAULT` to 1 in `funconfig.h` and build again. The
+fault handler then prints four hex numbers: MEPC, MSTATUS, MTVAL and
+MCAUSE. `riscv64-elf-addr2line -e ledmatrix.elf <MEPC>` gives the line
+that crashed. Set it back to 0 before you commit: the report costs about
+170 B.
 
 ## Tests
 

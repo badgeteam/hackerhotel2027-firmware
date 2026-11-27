@@ -16,6 +16,12 @@ FLASH_MEMORY_LINE:=FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 62K
 STORE_MEMORY_LINES:=FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 30K\n  STORE (r) : ORIGIN = 0x00007800, LENGTH = 32K
 RAM_MEMORY_LINE:=RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 20K
 FIRMWARE_RAM_LINE:=RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 8K
+# The global pointer 0x800 into .data, not 0x3fc: a gp-relative load or
+# store reaches 2K either side of it, so the linker can use one for the
+# first 4K of the firmware's .data and .bss, not only the first 3K (smaller
+# code). Higher than 0x800 and the start of .data drops out of reach.
+GP_LINE:=__global_pointer$$ = . + 0x3fc;
+FIRMWARE_GP_LINE:=__global_pointer$$ = . + 0x800;
 
 # The firmware's identity (FW_INFO, webusb_protocol.c): the git commit, and
 # -dirty if the firmware's own sources differ from it
@@ -24,6 +30,15 @@ EXTRA_CFLAGS+=-DFW_VERSION=\"$(FW_VERSION)\"
 # The factory test's KEY step (factory.h); FACTORY_KEYS=0: the test runs by itself
 FACTORY_KEYS?=1
 EXTRA_CFLAGS+=-DFACTORY_KEYS=$(FACTORY_KEYS)
+# Smaller code: switch as compare chains, not jump tables (with -Os they
+# are smaller here); align data only as its type needs, not to words (a
+# byte array read as words says aligned(4) itself); and leave loop
+# invariants in the loop (fewer registers to save). The two hot loops, the
+# row scan (ch643_ledpwm.c) and the animation decoder (la04.c), move them
+# out still: an attribute on each. -mstrict-align: the QingKe V4 core traps
+# on a misaligned load or store, and some options (-mtune=size) turn it off
+SIZE_CFLAGS:=-mstrict-align -fno-jump-tables -malign-data=natural -fno-move-loop-invariants
+EXTRA_CFLAGS+=$(SIZE_CFLAGS)
 
 include ch32fun/ch32fun/ch32fun.mk
 
@@ -31,7 +46,8 @@ $(LINKER_SCRIPT) : $(CH32FUN)/ch32fun.ld Makefile
 	$(PREFIX)-gcc -E -P -x c -DTARGET_MCU=$(TARGET_MCU) -DMCU_PACKAGE=$(MCU_PACKAGE) -DTARGET_MCU_LD=$(TARGET_MCU_LD) -DTARGET_MCU_MEMORY_SPLIT=$(TARGET_MCU_MEMORY_SPLIT) $< > $@.tmp
 	grep -qF '$(FLASH_MEMORY_LINE)' $@.tmp || { echo "$<: FLASH memory line changed, update the Makefile" >&2; rm -f $@.tmp; exit 1; }
 	grep -qF '$(RAM_MEMORY_LINE)' $@.tmp || { echo "$<: RAM memory line changed, update the Makefile" >&2; rm -f $@.tmp; exit 1; }
-	sed -e 's/$(FLASH_MEMORY_LINE)/$(STORE_MEMORY_LINES)/' -e 's/$(RAM_MEMORY_LINE)/$(FIRMWARE_RAM_LINE)/' $@.tmp > $@
+	grep -qF '$(GP_LINE)' $@.tmp || { echo "$<: global pointer line changed, update the Makefile" >&2; rm -f $@.tmp; exit 1; }
+	sed -e 's/$(FLASH_MEMORY_LINE)/$(STORE_MEMORY_LINES)/' -e 's/$(RAM_MEMORY_LINE)/$(FIRMWARE_RAM_LINE)/' -e 's/$(subst $$,\$$,$(GP_LINE))/$(subst $$,\$$,$(FIRMWARE_GP_LINE))/' $@.tmp > $@
 	rm -f $@.tmp
 
 # The web interface's firmware (webui/firmware/, not in git): what its

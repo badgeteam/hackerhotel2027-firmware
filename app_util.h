@@ -14,3 +14,8 @@ uint8_t AppUtil_Linear(const uint8_t gamma[256], uint8_t linear);
 // n in decimal, with a '-' if negative, into text (12 bytes: "-2147483648");
 // returns text
 char* AppUtil_Decimal(int32_t n, char text[12]);
+// The firmware's one random number generator (xorshift32): apps' random()
+// and the name tag's sparkles. g_random is its state, never 0; an app start
+// reseeds it (app_host.c).
+extern uint32_t g_random;
+uint32_t AppUtil_Random(void);

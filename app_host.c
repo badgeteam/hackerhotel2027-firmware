@@ -21,7 +21,6 @@
 static const hh_app_header_t* s_app;  // the running app's header, in app RAM
 static bool s_exit;
 static uint8_t s_pressed, s_held;
-static uint32_t s_random;
 static uint32_t s_millis;  // since the app started, counted in ticks
 // The app's name in the store (the persist.h key). A copy: Store_Delete()
 // can move the item while the app runs.
@@ -37,13 +36,6 @@ static uint8_t api_pressed(void) { return s_pressed; }
 static uint8_t api_held(void) { return s_held; }
 
 static uint32_t api_millis(void) { return s_millis; }
-
-static uint32_t api_random(void) {  // xorshift32
-    s_random ^= s_random << 13;
-    s_random ^= s_random >> 17;
-    s_random ^= s_random << 5;
-    return s_random;
-}
 
 static bool api_ir_receive(hh_ir_t* message) {
     infrared_nec_message_t m;
@@ -146,7 +138,7 @@ static const hh_api_t s_api = {
     .pressed = api_pressed,
     .held = api_held,
     .millis = api_millis,
-    .random = api_random,
+    .random = AppUtil_Random,
     .ir_send = infrared_send_nec,
     .ir_receive = api_ir_receive,
     .standby = api_standby,
@@ -206,8 +198,8 @@ bool AppHost_Start(const uint8_t* image, uint32_t length, const char* name) {
     s_pressed = s_held = 0;
     s_millis = 0;
     memcpy(s_name, name, STORE_NAME_LEN);
-    s_random = funSysTick32() ^ ESIG->UID0 ^ 0x9E3779B9u;
-    if (!s_random) s_random = 1;
+    g_random = funSysTick32() ^ ESIG->UID0 ^ 0x9E3779B9u;
+    if (!g_random) g_random = 1;
     ir_shot_t stale;  // shots from before the app (another app that ignored them) are not for it
     while (infrared_receive_shot(&stale)) {}
     LEDMatrix_Clear();

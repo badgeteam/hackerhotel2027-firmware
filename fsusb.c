@@ -30,28 +30,9 @@ struct _USBState FSUSBCTX;
 #define CUIS_TOKEN_IN    0x2
 #define CUIS_TOKEN_SETUP 0x3
 
-static inline void DMA7FastCopy( uint8_t * dest, const uint8_t * src, int len )
-{
-	while( DMA1_Channel7->CNTR );
-	DMA1_Channel7->CFGR = 0;
-	DMA1_Channel7->MADDR = (uintptr_t)src;
-	DMA1_Channel7->PADDR = (uintptr_t)dest;
-	DMA1_Channel7->CNTR  = (len+3)/4;
-	DMA1_Channel7->CFGR  =
-		DMA_M2M_Enable | 
-		DMA_DIR_PeripheralDST |
-		DMA_Priority_Low |
-		DMA_MemoryDataSize_Word |
-		DMA_PeripheralDataSize_Word |
-		DMA_MemoryInc_Enable |
-		DMA_PeripheralInc_Enable |
-		DMA_Mode_Normal | DMA_CFGR1_EN;
-#if !( FUSB_CURSED_TURBO_DMA == 1 )
-	// Somehow, it seems to work (unsafely) without this.
-	// Really, though, it's probably fine.
-	while( DMA1_Channel7->CNTR );
-#endif
-}
+// A plain copy: control packets are at most 64 bytes, and the DMA channel
+// setup was more code than the copy (and the copy waited for it anyway)
+static void DMA7FastCopy( uint8_t * dest, const uint8_t * src, int len ) { memcpy( dest, src, len ); }
 
 static inline void DMA7FastCopyComplete() { while( DMA1_Channel7->CNTR ); }
 
@@ -411,74 +392,19 @@ void USBFS_IRQHandler()
 						}
 						break;
 
-					/* set or enable one usb feature */
-					case USB_SET_FEATURE:
-						if( ( USBFS_SetupReqType & USB_REQ_RECIP_MASK ) == USB_REQ_RECIP_DEVICE )
-						{
-#if FUSB_SUPPORTS_SLEEP
-							/* Set Device Feature */
-							if( (uint8_t)( USBFS_IndexValue & 0xFF ) == USB_REQ_FEAT_REMOTE_WAKEUP )
-							{
-								/* Set Wake-up flag, device prepare to sleep */
-								USBFS_DevSleepStatus |= 0x01;
-							}
-							else
-#endif
-							{
-								goto sendstall;
-							}
-						}
-						else if( ( USBFS_SetupReqType & USB_REQ_RECIP_MASK ) == USB_REQ_RECIP_ENDP )
-						{
-							/* Set Endpoint Feature */
-							if( (uint8_t)( USBFS_IndexValue & 0xFF ) == USB_REQ_FEAT_ENDP_HALT )
-							{
-								ep = USBFS_SetupReqIndex & 0xf;
-								if( ( USBFS_SetupReqIndex & DEF_UEP_IN ) && ep < FUSB_CONFIG_EPS )
-									UEP_CTRL_H(ep) = ( UEP_CTRL_H(ep) & ~USBFS_UEP_T_RES_MASK ) | USBFS_UEP_T_RES_STALL;
-							}
-							else
-								goto sendstall;
-						}
-						else
-							goto sendstall;
-						break;
-
-					/* This request allows the host to select another setting for the specified interface  */
+					// GET_INTERFACE and GET_STATUS answer zeros: one alternate setting,
+					// no remote wakeup, no halted endpoint (they must answer: Linux asks
+					// for the status on resume, and a stall makes it reset the badge).
+					// SET_FEATURE stalls (default): there is no remote wakeup, and no
+					// host halts the badge's bulk endpoints.
 					case USB_GET_INTERFACE:
-						ctrl0buff[0] = 0x00;
-						if( USBFS_SetupReqLen > 1 ) USBFS_SetupReqLen = 1;
-						break;
-
-					case USB_SET_INTERFACE:
-						break;
-
-					/* host get status of specified device/interface/end-points */
 					case USB_GET_STATUS:
 						ctrl0buff[0] = 0x00;
 						ctrl0buff[1] = 0x00;
-						if( ( USBFS_SetupReqType & USB_REQ_RECIP_MASK ) == USB_REQ_RECIP_DEVICE )
-						{
-#if FUSB_SUPPORTS_SLEEP
-							ctrl0buff[0] = (ctx->USBFS_DevSleepStatus & 0x01)<<1;
-#else
-							ctrl0buff[0] = 0x00;
-#endif
-						}
-						else if( ( USBFS_SetupReqType & USB_REQ_RECIP_MASK ) == USB_REQ_RECIP_ENDP )
-						{
-							ep = USBFS_SetupReqIndex & 0xf;
-							if( ( USBFS_SetupReqIndex & DEF_UEP_IN ) && ep < FUSB_CONFIG_EPS )
-								ctrl0buff[0] = ( UEP_CTRL_H(ep) & USBFS_UEP_T_RES_MASK ) == USBFS_UEP_T_RES_STALL;
-							else
-								goto sendstall;
-						}
-						else
-							goto sendstall;
-						if( USBFS_SetupReqLen > 2 )
-							USBFS_SetupReqLen = 2;
+						if( USBFS_SetupReqLen > 2 ) USBFS_SetupReqLen = 2;
 						break;
-
+					case USB_SET_INTERFACE:
+						break;
 					default:
 						goto sendstall;
 						break;

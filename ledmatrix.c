@@ -35,11 +35,7 @@ int _write(int fd, const char* buf, int size) {
 #define IR_COMMAND_BOTTOM_ON 0x02  // first half of the rows 0, second half 255
 
 static void fill_halves(uint8_t top, uint8_t bottom) {
-    for (uint8_t row = 0; row < LED_MATRIX_ROWS; row++) {
-        for (uint8_t col = 0; col < LED_MATRIX_COLS; col++) {
-            LEDMatrix_SetPixel(row, col, row < LED_MATRIX_ROWS / 2 ? top : bottom);
-        }
-    }
+    for (unsigned slot = 0; slot < LED_MATRIX_SLOTS; slot++) LEDMatrix_SetSlot(slot, slot < LED_MATRIX_SLOTS / 2 ? top : bottom);
 }
 
 // Hold A this long for the menu; in an app longer, since the app has A too
@@ -61,11 +57,11 @@ static void fill_halves(uint8_t top, uint8_t bottom) {
 static uint8_t s_saved_leds[LED_MATRIX_ROWS * LED_MATRIX_COLS];
 
 static void save_leds(void) {
-    for (unsigned i = 0; i < sizeof s_saved_leds; i++) s_saved_leds[i] = LEDMatrix_GetPixel(i / LED_MATRIX_COLS, i % LED_MATRIX_COLS);
+    LEDMatrix_GetFrame(s_saved_leds);
 }
 
 static void restore_leds(void) {
-    for (unsigned i = 0; i < sizeof s_saved_leds; i++) LEDMatrix_SetPixel(i / LED_MATRIX_COLS, i % LED_MATRIX_COLS, s_saved_leds[i]);
+    LEDMatrix_SetFrame(s_saved_leds);
 }
 
 static bool item_runs(void) { return g_app_mode == APP_MODE_FLASH_PATTERN || g_app_mode == APP_MODE_APP; }
@@ -98,7 +94,7 @@ static void boot_rom_arrow(uint8_t brightness) {
             int half = y < 9 ? 1 : 12 - y;
             for (int x = HH_GRID_W / 2 - half; x <= HH_GRID_W / 2 + half; x++) {
                 uint16_t slot = layout_grid[y + shift][x];
-                if (slot < HH_SLOTS) LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, 255);
+                LEDMatrix_SetSlot(slot, 255);
             }
         }
         LEDMatrix_Show();

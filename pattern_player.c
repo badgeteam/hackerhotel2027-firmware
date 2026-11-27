@@ -53,6 +53,5 @@ void PatternPlayer_Tick( uint32_t elapsed_ms )
 		s_ms_accum -= frame_ms;
 		LA04_Next( s_frame );
 	}
-	for( unsigned i = 0; i < FRAME_PIXELS; i++ )
-		LEDMatrix_SetPixel( i / LED_MATRIX_COLS, i % LED_MATRIX_COLS, s_frame[i] );
+	LEDMatrix_SetFrame( s_frame );
 }

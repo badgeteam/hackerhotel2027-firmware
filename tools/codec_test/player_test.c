@@ -13,7 +13,7 @@
 #define PIXELS (LED_MATRIX_ROWS * LED_MATRIX_COLS)
 static uint8_t s_shown[PIXELS];
 
-void LEDMatrix_SetPixel(uint8_t row, uint8_t col, uint8_t brightness) { s_shown[row * LED_MATRIX_COLS + col] = brightness; }
+void LEDMatrix_SetFrame(const uint8_t* frame) { memcpy(s_shown, frame, PIXELS); }
 
 static uint8_t* load(const char* path, long* len) {
     FILE* f = fopen(path, "rb");

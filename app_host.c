@@ -27,10 +27,10 @@ static uint32_t s_millis;  // since the app started, counted in ticks
 static char s_name[STORE_NAME_LEN];
 
 static void api_set(uint16_t slot, uint8_t value) {
-    if (slot < HH_SLOTS) LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, value);
+    LEDMatrix_SetSlot(slot, value);
 }
 
-static uint8_t api_get(uint16_t slot) { return slot < HH_SLOTS ? LEDMatrix_GetPixel(slot / HH_COLS, slot % HH_COLS) : 0; }
+static uint8_t api_get(uint16_t slot) { return LEDMatrix_GetSlot(slot); }
 
 static uint8_t api_pressed(void) { return s_pressed; }
 static uint8_t api_held(void) { return s_held; }

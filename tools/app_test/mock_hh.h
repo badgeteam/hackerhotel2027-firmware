@@ -103,9 +103,8 @@ static bool m_save(const void* d, unsigned n) {
 }
 // The firmware's font.c draws the text, through this
 static void mock_text_pixel(uint16_t slot, uint8_t v);
-void LEDMatrix_SetPixel(uint8_t row, uint8_t col, uint8_t v) {
-    uint16_t slot = (uint16_t)(row * HH_COLS + col);
-    if (slot < HH_SLOTS) mock_leds[slot] = v, mock_text_pixel(slot, v);
+void LEDMatrix_SetSlot(unsigned slot, uint8_t v) {
+    if (slot < HH_SLOTS) mock_leds[slot] = v, mock_text_pixel((uint16_t)slot, v);
 }
 #include "font.c"
 

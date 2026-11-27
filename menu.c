@@ -116,7 +116,7 @@ int Menu_BrightnessLevel(void) {
 
 // HH_NONE (a grid cell without a LED) and anything past the LEDs: nothing
 static void set_slot(uint16_t slot, uint8_t v) {
-    if (slot < HH_SLOTS) LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, v);
+    LEDMatrix_SetSlot(slot, v);
 }
 
 void Menu_DrawBrightness(void) {

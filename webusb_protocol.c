@@ -134,9 +134,7 @@ static void handle_command(const uint8_t* data, int len) {
             break;
 
         case CMD_FRAME_COMMIT:
-            for (unsigned i = 0; i < FRAME_PIXELS; i++) {
-                LEDMatrix_SetPixel(i / LED_MATRIX_COLS, i % LED_MATRIX_COLS, s_stage_frame[i]);
-            }
+            LEDMatrix_SetFrame(s_stage_frame);
             g_app_mode = APP_MODE_CUSTOM;
             break;
 

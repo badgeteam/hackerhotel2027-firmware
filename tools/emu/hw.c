@@ -161,9 +161,12 @@ void LEDMatrix_Deinit(void) { s_leds_on = false; }
 void LEDMatrix_SetPixel(uint8_t row, uint8_t col, uint8_t v) {
     if (row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS) s_cells[row][col] = v;
 }
-uint8_t LEDMatrix_GetPixel(uint8_t row, uint8_t col) {
-    return row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS ? s_cells[row][col] : 0;
+void LEDMatrix_SetSlot(unsigned slot, uint8_t v) {
+    if (slot < LED_MATRIX_SLOTS) ((uint8_t*)s_cells)[slot] = v;
 }
+uint8_t LEDMatrix_GetSlot(unsigned slot) { return slot < LED_MATRIX_SLOTS ? ((uint8_t*)s_cells)[slot] : 0; }
+void LEDMatrix_SetFrame(const uint8_t* frame) { memcpy(s_cells, frame, LED_MATRIX_SLOTS); }
+void LEDMatrix_GetFrame(uint8_t* frame) { memcpy(frame, s_cells, LED_MATRIX_SLOTS); }
 void LEDMatrix_Clear(void) { memset(s_cells, 0, sizeof s_cells); }
 void LEDMatrix_Show(void) {}  // the emulator sends a frame from Delay_Ms(), after the drawing
 void LEDMatrix_SetBrightness(uint8_t b) { s_brightness = b; }

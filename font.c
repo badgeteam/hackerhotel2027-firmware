@@ -129,7 +129,7 @@ int Text_DrawN(int x, int y, const char* text, unsigned len, uint8_t value) {
                 int row = y + dy;
                 if (!(g[dx] >> dy & 1) || row < 0 || row >= HH_GRID_H) continue;
                 uint16_t slot = layout_grid[row][col];
-                if (slot != HH_NONE) LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, value);
+                LEDMatrix_SetSlot(slot, value);  // not HH_NONE
             }
         }
     }

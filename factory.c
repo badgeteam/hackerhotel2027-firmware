@@ -43,7 +43,7 @@ static uint16_t s_ir_sent, s_ir_heard;
 static uint32_t s_leave_ms;
 
 static void set(uint16_t slot, uint8_t v) {
-    if (slot < HH_SLOTS) LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, v);
+    LEDMatrix_SetSlot(slot, v);
 }
 
 static void arms(uint8_t r, uint8_t g, uint8_t b) {

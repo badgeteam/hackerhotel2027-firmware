@@ -35,8 +35,8 @@ static uint8_t random8(void) {
     return (uint8_t)(s_rand >> 24);
 }
 
-static void set_slot(uint16_t slot, uint8_t v) { LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, v); }
-static uint8_t get_slot(uint16_t slot) { return LEDMatrix_GetPixel(slot / HH_COLS, slot % HH_COLS); }
+static void set_slot(uint16_t slot, uint8_t v) { LEDMatrix_SetSlot(slot, v); }
+static uint8_t get_slot(uint16_t slot) { return LEDMatrix_GetSlot(slot); }
 
 // 0 .. 255 .. 0 over one turn of x
 static uint8_t triangle(uint8_t x) { return (uint8_t)(x < 128 ? 2 * x : 2 * (255 - x)); }

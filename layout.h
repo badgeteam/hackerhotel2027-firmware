@@ -10,5 +10,7 @@ extern const hh_rgb_t layout_rgb[HH_RGB_COUNT];
 // Each slot's place: distance from the grid's centre in 1/4 mm, and angle
 // in 1/256 turn, clockwise from the top
 extern const uint8_t layout_polar[HH_SLOTS][2];
-// Brightness (as a screen shows it) to PWM duty: gamma 2.2
-extern const uint8_t layout_gamma[256];
+// Brightness (as a screen shows it) to PWM duty: gamma 2.2. In RAM, from a
+// packed table in flash: call Layout_Init() before anything reads it.
+extern uint8_t layout_gamma[256];
+void Layout_Init(void);

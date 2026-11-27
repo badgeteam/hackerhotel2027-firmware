@@ -185,14 +185,22 @@ ir_rx_event_t IrRx_Silence(ir_rx_t* rx, uint32_t us) {
 
 // ---- Shots ----
 
+// CRC bit k is the parity of the data bits in TAPS[k], inverted for bits 1
+// and 2: c0 = d11 ^ d10 ^ d9 ^ d8 ^ d6 ^ d4 ^ d3 ^ d0, c1 = d8 ^ d7 ^ d6 ^
+// d5 ^ d3 ^ d1 ^ d0 ^ 1, c2 = d9 ^ d8 ^ d7 ^ d6 ^ d4 ^ d2 ^ d1 ^ 1, c3 = d10
+// ^ d9 ^ d8 ^ d7 ^ d5 ^ d3 ^ d2
 uint8_t IrShot_Crc(uint16_t bits) {
-    unsigned d[12];
-    for (int i = 0; i < 12; i++) d[i] = bits >> i & 1;
-    unsigned c0 = d[11] ^ d[10] ^ d[9] ^ d[8] ^ d[6] ^ d[4] ^ d[3] ^ d[0];
-    unsigned c1 = d[8] ^ d[7] ^ d[6] ^ d[5] ^ d[3] ^ d[1] ^ d[0] ^ 1;
-    unsigned c2 = d[9] ^ d[8] ^ d[7] ^ d[6] ^ d[4] ^ d[2] ^ d[1] ^ 1;
-    unsigned c3 = d[10] ^ d[9] ^ d[8] ^ d[7] ^ d[5] ^ d[3] ^ d[2];
-    return (uint8_t)(c0 | c1 << 1 | c2 << 2 | c3 << 3);
+    static const uint16_t TAPS[4] = {0xF59, 0x1EB, 0x3D6, 0x7AC};
+    unsigned crc = 1 << 1 | 1 << 2;
+    for (int k = 0; k < 4; k++) {
+        unsigned x = bits & TAPS[k];
+        x ^= x >> 8;
+        x ^= x >> 4;
+        x ^= x >> 2;
+        x ^= x >> 1;
+        crc ^= (x & 1) << k;
+    }
+    return (uint8_t)crc;
 }
 
 bool IrShot_Decode(uint16_t bits, ir_shot_t* shot) {

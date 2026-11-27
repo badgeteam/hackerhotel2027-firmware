@@ -1,4 +1,5 @@
 #include "ch643_ledpwm.h"
+#include <string.h>
 #include "ch32fun.h"
 #include "ch643_ledpwm_registers.h"
 #include "layout.h"
@@ -8,7 +9,7 @@ static const uint8_t s_com_sel_for_row[LED_MATRIX_ROWS] = {
 };
 
 static volatile uint8_t s_brightness[LED_MATRIX_ROWS][LED_MATRIX_COLS];  // shown: the row scan reads this
-static uint8_t s_draw[LED_MATRIX_ROWS][LED_MATRIX_COLS];                 // drawn: LEDMatrix_SetPixel writes this
+static uint8_t s_draw[LED_MATRIX_ROWS][LED_MATRIX_COLS];                 // drawn: LEDMatrix_Set* write this
 static uint32_t s_row_dma_buf[LED_MATRIX_COLS / 3];
 static volatile uint8_t s_next_row;
 static volatile uint8_t s_last_loaded_row;
@@ -114,26 +115,22 @@ void LEDMatrix_SetPixel(uint8_t row, uint8_t col, uint8_t brightness) {
     if (row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS) s_draw[row][col] = brightness;
 }
 
-uint8_t LEDMatrix_GetPixel(uint8_t row, uint8_t col) {
-    return row < LED_MATRIX_ROWS && col < LED_MATRIX_COLS ? s_draw[row][col] : 0;
+void LEDMatrix_SetSlot(unsigned slot, uint8_t brightness) {
+    if (slot < LED_MATRIX_SLOTS) ((uint8_t*)s_draw)[slot] = brightness;
 }
 
-void LEDMatrix_Clear(void) {
-    for (uint8_t row = 0; row < LED_MATRIX_ROWS; row++) {
-        for (uint8_t col = 0; col < LED_MATRIX_COLS; col++) {
-            s_draw[row][col] = 0;
-        }
-    }
-}
+uint8_t LEDMatrix_GetSlot(unsigned slot) { return slot < LED_MATRIX_SLOTS ? ((uint8_t*)s_draw)[slot] : 0; }
+
+void LEDMatrix_SetFrame(const uint8_t* frame) { memcpy(s_draw, frame, LED_MATRIX_SLOTS); }
+
+void LEDMatrix_GetFrame(uint8_t* frame) { memcpy(frame, s_draw, LED_MATRIX_SLOTS); }
+
+void LEDMatrix_Clear(void) { memset(s_draw, 0, sizeof s_draw); }
 
 // Each LED goes from its old value straight to its new one; a row the scan
 // loads during the copy mixes the two frames, but is never dark
 void LEDMatrix_Show(void) {
-    for (uint8_t row = 0; row < LED_MATRIX_ROWS; row++) {
-        for (uint8_t col = 0; col < LED_MATRIX_COLS; col++) {
-            s_brightness[row][col] = s_draw[row][col];
-        }
-    }
+    for (unsigned i = 0; i < LED_MATRIX_SLOTS; i++) ((volatile uint8_t*)s_brightness)[i] = ((const uint8_t*)s_draw)[i];
 }
 
 // The luminance PWM has 6 bits here (LEDPWM_INTEN_CYC(2)): 64 steps, and

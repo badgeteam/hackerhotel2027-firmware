@@ -45,7 +45,7 @@ jobs:
       - name: Layout tables match the board data
         run: |
           python3 tools/gen_layout.py
-          git diff --exit-code -- layout.c la04_tables.h webui/layout_data.js
+          git diff --exit-code -- layout.c webui/layout_data.js
 
       - name: Firmware
         run: |

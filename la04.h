@@ -3,7 +3,7 @@
 // webui/compression.js). It plays a .ledanim file that sits in flash one
 // frame at a time.
 //
-// Its tables and frame buffers (about 3.5 KB) live in the app RAM block
+// Its tables and frame buffers (about 4 KB) live in the app RAM block
 // (HH_APP_RAM_BASE): no app runs while an animation plays. Starting an app
 // overwrites them, so call LA04_Open() again before the next LA04_Next().
 #include <stdbool.h>

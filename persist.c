@@ -85,36 +85,26 @@ static void changed(void) {
     s_quiet_ms = 0;
 }
 
-void Persist_SetBootItem(uint8_t index) {
-    if (s_rec.boot_item == index) return;
-    s_rec.boot_item = index;
+// A setting changes: written out once it settles (Persist_Flush)
+static void set_byte(uint8_t* field, uint8_t v) {
+    if (*field == v) return;
+    *field = v;
     changed();
 }
+
+void Persist_SetBootItem(uint8_t index) { set_byte(&s_rec.boot_item, index); }
 
 uint8_t Persist_Brightness(void) { return s_rec.brightness; }
 
-void Persist_SetBrightness(uint8_t brightness) {
-    if (s_rec.brightness == brightness) return;
-    s_rec.brightness = brightness;
-    changed();
-}
+void Persist_SetBrightness(uint8_t brightness) { set_byte(&s_rec.brightness, brightness); }
 
 uint8_t Persist_Keys(void) { return s_rec.keys; }
 
-void Persist_SetKeys(uint8_t keys) {
-    if (s_rec.keys == keys) return;
-    s_rec.keys = keys;
-    changed();
-}
+void Persist_SetKeys(uint8_t keys) { set_byte(&s_rec.keys, keys); }
 
 bool Persist_FactoryPassed(void) { return s_rec.factory == FACTORY_PASSED; }
 
-void Persist_SetFactoryPassed(bool passed) {
-    uint8_t v = passed ? FACTORY_PASSED : 0;
-    if (s_rec.factory == v) return;
-    s_rec.factory = v;
-    changed();
-}
+void Persist_SetFactoryPassed(bool passed) { set_byte(&s_rec.factory, passed ? FACTORY_PASSED : 0); }
 
 const char* Persist_Name(void) { return s_name; }
 

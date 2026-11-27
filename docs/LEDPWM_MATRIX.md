@@ -54,9 +54,10 @@ the committed file matches the board. "Layout tables" in
 - the centre grid (17 × 16, 2 mm pitch),
 - the outline in clockwise order,
 - the RGB LEDs by arm and rank,
-- LA04's spatial pixel order, and the LA04 decoder's neighbour tables
-  (`la04_tables.h`),
-- the gamma table.
+- LA04's spatial pixel order (the LA04 decoder works out its neighbours
+  from the grid when an animation starts),
+- the gamma table (packed 2 bits per step in flash; `Layout_Init()` unpacks
+  it into RAM at start).
 
 The script writes `layout.c` for the firmware and `webui/layout_data.js`
 for the web interface.

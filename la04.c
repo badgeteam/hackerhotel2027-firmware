@@ -6,7 +6,6 @@
 #include <stddef.h>
 #include <string.h>
 #include "apps/hhapp.h"
-#include "la04_tables.h"
 #include "layout.h"
 
 #define N 384   // positions: the grid, the outline, then RGB (the order of LA04_Next's output loop)
@@ -49,6 +48,11 @@ typedef struct {
     uint8_t map[3 * NFAM * NCTX];  // context -> token table
     uint8_t ord[NG];               // the scan order of the last grid shift mode
     int8_t tt[256];                // the transition table: key -> delta to prev
+    // Per position p: bits 0..5 the distance to the position above (0:
+    // none); bit 6 the spatial neighbour is p - 1 (else the one above); bit 7
+    // a grid position with a right neighbour p + 1 (neighbours())
+    uint8_t nb[N];
+    uint8_t dn[NG];  // grid positions: the distance to the position below (0: none)
 } la04_ram_t;
 _Static_assert(sizeof(la04_ram_t) <= HH_APP_RAM_SIZE, "LA04 state must fit the app RAM");
 
@@ -201,7 +205,7 @@ static int clampq(int v, int m) { return v < 0 ? 0 : v > m ? m : v; }
 // The spatial modes S, G, A, B: they read this frame's decoded neighbour
 static inline unsigned spred(unsigned mode, int p, int m) {
     const uint8_t *cur = s_cur, *prev = s_prev;
-    unsigned g = la04_nb[p];
+    unsigned g = R->nb[p];
     int n = g & 64 ? 1 : (int)(g & 63);
     if (mode >= M_A && p >= NG + NE + 21) n = 21;  // the same LED on the previous arm
     if (mode == M_S || mode == M_A) return n ? cur[p - n] : 0;
@@ -216,8 +220,8 @@ static const uint8_t* shift_order(unsigned mode) {
         unsigned k = 0;
         for (unsigned pass = 0; pass < 2; pass++)
             for (unsigned p = 0; p < NG; p++) {
-                unsigned g = la04_nb[p];
-                unsigned has = mode == M_L ? g & 128 : mode == M_R ? g & 64 : mode == M_U ? la04_dn[p] : g & 63;
+                unsigned g = R->nb[p];
+                unsigned has = mode == M_L ? g & 128 : mode == M_R ? g & 64 : mode == M_U ? R->dn[p] : g & 63;
                 if (!has == !pass) R->ord[k++] = (uint8_t)p;
             }
         s_ordm = (uint8_t)mode;
@@ -263,20 +267,20 @@ static void segment(unsigned si, unsigned md, int rot, int start, int end) {
             for (p = start; p < end; p++) cur[p] = (uint8_t)clampq(2 * prev[p] - prev2[p], m);
             break;
         case M_L:
-            for (p = start; p < end; p++) cur[p] = la04_nb[p] & 128 ? prev[p + 1] : 0;
+            for (p = start; p < end; p++) cur[p] = R->nb[p] & 128 ? prev[p + 1] : 0;
             break;
         case M_R:
-            for (p = start; p < end; p++) cur[p] = la04_nb[p] & 64 ? prev[p - 1] : 0;
+            for (p = start; p < end; p++) cur[p] = R->nb[p] & 64 ? prev[p - 1] : 0;
             break;
         case M_U:
             for (p = start; p < end; p++) {
-                n = la04_dn[p];
+                n = R->dn[p];
                 cur[p] = n ? prev[p + n] : 0;
             }
             break;
         case M_D:
             for (p = start; p < end; p++) {
-                n = la04_nb[p] & 63;
+                n = R->nb[p] & 63;
                 cur[p] = n ? prev[p - n] : 0;
             }
             break;
@@ -300,7 +304,7 @@ static void segment(unsigned si, unsigned md, int rot, int start, int end) {
     unsigned ctx = 3;
     while (i < len) {
         p = ord ? ord[i] : start + i;
-        unsigned c = ctx, u = la04_nb[p] & 63, sym;
+        unsigned c = ctx, u = R->nb[p] & 63, sym;
         if (act) {
             int d = prev[p] - prev2[p], e = u ? cur[p - u] - prev[p - u] : 0;
             unsigned a = (unsigned)((d < 0 ? -d : d) + (e < 0 ? -e : e));
@@ -352,6 +356,31 @@ static void segment(unsigned si, unsigned md, int rot, int start, int end) {
     s_p = bp;
     s_bb = bb;
     s_bn = bn;
+}
+
+// The neighbours (R->nb, R->dn) from the layout: the grid row by row (left
+// and right are p - 1 and p + 1), the outline (the previous LED on the
+// ring), RGB (the previous LED's same colour, or the previous colour)
+static void neighbours(void) {
+    uint8_t *nb = R->nb, *dn = R->dn;
+    int above[HH_GRID_W];  // per column: the position in the row above, or -1
+    int p = 0;
+    memset(dn, 0, NG);
+    for (int x = 0; x < HH_GRID_W; x++) above[x] = -1;
+    for (int y = 0; y < HH_GRID_H; y++)
+        for (int x = 0; x < HH_GRID_W; x++) {
+            const uint16_t* row = layout_grid[y];
+            if (row[x] == HH_NONE) {
+                above[x] = -1;
+                continue;
+            }
+            int up = above[x];
+            nb[p] = (uint8_t)((up >= 0 ? p - up : 0) | (x > 0 && row[x - 1] != HH_NONE ? 64 : 0) |
+                              (x + 1 < HH_GRID_W && row[x + 1] != HH_NONE ? 128 : 0));
+            if (up >= 0) dn[up] = (uint8_t)(p - up);
+            above[x] = p++;
+        }
+    for (; p < N; p++) nb[p] = p == NG || p == NG + NE ? 0 : p < NG + NE + 3 ? 64 : 3;
 }
 
 bool LA04_Open(const uint8_t* data, uint32_t length) {
@@ -446,6 +475,7 @@ bool LA04_Open(const uint8_t* data, uint32_t length) {
             }
         }
     s_start = tell();
+    neighbours();
     s_ordm = 0;
     s_fi = 0;
     s_cur = R->buf[0];

@@ -6,6 +6,7 @@
 #include "font.h"
 #include "infrared.h"
 #include "layout.h"
+#include "menu.h"
 #include "power.h"
 
 enum { LED, ROW, KEY, USB, IR, STEPS };
@@ -43,12 +44,10 @@ static uint16_t s_ir_sent, s_ir_heard;
 static uint32_t s_leave_ms;
 
 static void set(uint16_t slot, uint8_t v) {
-    if (slot < HH_SLOTS) LEDMatrix_SetPixel(slot / HH_COLS, slot % HH_COLS, v);
+    LEDMatrix_SetSlot(slot, v);
 }
 
-static void arms(uint8_t r, uint8_t g, uint8_t b) {
-    for (int i = 0; i < HH_RGB_COUNT; i++) set(layout_rgb[i].r, r), set(layout_rgb[i].g, g), set(layout_rgb[i].b, b);
-}
+static void arms(uint8_t r, uint8_t g, uint8_t b) { Menu_Arms(r, g, b, 0); }
 
 static void center(const char* s, int row, uint8_t v) { Text_Draw((HH_GRID_W - Text_Width(s)) / 2, row, s, v); }
 

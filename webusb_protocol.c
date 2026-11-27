@@ -109,7 +109,9 @@ static void delete_item(uint8_t index) {
         g_running_item = running - 1;
 }
 
-static void handle_command(const uint8_t* data, int len) {
+// The command codes are spread over 0x01 .. 0x52: a jump table for them
+// would be mostly empty, and is larger than the compares
+__attribute__((optimize("no-jump-tables"))) static void handle_command(const uint8_t* data, int len) {
     s_result = STORE_OK;
     s_info_item = STORE_NONE;
     s_name_reply = false;
@@ -134,9 +136,7 @@ static void handle_command(const uint8_t* data, int len) {
             break;
 
         case CMD_FRAME_COMMIT:
-            for (unsigned i = 0; i < FRAME_PIXELS; i++) {
-                LEDMatrix_SetPixel(i / LED_MATRIX_COLS, i % LED_MATRIX_COLS, s_stage_frame[i]);
-            }
+            LEDMatrix_SetFrame(s_stage_frame);
             g_app_mode = APP_MODE_CUSTOM;
             break;
 

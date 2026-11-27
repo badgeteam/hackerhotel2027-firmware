@@ -27,11 +27,11 @@ earn its place. This is how the space is split, and what uses it now:
 
 | Memory | Size | Use | In use now |
 |---|---|---|---|
-| Flash | 30 KB | firmware | 28.6 KB |
+| Flash | 30 KB | firmware | 27.5 KB |
 | Flash | 31 KB | item store: animations, texts and apps | what you store |
 | Flash | 1 KB | persistent record: name, brightness, boot item, app data | 2 × 512 B |
-| RAM | 8 KB | firmware data and stack | 4.9 KB data, the rest is stack |
-| RAM | 12 KB | the app that runs (its code and data); while an animation plays, the animation decoder | snake: 1.4 KB code + 0.6 KB data; the decoder 3.5 KB |
+| RAM | 8 KB | firmware data and stack | 5.0 KB data, the rest is stack |
+| RAM | 12 KB | the app that runs (its code and data); while an animation plays, the animation decoder | snake: 1.4 KB code + 0.6 KB data; the decoder 4 KB |
 
 How we juggle space and usability:
 
@@ -417,7 +417,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/badge.py` | the item store, the name, run and stop, from the command line (needs pyusb); `--serial` picks one of several badges; `bringup` lights the LEDs one at a time and prints their designators |
 | `tools/deploy_webui.sh` | publishes `webui/` of the current commit to a web server |
 | `tools/extract_board_data.py` | makes `webui/board_data.js` from the KiCad board in the hardware repository |
-| `tools/gen_layout.py` | makes `layout.c`, `la04_tables.h` and `webui/layout_data.js` from `webui/board_data.js` |
+| `tools/gen_layout.py` | makes `layout.c` and `webui/layout_data.js` from `webui/board_data.js` |
 | `tools/codec_test/run.sh` | checks that the web interface and the firmware decode animations the same way |
 | `tools/app_test/run.sh` | checks the apps: game rules on the PC (`mock_hh.h` stands in for the firmware), that no app draws over its own text in the same tick (`overdraw_run.c`, `MOCK_OVERDRAW=all` lists the octagon's clipped pixels too; a text read back with `get()` and then cleared is a mask, as in the name tag, and not checked, nor is what the app draws over that pixel later in the tick), then every app in the emulator with random buttons |
 | `tools/text_test/run.sh` | checks text items: the web interface's payloads, played on the emulator |

@@ -431,9 +431,11 @@ static bool m_ir_send_shot(const hh_ir_shot_t* s) {
 }
 
 // Raw IR frames the app sent: the last one (its first 512 marks and
-// spaces) and how many. Fails while mock_tx_busy, and as the firmware does
-// for count 0 or a carrier out of range.
+// spaces, and where the app keeps it) and how many. Fails while
+// mock_tx_busy, and as the firmware does for count 0 or a carrier out of
+// range.
 static uint16_t mock_raw[512];
+static const uint16_t* mock_raw_us;
 static uint16_t mock_raw_count;
 static uint32_t mock_raw_carrier;
 static unsigned mock_raws_sent;
@@ -441,6 +443,7 @@ static bool m_ir_send_raw(const uint16_t* us, uint16_t count, uint32_t carrier_h
     if (mock_tx_busy || !count || carrier_hz < 20000 || carrier_hz > 60000) return false;
     mock_raw_count = count;
     mock_raw_carrier = carrier_hz;
+    mock_raw_us = us;
     memcpy(mock_raw, us, sizeof(uint16_t) * (count < 512 ? count : 512));
     mock_raws_sent++;
     return true;

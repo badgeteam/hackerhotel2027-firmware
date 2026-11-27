@@ -251,8 +251,10 @@ leave a battery on J2 when you do not use it: see "What you need".
 - CHRG at about 0 V while the battery charges.
 - VBAT goes up and stops at 4.2 V. Then CHRG goes up to VCC.
 - After step 8, the firmware shows the same: the factory test's USB
-  step shows `CHG` while the battery charges. The NAMETAG app shows a
-  charging screen when charging starts.
+  step shows `CHG` while the battery charges. The NAMETAG app (from the
+  recommended set, not on a fresh board) shows a battery that fills up
+  only when charging starts while it runs: unplug USB and plug it in
+  again to see it.
 
 **If not:**
 

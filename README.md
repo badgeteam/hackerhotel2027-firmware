@@ -154,13 +154,16 @@ Further:
   then does not start the boot item, so an app that hangs cannot lock up
   the badge.
 - **Brightness.** The badge keeps the brightness when it is powered off.
-- **Charging.** The NAMETAG app (the boot item of the recommended set)
-  shows when the battery starts to charge (plug in USB, also with the
-  badge already on): a battery on the grid fills up row by row, over and
-  over. The badge cannot tell how full the battery is. Tap any button to
-  hide it: that tap does nothing else, so B and D do not change the
-  style. It goes by itself when charging stops, and comes back only when
-  charging starts again. The firmware itself shows no charging screen
+- **Charging.** When the battery starts to charge (plug in USB, also
+  with the badge already on), the NAMETAG app (the boot item of the
+  recommended set) shows a battery on the grid that fills up row by row,
+  over and over. The badge cannot tell how full the battery is. Tap any
+  button to hide it: that tap does nothing else, so B and D do not
+  change the style. It goes by itself when charging stops, and comes
+  back only when charging starts again. If the app starts while the
+  battery already charges (from the menu, after a web upload, after the
+  factory test), it shows no battery until charging starts again. The
+  firmware itself shows no charging screen
   (not on its own name tag, not over other apps); apps can ask with
   `charging()` (`docs/APP_API.md`).
 

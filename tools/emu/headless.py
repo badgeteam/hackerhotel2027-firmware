@@ -6,7 +6,8 @@ hh27-emu talks on stdin/stdout as tools/emu/emu.py does (hw.c lists the
 lines): "u <hex>" a USB packet and "U <hex>" its reply, "b <hex>" the
 buttons held, "F <hex>" a frame, "P <hex>" / "p <hex>" an IR packet sent /
 received, "s <team> <trigger> <command> <parameter>" a banana shot received,
-"R <carrier> <us>..." a raw IR frame sent.
+"R <carrier> <us>..." a raw IR frame sent, "B" the badge goes into the boot
+ROM (and the emulator exits).
 """
 import os
 import queue
@@ -68,6 +69,7 @@ class Emu:
         self.ir_raw = []   # the raw IR frames it sent: (carrier Hz, [us, ...])
         self.log = []      # the firmware's log lines ("L"), apps' print() too
         self.peers = []    # emulators that receive its IR packets (link())
+        self.boot_rom = None  # when it went into the boot ROM (time.time())
         self.lock = threading.Lock()
         threading.Thread(target=self._read, daemon=True).start()
 
@@ -81,6 +83,8 @@ class Emu:
                 self.frames += 1
             elif kind == "L":
                 self.log.append(rest)
+            elif kind == "B":
+                self.boot_rom = time.time()
             elif kind == "P":
                 self.ir_sent.append(bytes.fromhex(rest))
                 for peer in self.peers:

@@ -151,7 +151,9 @@ hh->draw_number(HH_CENTER, 4, score, 255);
 The bits are `HH_BTN_A` .. `HH_BTN_D`, by the silkscreen letters,
 debounced. Holding A for a second opens the badge's menu: the app gets no
 ticks while it is open. The app sees that press of A too, so do not give
-a long press of A a meaning of its own; taps of A are fine.
+a long press of A a meaning of its own; taps of A are fine. Holding C and
+D together for 3 s reboots the badge into its USB boot ROM, so do not make
+people hold both for that long.
 
 ## Time and chance
 

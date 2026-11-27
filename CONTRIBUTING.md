@@ -75,7 +75,7 @@ Python 3 and Node.js. For `tools/badge.py` you need pyusb
 
 The firmware has 30 KB of flash. The item store and the persistent record
 have the rest, so the firmware cannot grow past 30 KB: the link fails.
-In November 2026 the firmware is about 27.6 KB, so there is little room.
+In November 2026 the firmware is about 28.6 KB, so there is little room.
 
 Check the `FLASH` line that the build prints:
 
@@ -109,6 +109,8 @@ node tools/isp_test/isp_test.js
 | `tools/ir_test/run.sh` | the infrared codec, and the name swap on two emulators |
 | `tools/four_test/run.sh` | 4 in a row: rules on the PC, and whole games on two emulators |
 | `tools/factory_test/run.sh` | the factory test on the emulator |
+| `tools/bringup_test/run.sh` | `tools/badge.py bringup` lights the LED of each designator it prints, on the emulator |
+| `tools/usb_test/run.sh` | the USB descriptors (every length, for Windows), and the C + D boot ROM chord on the emulator |
 | `tools/board_test/run.sh` | `tools/extract_board_data.py` makes the same `webui/board_data.js` from the KiCad board (SKIP without the board) |
 | `tools/emu/rv32_test/run.sh` | the emulator's RISC-V interpreter |
 | `tools/isp_test/isp_test.js` | the web interface's firmware update, offline |
@@ -137,6 +139,9 @@ hardware (the LEDs, USB, infrared, the buttons, standby, power, the
 flash, timing), try it on a badge, and say in the pull request that you
 did and what you saw. If you have no badge, say so, and ask someone with
 a badge to test it.
+
+For a newly assembled board, follow the checklist in `docs/BRINGUP.md`
+first.
 
 ## The app API
 
@@ -202,7 +207,8 @@ Over USB, through the CH643's boot ROM. Do the steps in this order:
    ch32fun/minichlink/minichlink -w ledmatrix.bin flash -b
    ```
 
-2. On the badge, open the menu (hold **A**) and choose **UPDATE**.
+2. On the badge, open the menu (hold **A**) and choose **UPDATE**, or
+   hold **C** + **D** for 3 s.
 
 The boot ROM waits about 5 s for a host. The web interface's
 **Firmware** panel can also flash the badge (`docs/FIRMWARE_UPDATE.md`).

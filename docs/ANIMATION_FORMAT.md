@@ -43,7 +43,7 @@ So the store holds about two to four times as much, except for video.
 The price:
 
 - The decoder is about 6 KB of code (LA03: 3 KB).
-- The decoder needs about 3.5 KB of tables and frame buffers. It borrows
+- The decoder needs about 4 KB of tables and frame buffers. It borrows
   the app RAM block (`HH_APP_RAM_BASE`, `apps/hhapp.h`) for them: no app
   runs while an animation plays. The firmware's own RAM does not change.
 - The worst frame of the test animations takes about 67,000 instructions,

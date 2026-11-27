@@ -166,8 +166,8 @@ to an app.
 
 ## Layout tables
 
-`layout.c`, `la04_tables.h` and `webui/layout_data.js` are generated
-from `webui/board_data.js`. Do not edit them by hand. After a change to
+`layout.c` and `webui/layout_data.js` are generated from
+`webui/board_data.js`. Do not edit them by hand. After a change to
 the board data or to the generator, run:
 
 ```sh

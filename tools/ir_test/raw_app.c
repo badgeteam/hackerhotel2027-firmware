@@ -4,7 +4,9 @@
 //
 //   at init        first: a short Sony-like frame at 40 kHz (1)
 //                  busy: the same again at once, while it goes out (0)
-//   after 200 ms   carrier: 10 kHz, out of range (0)
+//   after 200 ms   stack: an array on the stack, which the badge reuses
+//                  when tick() returns (0)
+//                  carrier: 10 kHz, out of range (0)
 //                  count: no marks (0)
 //                  long: 2 s of marks and spaces (1), still going out
 //                  when the test stops the app and starts it again
@@ -42,6 +44,8 @@ static void tick(uint32_t elapsed_ms) {
     s_ms += elapsed_ms;
     if (s_done || s_ms < 200) return;
     s_done = true;
+    uint16_t local[2] = {600, 600};
+    report("stack", hh->ir_send_raw(local, 2, 40000));
     report("carrier", hh->ir_send_raw(s_sony, 2, 10000));
     report("count", hh->ir_send_raw(s_sony, 0, 40000));
     report("long", hh->ir_send_raw(s_long, sizeof s_long / sizeof *s_long, 38000));

@@ -126,7 +126,8 @@ static void trap(rv_cpu* cpu, unsigned m) {
             r = in_ram(a0, sizeof(hh_ir_shot_t)) && s_api->ir_send_shot((const hh_ir_shot_t*)(uintptr_t)a0);
             break;
         case M_IR_SEND_RAW:
-            r = !(a0 & 1) && in_ram(a0, 2 * (uint16_t)a1) &&
+            // as on the badge (app_host.c): the app's own data, not its stack
+            r = !(a0 & 1) && a0 >= HH_APP_RAM_BASE && in_ram(a0, 2 * (uint16_t)a1) &&
                 s_api->ir_send_raw((const uint16_t*)(uintptr_t)a0, (uint16_t)a1, x[12]);
             break;
         default: emu_log("the app called hh_api_t member %u, which is not a function", m); break;

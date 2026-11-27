@@ -211,9 +211,11 @@ typedef struct {
     // each, on a carrier of carrier_hz (20000 .. 60000; most remotes use
     // 36000 to 40000). End with a space to keep quiet that long before the
     // next frame. The firmware reads us[] while it sends, so leave it as
-    // it is until then (a const table is simplest). False while something
-    // still goes out, or for count 0 or a carrier out of range. When the
-    // app stops, a frame still going out stops too.
+    // it is until then, and keep it in the app's own data (a const table
+    // or a global), not on the stack: an array in a function is refused.
+    // False while something still goes out (this or another ir_send*), or
+    // for count 0 or a carrier out of range. When the app stops, a frame
+    // still going out stops too.
     bool (*ir_send_raw)(const uint16_t *us, uint16_t count, uint32_t carrier_hz);
 } hh_api_t;
 

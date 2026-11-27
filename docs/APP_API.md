@@ -255,7 +255,7 @@ remote or blaster sends.
 
 | Member | |
 |---|---|
-| `bool ir_send_raw(const uint16_t *us, uint16_t count, uint32_t carrier_hz)` | Sends `count` marks and spaces, alternating and starting with a mark, `us[i]` microseconds each, on a carrier of `carrier_hz`. False while something still goes out, for `count` 0, or for a carrier outside 20000 .. 60000. |
+| `bool ir_send_raw(const uint16_t *us, uint16_t count, uint32_t carrier_hz)` | Sends `count` marks and spaces, alternating and starting with a mark, `us[i]` microseconds each, on a carrier of `carrier_hz`. The firmware reads `us` while the frame goes out, so it must be the app's own data (a `const` table or a global), not an array on the stack, which is refused. False while something still goes out (this or another `ir_send*`: they share the transmitter), for `count` 0, or for a carrier outside 20000 .. 60000. |
 
 For remote controls that `ir_send()` does not speak: Sony (40 kHz), RC5
 and RC6 (36 kHz), Panasonic, and so on. A mark is the carrier on, a space

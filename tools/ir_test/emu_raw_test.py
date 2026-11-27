@@ -62,8 +62,8 @@ def main():
 
 def run(emu, app):
     check(emu.store(TYPE_APP, "rawtest", app)[2] == 0, "the test app is stored and runs")
-    check(wait_for(lambda: len(reports(emu)) >= 5, 5), "it reports all five calls")
-    want = [("first", True), ("busy", False), ("carrier", False), ("count", False), ("long", True)]
+    check(wait_for(lambda: len(reports(emu)) >= 6, 5), "it reports all six calls")
+    want = [("first", True), ("busy", False), ("stack", False), ("carrier", False), ("count", False), ("long", True)]
     for (what, ok), got in zip(want, reports(emu)):
         check(got == (what, ok), "%s: %s (got %s)" % (what, "sent" if ok else "refused", got))
     check(emu.ir_raw[:2] == [(40000, SONY), (38000, LONG)],
@@ -74,8 +74,8 @@ def run(emu, app):
     time.sleep(0.3)
     emu.usb(STOP)
     emu.usb(ITEM_RUN, 0, 0)
-    check(wait_for(lambda: len(reports(emu)) >= 6, 5), "the app starts again")
-    check(reports(emu)[5:6] == [("first", True)], "its first frame goes out at once: the old one stopped with the app")
+    check(wait_for(lambda: len(reports(emu)) >= 7, 5), "the app starts again")
+    check(reports(emu)[6:7] == [("first", True)], "its first frame goes out at once: the old one stopped with the app")
     check(len(emu.ir_raw) == 3 and emu.ir_raw[2] == (40000, SONY), "on air: the Sony frame again")
 
 

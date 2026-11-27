@@ -43,7 +43,9 @@ make -s -C "$root/tools/emu"
 # apps/build can still hold apps of another branch
 hhapps=""
 for d in "$root"/apps/*/; do
-    ls "$d"*.c >/dev/null 2>&1 && hhapps="$hhapps $root/apps/build/$(basename "$d").hhapp"
+    if ls "$d"*.c >/dev/null 2>&1; then
+        hhapps="$hhapps $root/apps/build/$(basename "$d").hhapp"
+    fi
 done
 python3 "$here/emu_smoke.py" "$root/tools/emu/build/hh27-emu" $hhapps
 python3 "$here/recommended_test.py"

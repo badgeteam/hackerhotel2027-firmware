@@ -71,10 +71,22 @@ def smoke(emu, path):
                                                   "; " + "; ".join(faults[:3]) if faults else "")
 
 
+def smoke_or_fail(emu, path):
+    """smoke(), with an exception (no reply from the emulator, for one) as
+    a failure of this app only, so that the other apps still report"""
+    try:
+        return smoke(emu, path)
+    except queue.Empty:
+        why = "no reply from the emulator in 10 s"
+    except Exception as e:
+        why = repr(e)
+    return False, "FAIL  %s: %s" % (os.path.splitext(os.path.basename(path))[0], why)
+
+
 if __name__ == "__main__":
     emu, apps = sys.argv[1], sys.argv[2:]
     with ThreadPoolExecutor(8) as pool:
-        results = list(pool.map(lambda a: smoke(emu, a), apps))
+        results = list(pool.map(lambda a: smoke_or_fail(emu, a), apps))
     for good, line in results:
         print(line)
     sys.exit(0 if all(good for good, _ in results) else 1)

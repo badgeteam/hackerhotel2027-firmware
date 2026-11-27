@@ -148,6 +148,7 @@ static void browse_next(void) {
 int main(void) {
     SystemInit();
     funGpioInitAll();
+    Layout_Init();  // the LEDs' gamma, before the row scan starts
 
     LEDMatrix_Init();
     buttons_init();

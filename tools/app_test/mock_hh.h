@@ -29,6 +29,9 @@
 #include "apps/hhapp.h"
 #include "layout.h"
 #include "app_util.c"  // the firmware's own helpers (sin8, hsv, ...)
+// layout_gamma is in RAM: fill it before the test starts, as the
+// firmware's main() does
+__attribute__((constructor)) static void mock_layout_init(void) { Layout_Init(); }
 
 char __hh_load_end[1], __hh_bss_end[1];  // the app's linker symbols (HH_APP)
 

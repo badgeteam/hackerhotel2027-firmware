@@ -141,10 +141,18 @@ def main():
     out.write("};\n\nconst uint8_t layout_polar[HH_SLOTS][2] = {\n")
     for i in range(0, len(polar), 8):
         out.write("    " + ", ".join("{%3d, %3d}" % pa for pa in polar[i:i + 8]) + ",\n")
-    out.write("};\n\nconst uint8_t layout_gamma[256] = {\n")
-    for i in range(0, 256, 16):
-        out.write("    " + ", ".join("%3d" % v for v in gamma[i:i + 16]) + ",\n")
-    out.write("};\n")
+    # The gamma table rises by 0 to 3 per value: 2 bits each, 4 to a byte,
+    # the lowest bits first. Layout_Init() adds them up into layout_gamma.
+    steps = [gamma[0]] + [b - a for a, b in zip(gamma, gamma[1:])]
+    assert all(0 <= s <= 3 for s in steps), steps
+    packed = [sum(steps[i + k] << (2 * k) for k in range(4)) for i in range(0, 256, 4)]
+    out.write("};\n\nuint8_t layout_gamma[256];\n\nstatic const uint8_t gamma_steps[64] = {\n")
+    for i in range(0, 64, 16):
+        out.write("    " + ", ".join("%3d" % v for v in packed[i:i + 16]) + ",\n")
+    out.write("};\n\nvoid Layout_Init(void) {\n")
+    out.write("    unsigned v = 0;\n")
+    out.write("    for (unsigned i = 0; i < 256; i++) layout_gamma[i] = (uint8_t)(v += gamma_steps[i / 4] >> (2 * (i % 4)) & 3);\n")
+    out.write("}\n")
     out.close()
 
 

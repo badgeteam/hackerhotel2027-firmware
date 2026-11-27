@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 #define HH_APP_MAGIC 0x50414848u  // "HHAP"
-#define HH_API_VERSION 7  // 2: draw_text, text_width; 3: polar; 4: the helpers; 5: IR packets; 6: shots; 7: raw IR
+#define HH_API_VERSION 8  // 2: draw_text, text_width; 3: polar; 4: the helpers; 5: IR packets; 6: shots; 7: raw IR; 8: charging
 
 #define HH_APP_RAM_BASE 0x20002000u
 #define HH_APP_RAM_SIZE 0x3000u  // 12 KB: the image and its .bss
@@ -217,6 +217,11 @@ typedef struct {
     // for count 0 or a carrier out of range. When the app stops, a frame
     // still going out stops too.
     bool (*ir_send_raw)(const uint16_t *us, uint16_t count, uint32_t carrier_hz);
+
+    // Power (HH_API_VERSION 8): true while the battery charges (USB is in
+    // and the charger's CHRG line has been low for half a second). The
+    // badge cannot tell how full the battery is.
+    bool (*charging)(void);
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.

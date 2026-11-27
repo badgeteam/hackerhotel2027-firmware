@@ -451,6 +451,9 @@ static bool m_ir_send_raw(const uint16_t* us, uint16_t count, uint32_t carrier_h
     return true;
 }
 
+static bool mock_charging;  // what charging() returns
+static bool m_charging(void) { return mock_charging; }
+
 static const hh_api_t mock_api = {
     .version = HH_API_VERSION, .size = sizeof(hh_api_t),
     .set = m_set, .get = m_get, .clear = m_clear, .set_brightness = m_set_brightness, .brightness = m_brightness,
@@ -463,6 +466,7 @@ static const hh_api_t mock_api = {
     .isqrt = AppUtil_Isqrt, .atan8 = AppUtil_Atan8, .draw_number = m_draw_number,
     .step_brightness = m_step_brightness, .ir_send_packet = m_ir_send_packet, .ir_receive_packet = m_ir_receive_packet,
     .ir_receive_shot = m_ir_receive_shot, .ir_send_shot = m_ir_send_shot, .ir_send_raw = m_ir_send_raw,
+    .charging = m_charging,
 };
 
 // The test's checks

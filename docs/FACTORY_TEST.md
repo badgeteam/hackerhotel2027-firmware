@@ -50,7 +50,10 @@ The badge logs each step over SWIO (`minichlink -T`), for example
 - **USB power:** PC3 sees VBUS through R37 to GND, so it is high while USB
   powers the badge.
 - **Charging:** the XT4054 charger's CHRG output (PB22, open-drain) is low
-  while the battery charges.
+  while the battery charges. The firmware takes a change only after it
+  holds for 500 ms (`power.c`), so `CHG` comes half a second late. With no
+  battery the charger toggles CHRG faster than that, so `CHG` never shows
+  (it does not flicker).
 - **IR:** the receiver (S1) hears the badge's own IR LED (D315). During the
   IR step the driver decodes its own transmission (`infrared_set_loopback`).
 

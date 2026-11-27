@@ -106,6 +106,9 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 - **Brightness.** `set_brightness()` sets the global brightness, the same
   one that B and D set outside an app. The badge keeps it when it is
   powered off.
+- **Charging.** `charging()` is true while the battery charges (API
+  version 8). Outside apps the badge shows a charging screen then, but not
+  over an app: an app that wants to show it draws its own.
 - **Gamma.** LED values are brightness as a screen shows it. The firmware
   applies gamma 2.2, so 128 looks half as bright.
 - **Safe start.** Hold any button while the badge powers on, and it does
@@ -119,8 +122,8 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 ## Limits
 
 - **API version.** An app does not start on firmware with an older
-  `HH_API_VERSION` than the one it was built against (7: raw infrared,
-  `ir_send_raw`; 6: shots, `ir_receive_shot`; 5: the infrared packets; 4: the helpers; 3: `polar`;
+  `HH_API_VERSION` than the one it was built against (8: `charging`;
+  7: raw infrared, `ir_send_raw`; 6: shots, `ir_receive_shot`; 5: the infrared packets; 4: the helpers; 3: `polar`;
   2: the text calls); update the
   badge first. `tools/badge.py list` prints the firmware's version ("app API").
 

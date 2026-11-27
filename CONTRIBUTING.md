@@ -80,7 +80,7 @@ In November 2026 the firmware is about 25.2 KB, so there is little room.
 Check the `FLASH` line that the build prints:
 
 ```
-           FLASH:       25764 B        30 KB     83.87%
+           FLASH:       25772 B        30 KB     83.89%
 ```
 
 Put the old and the new number in the pull request. If a feature does

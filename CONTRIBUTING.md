@@ -95,11 +95,22 @@ one. CI runs all of them on each pull request, and you can run them
 yourself:
 
 ```sh
-make -C apps
-for t in tools/*/run.sh; do sh "$t" || break; done
-sh tools/emu/rv32_test/run.sh
-node tools/isp_test/isp_test.js
+tools/run_tests.sh             # every test, at the same time: about 70 s
+tools/run_tests.sh four ir     # only the tests whose names start so
+tools/run_tests.sh -j 1        # one test at a time: about 6 minutes
+sh tools/four_test/run.sh      # one test, without the runner
 ```
+
+`tools/run_tests.sh` builds the emulator and the apps first, then runs
+the tests below, 2 per CPU at a time (`-j N` changes that). Most tests
+wait for the emulator in real time, so they use little CPU. It prints
+the log of each test, then a table of the results and the seconds each
+took, and exits with an error if a test failed.
+
+A new test is a `tools/<name>/run.sh`; the runner finds it. It runs at
+the same time as the others, so it must not write in the repository or
+at a fixed path (use `mktemp -d`), must not use a fixed port, and must
+not run `make clean`.
 
 | Test | What it checks |
 |---|---|

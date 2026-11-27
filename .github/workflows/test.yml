@@ -66,13 +66,7 @@ jobs:
           git -C "$RUNNER_TEMP/hw" fetch -q --depth 1 https://github.com/badgeteam/hackerhotel2027-hardware "$rev"
           echo "HH27_HW=$RUNNER_TEMP/hw" >> "$GITHUB_ENV"
 
+      # Every test at the same time (the apps are already built above):
+      # the logs, failures first, then a table of the results
       - name: Tests
-        run: |
-          set -e
-          node tools/isp_test/isp_test.js
-          sh tools/emu/rv32_test/run.sh
-          for t in tools/*/run.sh; do
-            echo "::group::$t"
-            sh "$t"
-            echo "::endgroup::"
-          done
+        run: tools/run_tests.sh

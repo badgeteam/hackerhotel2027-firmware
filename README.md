@@ -426,6 +426,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/deploy_webui.sh` | publishes `webui/` of the current commit to a web server |
 | `tools/extract_board_data.py` | makes `webui/board_data.js` from the KiCad board in the hardware repository |
 | `tools/gen_layout.py` | makes `layout.c` and `webui/layout_data.js` from `webui/board_data.js` |
+| `tools/run_tests.sh` | runs every test below at the same time, then prints their logs and a table of the results (`-j 1`: one at a time; `tools/run_tests.sh four ir`: only those tests). See `CONTRIBUTING.md` |
 | `tools/codec_test/run.sh` | checks that the web interface and the firmware decode animations the same way |
 | `tools/app_test/run.sh` | checks the apps: game rules on the PC (`mock_hh.h` stands in for the firmware), that no app draws over its own text in the same tick (`overdraw_run.c`, `MOCK_OVERDRAW=all` lists the octagon's clipped pixels too; a text read back with `get()` and then cleared is a mask, as in the name tag, and not checked, nor is what the app draws over that pixel later in the tick), then every app in the emulator with random buttons |
 | `tools/text_test/run.sh` | checks text items: the web interface's payloads, played on the emulator |

@@ -26,7 +26,7 @@ concurrency:
 jobs:
   test:  # a required check on main: keep this job id
     runs-on: ubuntu-24.04
-    timeout-minutes: 20  # a run takes about 5 minutes
+    timeout-minutes: 20  # a run takes about 3 minutes; a test stops after 5
     env:
       PREFIX: riscv64-unknown-elf  # the Makefiles' default is riscv64-elf (Arch)
     steps:
@@ -66,13 +66,7 @@ jobs:
           git -C "$RUNNER_TEMP/hw" fetch -q --depth 1 https://github.com/badgeteam/hackerhotel2027-hardware "$rev"
           echo "HH27_HW=$RUNNER_TEMP/hw" >> "$GITHUB_ENV"
 
+      # Every test at the same time (the apps are already built above):
+      # the logs, failures first, then a table of the results
       - name: Tests
-        run: |
-          set -e
-          node tools/isp_test/isp_test.js
-          sh tools/emu/rv32_test/run.sh
-          for t in tools/*/run.sh; do
-            echo "::group::$t"
-            sh "$t"
-            echo "::endgroup::"
-          done
+        run: tools/run_tests.sh

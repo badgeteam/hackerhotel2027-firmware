@@ -95,11 +95,27 @@ one. CI runs all of them on each pull request, and you can run them
 yourself:
 
 ```sh
-make -C apps
-for t in tools/*/run.sh; do sh "$t" || break; done
-sh tools/emu/rv32_test/run.sh
-node tools/isp_test/isp_test.js
+tools/run_tests.sh             # every test, at the same time: about 90 s
+tools/run_tests.sh four ir     # only the tests whose names start so
+tools/run_tests.sh -j 1        # one test at a time: about 7 minutes
+sh tools/four_test/run.sh      # one test, without the runner
 ```
+
+`tools/run_tests.sh` builds the emulator and the apps first, then runs
+the tests below, 2 per CPU at a time (`-j N` changes that). Most tests
+wait for the emulator in real time, so they use little CPU. It prints
+the log of each test, then a table of the results and the seconds each
+took, and exits with an error if a test failed. A test that runs longer
+than 5 minutes is stopped and fails (`HH27_TEST_TIMEOUT=600` changes
+that). Ctrl-C stops every test and shows the end of the log of each
+test that was still running. The runner needs bash 5 (on macOS:
+`brew install bash`). Without GNU `timeout` the tests run with no time
+limit.
+
+A new test is a `tools/<name>/run.sh`; the runner finds it. It runs at
+the same time as the others, so it must not write in the repository or
+at a fixed path (use `mktemp -d`), must not use a fixed port, and must
+not run `make clean`.
 
 | Test | What it checks |
 |---|---|

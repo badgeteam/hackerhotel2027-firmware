@@ -16,7 +16,9 @@ HHAPPS := $(addprefix build/,$(addsuffix .hhapp,$(sort $(APPS))))
 
 all: $(HHAPPS)
 
-build/%.elf: %/*.c sdk.c hhapp.h app.ld
+# Every app depends on its own headers and on the shared ones (fx.h, hhapp.h)
+.SECONDEXPANSION:
+build/%.elf: %/*.c $$(wildcard $$*/*.h) sdk.c app.ld $(wildcard *.h)
 	@mkdir -p build
 	$(CC) $(CFLAGS) -o $@ $(filter %.c,$^) $(LDFLAGS)
 

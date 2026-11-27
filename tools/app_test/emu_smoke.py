@@ -3,11 +3,13 @@
 fresh badge, it must start, draw, take 4 s of random button taps (B, C, D,
 and short taps of A) and still run, with no fault in the log ("[emu]": a
 bad pointer, a jump outside the app, a tick() that does not return).
+The apps run 8 at a time: each one mostly waits.
 
   python3 tools/app_test/emu_smoke.py EMU APP.hhapp...
 """
 import os
 import queue
+from concurrent.futures import ThreadPoolExecutor
 import random
 import subprocess
 import sys
@@ -64,12 +66,27 @@ def smoke(emu, path):
             p.kill()
             p.wait()
         good = ok and running and not faults and frames[0] > 10
-        print("%s  %s: %s, %d frames%s" % ("ok  " if good else "FAIL", name.lower(), "runs" if running else "stopped",
-                                           frames[0], "; " + "; ".join(faults[:3]) if faults else ""))
-        return good
+        return good, "%s  %s: %s, %d frames%s" % ("ok  " if good else "FAIL", name.lower(),
+                                                  "runs" if running else "stopped", frames[0],
+                                                  "; " + "; ".join(faults[:3]) if faults else "")
+
+
+def smoke_or_fail(emu, path):
+    """smoke(), with an exception (no reply from the emulator, for one) as
+    a failure of this app only, so that the other apps still report"""
+    try:
+        return smoke(emu, path)
+    except queue.Empty:
+        why = "no reply from the emulator in 10 s"
+    except Exception as e:
+        why = repr(e)
+    return False, "FAIL  %s: %s" % (os.path.splitext(os.path.basename(path))[0], why)
 
 
 if __name__ == "__main__":
     emu, apps = sys.argv[1], sys.argv[2:]
-    results = [smoke(emu, a) for a in apps]
-    sys.exit(0 if all(results) else 1)
+    with ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(lambda a: smoke_or_fail(emu, a), apps))
+    for good, line in results:
+        print(line)
+    sys.exit(0 if all(good for good, _ in results) else 1)

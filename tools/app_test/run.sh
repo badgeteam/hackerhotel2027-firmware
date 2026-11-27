@@ -35,7 +35,17 @@ for d in "$root"/apps/*/; do
         -o "$out/od_$a" "$here/overdraw_run.c" $more "$root/layout.c" -lm
     "$out/od_$a" 2
 done
-make -s -C "$root/apps" clean all >/dev/null  # only the apps of this checkout
+# No make clean: other tests use apps/build while this one runs
+# (tools/run_tests.sh runs them at once)
+make -s -C "$root/apps" >/dev/null
 make -s -C "$root/tools/emu"
-python3 "$here/emu_smoke.py" "$root/tools/emu/build/hh27-emu" "$root"/apps/build/*.hhapp
+# Only the apps of this checkout (the dirs with a .c file, as apps/Makefile):
+# apps/build can still hold apps of another branch
+hhapps=""
+for d in "$root"/apps/*/; do
+    if ls "$d"*.c >/dev/null 2>&1; then
+        hhapps="$hhapps $root/apps/build/$(basename "$d").hhapp"
+    fi
+done
+python3 "$here/emu_smoke.py" "$root/tools/emu/build/hh27-emu" $hhapps
 python3 "$here/recommended_test.py"

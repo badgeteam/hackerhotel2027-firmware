@@ -5,7 +5,7 @@ Refer to the issue, for example "Fixes #52". -->
 
 ## How it was tested
 
-- [ ] The tests pass: `tools/*/run.sh`, `tools/emu/rv32_test/run.sh`, `node tools/isp_test/isp_test.js`
+- [ ] The tests pass: `tools/run_tests.sh`
 - [ ] New or changed tests cover this change
 - [ ] Tried in the emulator (`python3 tools/emu/emu.py --web`)
 - [ ] Tried on a badge (needed when it touches the hardware)

@@ -76,6 +76,8 @@ def badge_py(e, *args):
     """Runs tools/badge.py with args, its USB through the emulator (a
     stand-in for pyusb); returns what it printed, and its exit message"""
     class Dev:
+        iSerialNumber = 3
+
         def is_kernel_driver_active(self, i):
             return False
 
@@ -86,15 +88,16 @@ def badge_py(e, *args):
             return self.reply
 
     usb = types.ModuleType("usb")
-    usb.core = types.SimpleNamespace(find=lambda **kw: Dev(), USBError=OSError)
-    usb.util = types.SimpleNamespace(claim_interface=lambda dev, i: None)
+    dev = Dev()
+    usb.core = types.SimpleNamespace(find=lambda find_all=False, **kw: [dev] if find_all else dev, USBError=OSError)
+    usb.util = types.SimpleNamespace(claim_interface=lambda dev, i: None, get_string=lambda dev, i: "EMU")
     saved = {k: sys.modules.get(k) for k in ("usb", "usb.core", "usb.util")}
     sys.modules.update({"usb": usb, "usb.core": usb.core, "usb.util": usb.util})
     argv, sys.argv = sys.argv, ["badge.py"] + list(args)
     out, exit_msg = io.StringIO(), None
     try:
         with contextlib.redirect_stdout(out):
-            runpy.run_path(os.path.join(ROOT, "tools", "badge.py"), run_name="badge")
+            runpy.run_path(os.path.join(ROOT, "tools", "badge.py"), run_name="__main__")
     except SystemExit as x:
         exit_msg = x.code
     finally:

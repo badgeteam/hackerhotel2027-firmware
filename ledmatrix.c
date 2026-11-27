@@ -52,8 +52,8 @@ static void fill_halves(uint8_t top, uint8_t bottom) {
 // B or D outside apps: the brightness level shows this long over what runs
 #define LEVEL_SHOW_MS 1000
 // C outside apps: a press shorter than this, with D up all the time, is a
-// tap and shows the next item (browse_next). A longer press is no tap, and
-// C + D together is the boot ROM chord, never a tap.
+// tap and shows the next animation or text (browse_next). A longer press
+// is no tap, and C + D together is the boot ROM chord, never a tap.
 #define BROWSE_TAP_MS 500
 
 // What the LEDs showed when the menu opened, to put back when it closes
@@ -101,23 +101,20 @@ static void run_item(uint8_t index) {
 }
 
 // A tap of C outside apps: the next stop in the ring of the name tag, then
-// every store item in store order (as the menu lists them, apps too),
-// then the name tag again. On the name tag it goes on after the item that
-// ran last, so an app (which keeps C) is no dead end: leave it with the
-// menu's NAME TAG, and a tap starts the item after it. After the last item,
-// or if none ran yet (g_running_item is STORE_NONE), the name tag goes on
-// to the first. From the host's drawing (custom mode): the first item.
+// every animation and text in store order, then the name tag again. Apps
+// are not in the ring: an app keeps C for itself, so browsing into one
+// would end the browsing (leave an app with the menu). From the name tag or
+// the host's drawing (custom mode): the first animation or text.
 static void browse_next(void) {
-    int next = 0;
-    if (g_app_mode == APP_MODE_FLASH_PATTERN || g_app_mode == APP_MODE_NAMETAG) next = g_running_item + 1;
-    if (next < Store_Count()) {
-        run_item((uint8_t)next);
-    } else if (g_app_mode == APP_MODE_NAMETAG) {
-        run_item(0);  // the name tag shows already: on to the first item
-    } else {
-        AppHost_Stop();
-        g_app_mode = APP_MODE_NAMETAG;
+    int next = g_app_mode == APP_MODE_FLASH_PATTERN ? g_running_item + 1 : 0;
+    for (; next < Store_Count(); next++) {
+        const store_item_t* item = Store_Item((uint8_t)next);
+        if (item && item->type != STORE_TYPE_APP) {
+            run_item((uint8_t)next);
+            return;
+        }
     }
+    g_app_mode = APP_MODE_NAMETAG;
 }
 
 int main(void) {
@@ -315,9 +312,9 @@ int main(void) {
         // and the level shows for a moment (at the end of the pass)
         if (buttons & (HH_BTN_B | HH_BTN_D)) level_ms = LEVEL_SHOW_MS;
 
-        // A tap of C shows the next item (browse_next), on its release.
-        // B and D stay the brightness, as the menu's BUTTONS setting only
-        // changes the menu, so C alone browses. Not a tap: a press that
+        // A tap of C shows the next animation or text (browse_next), on its
+        // release. B and D stay the brightness, as the menu's BUTTONS setting
+        // only changes the menu, so C alone browses. Not a tap: a press that
         // started in an app, the menu, a greeting or the factory test; a
         // long press; D down at any time during it (C + D is a chord).
         if (!was_outside) c_tap = false;
@@ -357,7 +354,7 @@ int main(void) {
             Nametag_Tick(elapsed_ms);
         }
         last_mode = g_app_mode;
-        outside = g_app_mode != APP_MODE_APP;  // browse_next can start an app
+        outside = g_app_mode != APP_MODE_APP;
         // The brightness level goes over the frame only for the next
         // LEDMatrix_Show(): then what was under it comes back, so what runs
         // needs to draw nothing again when the level goes. The saved LEDs

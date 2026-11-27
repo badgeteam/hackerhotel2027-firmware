@@ -122,9 +122,9 @@ not run `make clean`.
 | `tools/app_test/run.sh` | the apps: game rules on the PC, no text drawn over in the same tick (every app alone for a while), then every app in the emulator with random buttons |
 | `tools/codec_test/run.sh` | the web interface and the firmware decode animations the same way |
 | `tools/brightness_test/run.sh` | the brightness: the start value, the USB command and `tools/badge.py brightness`, kept over a power cycle, the level on the grid (the menu, and B / D over what runs) |
-| `tools/browse_test/run.sh` | a tap of C outside apps steps through the name tag, the animations and the texts, and skips the apps and any animation that cannot start (a store of apps only: the name tag stays); an app keeps C; long presses, C + D, and presses from the menu or a greeting do not step |
+| `tools/browse_test/run.sh` | a tap of C outside apps steps through the name tag, the animations and the texts, and skips the apps and any animation that cannot start (a store of apps only: the name tag stays); an app keeps C; long presses, C + D, and presses from the menu do not step |
 | `tools/text_test/run.sh` | text items, from the web interface to the emulator |
-| `tools/ir_test/run.sh` | the infrared codec, and the name swap on two emulators |
+| `tools/ir_test/run.sh` | the infrared codec, and raw frames from an app on the emulator |
 | `tools/four_test/run.sh` | 4 in a row: rules on the PC, and whole games on two emulators |
 | `tools/factory_test/run.sh` | the factory test on the emulator |
 | `tools/bringup_test/run.sh` | `tools/badge.py bringup` lights the LED of each designator it prints, on the emulator |

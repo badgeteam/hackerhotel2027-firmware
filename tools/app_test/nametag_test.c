@@ -323,8 +323,9 @@ static void answering(void) {
     run(600000, 0);
     CHECK(mock_sent_n == 1, "C14 nothing else in 10 min (%u)", mock_sent_n);
 
-    // C24: an answer to a plain badge's HELLO ends before it calls again,
-    // 1.5 s after its HELLO began, even with long names on both sides
+    // C24: an answer to the HELLO of a badge with older firmware (SAY HI)
+    // ends before it calls again, 1.5 s after its HELLO began, even with
+    // long names on both sides
     static const char* longest = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
     int late = 0, early = 0;
     for (int k = 0; k < 40; k++) {
@@ -348,7 +349,7 @@ static void answering(void) {
         late += end > 1500;
         early += mock_sent_ms[i] - t0 < 20;
     }
-    CHECK(!late && !early, "C24 40 HELLOs from plain badges, short and long names: every answer within 20 ms .. 1.5 s (%d late, %d early)",
+    CHECK(!late && !early, "C24 40 HELLOs from badges with older firmware, short and long names: every answer within 20 ms .. 1.5 s (%d late, %d early)",
           late, early);
 }
 

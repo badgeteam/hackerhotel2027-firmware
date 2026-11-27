@@ -5,25 +5,27 @@
 // badges near each other swap names by infrared by themselves, count the
 // hackers you met (kept over power-off; an estimate from about 50 on, it
 // tops out near 400), and the dots going round show who is nearby. C: who
-// is here? (this app's SAY HI; the menu's does nothing while an app runs).
-// Hold C and press B / D for brightness. Badges without an app nearby
-// show "HI <your name>" when this one says hello, at most every 10 min.
+// is here? (and says hello at once). Hold C and press B / D for
+// brightness. Badges with older firmware (it had SAY HI in the menu) and
+// no app nearby show "HI <your name>" when this one says hello, at most
+// every 10 min; badges with this firmware and no app do not answer.
 
 // This file: what shows (the name, a hit count, a team, "HI <name>", the
 // panel), the buttons, the saved data, the banana's shots and the name
 // swap. styles.c gives every text its look.
 //
-// Infrared: the firmware's SAY HI packets (greet.h), 'H' HELLO and 'R'
-// REPLY, with the owner's name and, when it fits, a NUL and an info byte
-// (0x10 | team, 15 for none) that a plain badge does not show. Every 20 to
-// 60 s the app sends an 'N' with the same contents, a beacon: other NAMETAG
-// badges learn the name, the firmware and other apps ignore the type. (Not
-// 'R': a plain badge doing SAY HI takes any 'R' as its answer.) About every
-// 12 min one badge of a group sends 'H' (an 'H' heard puts ours off), which
-// plain badges answer, and show "HI <name>" for 5 s. An 'H' gets an 'R'
-// after 0.3 s or more, after the firmware's own answers (0.3 to 2.3 s from
-// an app), and from a plain badge early enough to end before its next
-// HELLO, 1.5 s after the last. Beacons and HELLOs wait while the air is
+// Infrared: the packets of older firmware's SAY HI (greet.c, gone from the
+// firmware since), 'H' HELLO and 'R' REPLY, with the owner's name and,
+// when it fits, a NUL and an info byte (0x10 | team, 15 for none) that an
+// older badge does not show. Every 20 to 60 s the app sends an 'N' with
+// the same contents, a beacon: other NAMETAG badges learn the name, the
+// firmware and other apps ignore the type. (Not 'R': an older badge doing
+// SAY HI takes any 'R' as its answer.) About every 12 min one badge of a
+// group sends 'H' (an 'H' heard puts ours off), which older badges
+// answer, and show "HI <name>" for 5 s. An 'H' gets an 'R' after 0.3 s or
+// more, after older firmware's own answers (0.3 to 2.3 s from an app), and
+// from an older badge early enough to end before its next HELLO, 1.5 s
+// after the last. Beacons and HELLOs wait while the air is
 // busy, and after our HELLO for its answers.
 //
 // The hackers met are counted with a 192-bit Bloom filter of name hashes
@@ -264,7 +266,7 @@ static void heard(const hh_ir_packet_t* p) {
     bool tail = len == n + 2 && d[n + 1] >> 4 == 1;
     if (t == HELLO) {
         hello_heard();
-        // A plain badge calls again 1.5 s after its HELLO began, and does
+        // An older badge calls again 1.5 s after its HELLO began, and does
         // not hear while it sends: our answer ends before that. A packet of
         // n bytes takes 7 + 18 * (n + 3) ms at the slowest (hhapp.h); ours
         // has the name and the tail.

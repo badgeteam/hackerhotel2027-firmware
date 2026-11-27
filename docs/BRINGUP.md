@@ -454,13 +454,23 @@ pull-up: R25 (A), R26 (B), R29 (C) or R30 (D).
    2025 banana at the badge, and press a button on it.
 3. Run `tools/badge.py shoot 1`. Look at D315 through a phone camera:
    most phone cameras show IR light. Or run `irlog` on a second badge.
-4. With two badges: choose **SAY HI** in the menu on one of them.
+4. With two badges: give each one a name (`tools/badge.py name ALICE`,
+   `tools/badge.py name BOB`), and install and start the NAMETAG app on
+   both (`tools/badge.py add apps/build/nametag.hhapp`). The app sends
+   nothing without a name. Keep both badges near each other for 20 s,
+   then tap **C** on one of them.
 
 **You should see:**
 
 - In step 2, frames with a leader and bits.
 - In step 3, D315 flashes once.
-- In step 4, the other badge says HI, and the names swap.
+- In step 4, the panel that C opens shows `NEAR 1` and the other
+  badge's name. The SWIO log (`minichlink -T`, section 6) shows
+  `nametag: new <name>` the first time a badge meets the other one. The
+  `HI <name>` pop-up shows only at a first meeting (often before you tap
+  C), and not again for a name the badge already knows, also after a
+  power-off. If step 4 fails but step 3 passed, use `irlog` on the
+  second badge as the IR check.
 
 **If not:**
 

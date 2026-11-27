@@ -8,9 +8,8 @@ drawing (custom mode) a tap starts the first animation or text; with none
 in the store, the name tag stays.
 
 It acts on the release of C. A long press is no tap, and neither is C
-with D down at any time during the press (C + D is the boot ROM chord), a
-press that began in the menu, or one that ended a greeting. In an app, C
-is the app's.
+with D down at any time during the press (C + D is the boot ROM chord), or
+a press that began in the menu. In an app, C is the app's.
 
   python3 tools/browse_test/emu_browse_test.py
 """
@@ -114,16 +113,16 @@ def run(e):
     check(state(e) == (MODE_ITEM, 1), "a tap of C there: the first text again, ONE")
 
     # An app keeps C. Leave it as a person does: hold A, then NAME TAG in
-    # the menu (it opens on NAMETAG, item 2: C four times goes back past
-    # ONE, FIRE and SAY HI to NAME TAG). From there a tap starts the first
-    # text, not the item after the app.
+    # the menu (it opens on NAMETAG, item 2: C three times goes back past
+    # ONE and FIRE to NAME TAG). From there a tap starts the first text,
+    # not the item after the app.
     e.usb(ITEM_RUN, 2, 0)
     time.sleep(0.15)
     check(state(e) == (MODE_APP, 2), "the host starts the NAMETAG app")
     tap_c(e)
     check(state(e) == (MODE_APP, 2), "in the app, a tap of C is the app's: NAMETAG still runs")
     menu(e, 1.2)
-    for _ in range(4):
+    for _ in range(3):
         e.press(BTN_C)
     e.press(BTN_A)
     time.sleep(0.15)
@@ -194,20 +193,6 @@ def run(e):
     e.usb(STOP)
     time.sleep(0.15)
     check(state(e)[0] == MODE_NAMETAG, "STOP: the name tag, and that press of C does not step")
-
-    # A greeting: the tap of C that ends it does nothing else
-    e.usb(STOP)
-    e.buttons(BTN_A)
-    time.sleep(1.0)
-    e.buttons(0)
-    time.sleep(0.15)
-    e.press(BTN_D)  # SAY HI
-    e.press(BTN_A)
-    time.sleep(0.3)
-    check(state(e)[0] == MODE_NAMETAG and not shows_still(e.wait_frames(), NAME), "SAY HI: the greeting shows")
-    tap_c(e)
-    time.sleep(0.2)
-    check(state(e)[0] == MODE_NAMETAG and shows_still(e.wait_frames(), NAME), "a tap of C ends it: the name tag, no step")
 
     # From the host's drawing: the first animation or text
     check(e.usb(CLEAR)[0] == MODE_CUSTOM, "CLEAR: the host's custom mode")

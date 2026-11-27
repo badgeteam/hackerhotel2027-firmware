@@ -5,8 +5,9 @@ When the battery starts to charge, also at power-on, a battery outline
 shows on the centre grid and fills up row by row, over and over. A button
 hides it, and that press does nothing else (B and D leave the brightness
 alone). It comes back only when charging stops and starts again, and goes
-when charging stops. It never shows over an app, the menu or a greeting,
-and a host command that changes what runs ends it. It never covers what
+when charging stops. It never shows over an app or the menu, a HELLO
+from another badge leaves it alone, and a host command that changes what
+runs ends it. It never covers what
 the host drew (custom mode). Hiding it puts back what showed before; a
 shot or the menu while it shows, or the factory test over it, does not
 bring it back. CHRG must keep its level for 500 ms (power.c): a line that
@@ -103,7 +104,7 @@ def brightness(e):
 
 
 def hello(e, name):
-    """A SAY HI from another badge (greet.h): type 'H', the name"""
+    """A SAY HI from a badge with older firmware: type 'H', the name"""
     e.send("p " + bytes([ord("H"), len(name)]).hex() + name.encode().hex())
 
 
@@ -280,22 +281,16 @@ def run(e, app):
     e.charging(False)
     time.sleep(OFF_HOLD)
 
-    # Not over a greeting
-    hello(e, "ANN")
-    check(wait_for(lambda: shows_still(e.wait_frames(), "HI ANN"), 1.5), "a HELLO: HI ANN")
-    e.charging(True)
-    check(no_battery(e, 1.2), "charging starts during the greeting: no battery")
-    e.press(BTN_C)  # ends the greeting
-    check(wait_for(lambda: shows_still(e.wait_frames(), NAME), 1.0), "C ends the greeting: the name tag")
-    check(no_battery(e, 1.0), "and no battery after it")
-
-    # A greeting over the charging screen takes over
+    # A HELLO over the charging screen leaves it alone: outside apps the
+    # firmware drops packets, and answers none
     charge_cycle(e)
     check(shows_battery(e), "again")
+    e.ir_sent.clear()
     hello(e, "ANN")
-    check(wait_for(lambda: shows_still(e.wait_frames(), "HI ANN"), 1.5), "a HELLO over it: HI ANN")
+    check(not wait_for(lambda: shows_still(e.wait_frames(), "HI ANN"), 1.0), "a HELLO over it: no HI ANN")
+    check(shows_battery(e) and not e.ir_sent, "the battery stays, and no answer goes out")
     e.press(BTN_C)
-    check(wait_for(lambda: shows_still(e.wait_frames(), NAME), 1.0), "C ends the greeting: the name tag, not the battery")
+    check(wait_for(lambda: shows_still(e.wait_frames(), NAME), 1.0), "C ends it: the name tag")
     check(no_battery(e, 1.0), "the battery stays gone")
     e.charging(False)
     time.sleep(OFF_HOLD)

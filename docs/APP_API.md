@@ -197,22 +197,24 @@ A packet takes 6.75 ms + 1.1 to 2.2 ms per bit, 8 × (length + 3) bits:
 arrived: answer each packet, and send again (after a random wait, so two badges do not keep
 colliding) when no answer comes.
 
-Pick a type of your own for your app's packets. `'H'` and `'R'` are SAY
-HI's name swap: outside apps the firmware answers them; while an app runs,
+Pick a type of your own for your app's packets. `'H'` and `'R'` are the
+name swap of `apps/nametag` and of older firmware's SAY HI: outside apps
+the firmware drops them (it has no SAY HI any more); while an app runs,
 the app gets them like any other. `apps/four` (4 in a row) uses `'F'`, and is a
 full example: invites, moves, answers and sending again.
 
-`apps/nametag` (NAMETAG) uses `'H'` and `'R'` themselves, so that it
-also swaps names with badges that run no app. After the name it can put a
-NUL and one info byte (`0x10` | the banana team, 15 for none); the
-firmware shows a name only up to the NUL, so a plain badge shows "HI
-ALICE". Every 20 to 60 s it also sends a beacon, type `'N'` with the same
-contents: other NAMETAG badges learn the name from it, and the firmware
-ignores the type. (An `'R'` would not do: a plain badge doing SAY HI takes
-any `'R'` as its answer.) About every 12 minutes it says HELLO by itself,
-so that it also learns the names of badges that run no app; each of those
-shows "HI ALICE" for 5 s then. It answers a plain badge's HELLO in time
-to end before that badge calls again, 1.5 s after its HELLO began.
+`apps/nametag` (NAMETAG) uses `'H'` and `'R'`, the packets of the SAY
+HI that older firmware has, so that it also swaps names with those
+badges. After the name it can put a NUL and one info byte (`0x10` | the
+banana team, 15 for none); older firmware shows a name only up to the
+NUL, so such a badge shows "HI ALICE". Every 20 to 60 s it also sends a
+beacon, type `'N'` with the same contents: other NAMETAG badges learn the
+name from it, and the firmware ignores the type. (An `'R'` would not do:
+an older badge doing SAY HI takes any `'R'` as its answer.) About every
+12 minutes it says HELLO by itself, so that it also learns the names of
+older badges that run no app; each of those shows "HI ALICE" for 5 s
+then. It answers an older badge's HELLO in time to end before that badge
+calls again, 1.5 s after its HELLO began.
 
 ```c
 // Ping: B sends, any badge that hears it lights up

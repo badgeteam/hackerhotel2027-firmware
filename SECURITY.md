@@ -43,8 +43,8 @@ In scope:
 - **The app loader** (`app_host.c`, `apps/hhapp.h`): a `.hhapp` whose
   header passes the checks but makes the firmware read or write outside
   the app's RAM before the app runs.
-- **The infrared receiver** (`infrared.c`, `ir_codec.c`, `greet.c`): a
-  frame or packet from another badge or a remote that crashes the badge or
+- **The infrared receiver** (`infrared.c`, `ir_codec.c`): a frame or
+  packet from another badge or a remote that crashes the badge or
   corrupts its memory.
 
 Out of scope:

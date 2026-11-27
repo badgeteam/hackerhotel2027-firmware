@@ -1,5 +1,5 @@
 #pragma once
-// The menu on the badge (hold A): the name tag, SAY HI, every stored item
+// The menu on the badge (hold A): the name tag, every stored item
 // by name, and the badge's own settings; and the name editor (EDIT NAME).
 //
 // While it is open, what ran before is paused: an app gets no ticks, an
@@ -18,7 +18,6 @@ typedef enum {
     MENU_KEEP,     // closed: go on with what ran before
     MENU_RUN,      // closed: start store item *item
     MENU_NAMETAG,  // closed: show the name tag
-    MENU_SAY_HI,   // closed: swap names over infrared (greet.h), then go on with what ran before
     MENU_SLEEP,    // closed: standby, then go on with what ran before
     MENU_UPDATE,   // closed: into the USB boot ROM
 } menu_result_t;
@@ -43,6 +42,5 @@ int Menu_BrightnessLevel(void);
 #define MENU_LEVEL_Y 13
 void Menu_DrawBrightness(void);
 
-// The arms in one colour, as the menu, the factory test and the greeting
-// show them: the RGB LEDs of rank rank_min and up (0: all), the others dark
-void Menu_Arms(uint8_t r, uint8_t g, uint8_t b, uint8_t rank_min);
+// The arms in one colour, as the menu and the factory test show them
+void Menu_Arms(uint8_t r, uint8_t g, uint8_t b);

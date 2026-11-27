@@ -8,7 +8,6 @@
 #include "ch643_ledpwm.h"
 #include "debug_output.h"
 #include "factory.h"
-#include "greet.h"
 #include "infrared.h"
 #include "app_host.h"
 #include "layout.h"
@@ -191,8 +190,7 @@ int main(void) {
     bool outside = false;      // the previous pass ran outside apps, to its end
     uint32_t c_ms = 0;         // how long C has been down
     bool c_tap = false;        // C went down outside apps, and so far it is a tap
-    bool greeting = false;  // greet.h has the LEDs; what they showed before is saved
-    bool charge = false;    // charge.h has the LEDs; the same
+    bool charge = false;  // charge.h has the LEDs; what they showed before is saved
     // what ran when the menu opened, or the charging screen started (never both at once)
     uint8_t menu_mode = 0, menu_item = STORE_NONE;
 
@@ -221,10 +219,9 @@ int main(void) {
         if (WebUSB_BootRomDue(elapsed_ms)) enter_boot_rom();
 
         // Charging starts: the charging screen (charge.h), but not over an
-        // app, what the host drew (custom mode), the menu, the factory test
-        // or a greeting
+        // app, what the host drew (custom mode), the menu or the factory test
         if (Power_Tick(elapsed_ms) && g_app_mode != APP_MODE_APP && g_app_mode != APP_MODE_CUSTOM && !factory &&
-            !menu_open && !greeting) {
+            !menu_open) {
             save_leds();
             menu_mode = g_app_mode;  // the menu is closed, so its record is free
             menu_item = g_running_item;
@@ -250,7 +247,7 @@ int main(void) {
         // while it is on (and not those left from an app: see below)
         ir_shot_t shot;
         while (g_app_mode != APP_MODE_APP && infrared_receive_shot(&shot))
-            if (g_app_mode == APP_MODE_NAMETAG && !factory && !menu_open && !greeting && !charge)
+            if (g_app_mode == APP_MODE_NAMETAG && !factory && !menu_open && !charge)
                 Nametag_Shot(shot.team, shot.command);
 
         // The factory test (factory.h) has the LEDs and the buttons until
@@ -293,9 +290,6 @@ int main(void) {
                     g_app_mode = APP_MODE_NAMETAG;
                 } else if (r == MENU_UPDATE) {
                     enter_boot_rom();
-                } else if (r == MENU_SAY_HI) {  // what ran goes on after the greeting
-                    restore_leds();
-                    Greet_SayHi();
                 } else {  // KEEP or SLEEP: what ran goes on, as it was
                     restore_leds();
                     if (r == MENU_SLEEP) {
@@ -311,12 +305,7 @@ int main(void) {
         // Hold A: the menu, also from an app (which gets the press of A too)
         hold_ms = held & HH_BTN_A ? hold_ms + elapsed_ms : 0;
         if (hold_ms >= (g_app_mode == APP_MODE_APP ? MENU_HOLD_APP_MS : MENU_HOLD_MS)) {
-            if (greeting) {  // the menu puts back what showed before the greeting
-                Greet_Cancel();
-                restore_leds();
-                greeting = false;
-            }
-            if (charge) {  // or the charging screen (A held since before it came)
+            if (charge) {  // the menu puts back what the charging screen covered (A held since before it came)
                 restore_leds();
                 charge = false;
             }
@@ -343,31 +332,11 @@ int main(void) {
             continue;
         }
 
-        // Outside apps: the name swap (greet.h). While it shows, what ran
-        // before waits; B, C or D ends it.
-        bool greets = Greet_Tick(elapsed_ms);
-        if (greets && (buttons & (HH_BTN_B | HH_BTN_C | HH_BTN_D))) {
-            Greet_Cancel();
-            greets = false;
-            buttons = 0;  // that press is only for ending the greeting
-        }
-        if (greets && charge) {  // a greeting ends the charging screen
-            restore_leds();
-            charge = false;
-        }
-        if (greets != greeting) {
-            if (greets)
-                save_leds();
-            else
-                restore_leds();
-            greeting = greets;
-        }
-        if (greeting) {
-            Greet_Draw();
-            last_mode = g_app_mode;
-            Delay_Ms(TICK_MS);
-            continue;
-        }
+        // Outside apps the firmware has no use for packets (an app's, such
+        // as the NAMETAG app's name swap): drop them, so none waits for the
+        // next app
+        infrared_packet_t packet;
+        while (infrared_receive_packet(&packet)) {}
 
         // The charging screen: what ran before waits. A button ends it, and
         // that press does nothing else; the end of charging ends it too.
@@ -394,8 +363,8 @@ int main(void) {
         // A tap of C shows the next animation or text (browse_next), on its
         // release. B and D stay the brightness, as the menu's BUTTONS setting
         // only changes the menu, so C alone browses. Not a tap: a press that
-        // started in an app, the menu, a greeting or the factory test; a
-        // long press; D down at any time during it (C + D is a chord).
+        // started in an app, the menu or the factory test; a long press; D
+        // down at any time during it (C + D is a chord).
         if (!was_outside) c_tap = false;
         if (buttons & HH_BTN_C) {
             c_tap = true;
@@ -437,8 +406,8 @@ int main(void) {
         // The brightness level goes over the frame only for the next
         // LEDMatrix_Show(): then what was under it comes back, so what runs
         // needs to draw nothing again when the level goes. The saved LEDs
-        // are free here: the menu and a greeting keep them only while they
-        // are on, and neither is on at the end of this pass.
+        // are free here: the menu and the charging screen keep them only
+        // while they are on, and neither is on at the end of this pass.
         if (level_ms && outside) {
             save_leds();
             Menu_DrawBrightness();

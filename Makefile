@@ -2,7 +2,7 @@ all : flash
 
 TARGET:=ledmatrix
 TARGET_MCU:=CH643Q
-ADDITIONAL_C_FILES:=debug_output.c ch643_ledpwm.c buttons.c standby.c bootloader.c infrared.c ir_codec.c power.c webusb_protocol.c flash_pages.c store.c persist.c pattern_player.c la04.c app_host.c app_util.c layout.c font.c nametag.c menu.c
+ADDITIONAL_C_FILES:=debug_output.c ch643_ledpwm.c buttons.c standby.c bootloader.c infrared.c ir_codec.c power.c webusb_protocol.c flash_pages.c store.c persist.c pattern_player.c la04.c app_host.c app_util.c layout.c font.c nametag.c menu.c tools/saverestore.S
 PREFIX?=riscv64-elf
 MINICHLINK:=$(dir $(shell which minichlink))
 
@@ -25,7 +25,7 @@ FIRMWARE_GP_LINE:=__global_pointer$$ = . + 0x800;
 
 # The firmware's identity (FW_INFO, webusb_protocol.c): the git commit, and
 # -dirty if the firmware's own sources differ from it
-FW_VERSION:=$(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet HEAD -- ':(glob)*.c' ':(glob)*.h' ':(glob)apps/hhapp.h' Makefile 2>/dev/null || echo -dirty)
+FW_VERSION:=$(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet HEAD -- ':(glob)*.c' ':(glob)*.h' ':(glob)apps/hhapp.h' tools/saverestore.S Makefile 2>/dev/null || echo -dirty)
 EXTRA_CFLAGS+=-DFW_VERSION=\"$(FW_VERSION)\"
 # Smaller code: switch as compare chains, not jump tables (with -Os they
 # are smaller here); align data only as its type needs, not to words (a
@@ -33,8 +33,13 @@ EXTRA_CFLAGS+=-DFW_VERSION=\"$(FW_VERSION)\"
 # invariants in the loop (fewer registers to save). The two hot loops, the
 # row scan (ch643_ledpwm.c) and the animation decoder (la04.c), move them
 # out still: an attribute on each. -mstrict-align: the QingKe V4 core traps
-# on a misaligned load or store, and some options (-mtune=size) turn it off
-SIZE_CFLAGS:=-mstrict-align -fno-jump-tables -malign-data=natural -fno-move-loop-invariants
+# on a misaligned load or store, and some options (-mtune=size) turn it off.
+# -msave-restore: a function saves and restores ra and the s registers with
+# a call to a shared routine (tools/saverestore.S: the toolchain has no
+# rv32 libgcc), not with its own sw/lw. GCC never does that in a function
+# with the interrupt attribute; the IRQ_HANDLER bodies (funconfig.h) may,
+# since HPE saved t0 and t1 for them
+SIZE_CFLAGS:=-mstrict-align -fno-jump-tables -malign-data=natural -fno-move-loop-invariants -msave-restore
 EXTRA_CFLAGS+=$(SIZE_CFLAGS)
 
 include ch32fun/ch32fun/ch32fun.mk

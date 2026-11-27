@@ -78,8 +78,30 @@ C bottom left, D bottom right.
 | Button | |
 |---|---|
 | **Hold A** | the menu, also from an app (hold it for a second there) |
+| **Tap C** | the next animation or text (when no app runs): see below |
 | **B** / **D** | brighter / dimmer (when no app runs) |
 | **Hold C + D** for 3 s | the USB boot ROM, from anywhere: see UPDATE below |
+
+When no app runs and the menu is closed:
+
+- **B** and **D** show the brightness level for a second at the bottom of
+  the grid, over what runs: six dots, one for each level, bright up to
+  the level now.
+- **A tap of C** starts the next animation or text, in the menu's
+  order. After the last one comes the name tag, and after the name tag
+  the first stored animation or text. With none stored, the name tag
+  stays. A tap is shorter than half a second, and acts when you let go
+  of C. C with D down at any moment of the press is no tap.
+- **C skips apps.** An app gets C itself, so C does not browse while an
+  app runs, and a tap of C never starts one: start an app from the menu.
+  That includes the app a badge starts at power-on (the recommended set
+  starts the NAMETAG app, which looks like the name tag). To browse from
+  an app, hold A for the menu and pick NAME TAG: a tap of C then starts
+  the first animation or text.
+- Only C steps through the items, and only forward: B and D stay the
+  brightness. C goes forward even though it is "previous" in the menu:
+  with one button, forward is the way round the ring. The menu's BUTTONS
+  setting changes only the menu and the name editor, not this.
 
 **The menu** lists the name tag, SAY HI, every stored animation, text and
 app, and the badge's settings. The name of the entry shows on the grid,
@@ -110,7 +132,8 @@ The settings in the menu:
   To make the name shorter, set the characters at the end to blank. After
   a minute without a button, the editor closes without saving.
 - **BRIGHTNESS:** each tap is one level brighter, then back to the
-  dimmest.
+  dimmest. Six dots under the label show the level. A new badge starts
+  at the third level (32 of 255, 12.5 %).
 - **BUTTONS:** which pair steps through the menu. `C D` is the bottom pair,
   side by side (the default). `B D` is the right pair, one above the
   other: then B is previous, and in the editor C is the previous
@@ -230,8 +253,10 @@ cd webui && python3 -m http.server 8027 --bind 127.0.0.1
 Open http://127.0.0.1:8027/ and click **Connect badge**. In the
 browser's box, pick **Hackerhotel 2027 starfish**. The **Your badge**
 panel then shows the badge's state and lets you set your name
-(**Save name**). The **On your badge** panel shows what is stored on the
-badge. In that panel you can:
+(**Save name**) and the brightness (**Brightness**, the six levels of the
+badge's menu; `tools/badge.py brightness N` sets any value from 1 to
+255). The **On your badge** panel shows what is stored on the badge. In
+that panel you can:
 
 - start an item (**Start**),
 - choose the item that starts at power-on (the star button),
@@ -403,6 +428,8 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/nametag_test/run.sh` | checks how the name tag shows banana shots, on the emulator |
 | `tools/usb_test/run.sh` | checks the USB descriptors' lengths on the PC, and the C + D boot ROM chord on the emulator |
 | `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge, banana shots, on emulators |
+| `tools/brightness_test/run.sh` | checks the brightness on the emulator: the start value, the USB command and `tools/badge.py brightness`, the level on the grid |
+| `tools/browse_test/run.sh` | checks that a tap of C steps through the animations and texts on the emulator and skips the apps, and that long presses and C + D do not |
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, USB power and charging, a fresh start, the text on the grid |
 | `tools/isp_test/isp_test.js` | tests the web interface's firmware update offline (`node tools/isp_test/isp_test.js`) |
 | `tools/emu/` | the emulator (see above); `hw.c` stands in for the hardware, `rv32.c` runs the apps |

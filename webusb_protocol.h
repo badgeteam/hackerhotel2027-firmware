@@ -35,6 +35,11 @@
 //   0x30 NAME_GET                              the reply carries the owner's name
 //   0x31 NAME_SET       name...                set it (up to 32 bytes; written to flash
 //                                              from the main loop)
+//   0x32 BRIGHTNESS     value                  set the global brightness, 1 .. 255 (byte 1
+//                                              of the reply); kept over power-off as B / D
+//                                              keep it. The menu's levels are 8, 16, 32,
+//                                              64, 128 and 255; any value works. 0 is
+//                                              refused (result 1: the LEDs would be dark)
 //
 //   The protocol before the item store, still accepted: one animation only
 //   0x10 PATTERN_BEGIN                         erase every item, then ITEM_BEGIN an animation

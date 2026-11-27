@@ -46,6 +46,17 @@ static void fill_halves(uint8_t top, uint8_t bottom) {
 #define MENU_HOLD_MS 700
 #define MENU_HOLD_APP_MS 1000
 
+// A badge that has never saved a brightness starts at 32 of 255 (12.5 %),
+// as the old firmware did: full brightness dazzles and drains the battery
+#define START_BRIGHTNESS 32
+
+// B or D outside apps: the brightness level shows this long over what runs
+#define LEVEL_SHOW_MS 1000
+// C outside apps: a press shorter than this, with D up all the time, is a
+// tap and shows the next animation or text (browse_next). A longer press
+// is no tap, and C + D together is the boot ROM chord, never a tap.
+#define BROWSE_TAP_MS 500
+
 // What the LEDs showed when the menu opened, to put back when it closes
 static uint8_t s_saved_leds[LED_MATRIX_ROWS * LED_MATRIX_COLS];
 
@@ -119,6 +130,25 @@ static void run_item(uint8_t index) {
     }
 }
 
+// A tap of C outside apps: the next stop in the ring of the name tag, then
+// every animation and text in store order, then the name tag again. Apps
+// are not in the ring: an app keeps C for itself, so browsing into one
+// would end the browsing (leave an app with the menu). From the name tag or
+// the host's drawing (custom mode): the first animation or text. An item
+// that cannot start (the store checks less than the player) is skipped too,
+// so it does not hide the items after it.
+static void browse_next(void) {
+    int next = g_app_mode == APP_MODE_FLASH_PATTERN ? g_running_item + 1 : 0;
+    for (; next < Store_Count(); next++) {
+        const store_item_t* item = Store_Item((uint8_t)next);
+        if (item && item->type != STORE_TYPE_APP) {
+            run_item((uint8_t)next);
+            if (g_app_mode == APP_MODE_FLASH_PATTERN) return;
+        }
+    }
+    g_app_mode = APP_MODE_NAMETAG;
+}
+
 int main(void) {
     SystemInit();
     funGpioInitAll();
@@ -130,8 +160,8 @@ int main(void) {
     Power_Init();
 
     Persist_Init();
-    // the brightness from last time (B / D or an app set it); full the first time
-    LEDMatrix_SetBrightness(Persist_Brightness() ? Persist_Brightness() : 255);
+    // the brightness from last time (B / D, the host or an app set it)
+    LEDMatrix_SetBrightness(Persist_Brightness() ? Persist_Brightness() : START_BRIGHTNESS);
 
     // Start the boot item from the store, unless a button is held: then
     // the badge starts without it (in case it is an app that hangs).
@@ -158,11 +188,20 @@ int main(void) {
     uint8_t chord_brightness = LEDMatrix_GetBrightness();  // from before C or D went down
     uint8_t last_mode = 0;  // to start the name tag when it comes on
     bool menu_open = false;
+    uint32_t level_ms = 0;     // the brightness level shows this much longer
+    bool level_drawn = false;  // the previous pass drew it over what runs
+    bool outside = false;      // the previous pass ran outside apps, to its end
+    uint32_t c_ms = 0;         // how long C has been down
+    bool c_tap = false;        // C went down outside apps, and so far it is a tap
     bool greeting = false;  // greet.h has the LEDs; what they showed before is saved
     uint8_t menu_mode = 0, menu_item = STORE_NONE;  // what ran when it opened
 
     while (1) {
         LEDMatrix_Show();  // what the previous pass drew (the app, the menu, the name tag, the host)
+        if (level_drawn) restore_leds();  // what runs keeps its own frame
+        level_drawn = false;
+        bool was_outside = outside;
+        outside = false;
         WebUSB_HandleCommand();
         uint8_t run = WebUSB_TakeRunRequest();
         if (run != STORE_NONE) run_item(run);
@@ -172,9 +211,11 @@ int main(void) {
 
         uint32_t elapsed_ms = (funSysTick32() - last_tick) / DELAY_MS_TIME;
         last_tick += elapsed_ms * DELAY_MS_TIME;
+        level_ms = level_ms > elapsed_ms ? level_ms - elapsed_ms : 0;
 
-        // keep what the host, the app or the buttons changed
-        Persist_SetBrightness(LEDMatrix_GetBrightness());
+        // keep what the host, the app or the buttons changed (not the
+        // factory test's full brightness: factory.c puts the badge's back)
+        if (!factory) Persist_SetBrightness(LEDMatrix_GetBrightness());
         Persist_Flush(elapsed_ms);
 
         if (WebUSB_BootRomDue(elapsed_ms)) enter_boot_rom();
@@ -309,6 +350,27 @@ int main(void) {
         // (not D while C is down: that is the start of the boot ROM chord)
         if ((buttons & HH_BTN_D) && !(held & HH_BTN_C)) Menu_StepBrightness(-1);
 
+        // and the level shows for a moment (at the end of the pass)
+        if (buttons & (HH_BTN_B | HH_BTN_D)) level_ms = LEVEL_SHOW_MS;
+
+        // A tap of C shows the next animation or text (browse_next), on its
+        // release. B and D stay the brightness, as the menu's BUTTONS setting
+        // only changes the menu, so C alone browses. Not a tap: a press that
+        // started in an app, the menu, a greeting or the factory test; a
+        // long press; D down at any time during it (C + D is a chord).
+        if (!was_outside) c_tap = false;
+        if (buttons & HH_BTN_C) {
+            c_tap = true;
+            c_ms = 0;
+        }
+        if (held & HH_BTN_C) {
+            c_ms += elapsed_ms;
+            if ((held & HH_BTN_D) || c_ms >= BROWSE_TAP_MS) c_tap = false;
+        } else if (c_tap) {
+            c_tap = false;
+            browse_next();
+        }
+
         infrared_nec_message_t message;
         while (infrared_receive(&message)) {
             if (message.address != IR_ADDRESS || message.repeat) continue;
@@ -333,6 +395,17 @@ int main(void) {
             Nametag_Tick(elapsed_ms);
         }
         last_mode = g_app_mode;
+        outside = g_app_mode != APP_MODE_APP;
+        // The brightness level goes over the frame only for the next
+        // LEDMatrix_Show(): then what was under it comes back, so what runs
+        // needs to draw nothing again when the level goes. The saved LEDs
+        // are free here: the menu and a greeting keep them only while they
+        // are on, and neither is on at the end of this pass.
+        if (level_ms && outside) {
+            save_leds();
+            Menu_DrawBrightness();
+            level_drawn = true;
+        }
 
         Delay_Ms(TICK_MS);
     }

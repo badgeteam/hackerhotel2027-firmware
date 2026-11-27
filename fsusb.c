@@ -296,7 +296,13 @@ void USBFS_IRQHandler()
 					}
 				}
 #else
-				;
+				// The Microsoft OS 2.0 descriptor set and the WebUSB landing page
+				// (usb_descriptors.h) come with a vendor request. It is answered
+				// from descriptor_list, as a GET_DESCRIPTOR is. Every other
+				// vendor or class request stalls.
+				if( USBFS_SetupReqType == 0xC0 && USBFS_SetupReqCode == USB_VENDOR_CODE )
+					goto descriptor;
+				goto sendstall;
 #endif
 			}
 			else
@@ -306,6 +312,7 @@ void USBFS_IRQHandler()
 				{
 					/* get device/configuration/string/report/... descriptors */
 					case USB_GET_DESCRIPTOR:
+					descriptor:
 					{
 						const struct descriptor_list_struct * e = descriptor_list;
 						const struct descriptor_list_struct * e_end = e + DESCRIPTOR_LIST_ENTRIES;
@@ -607,6 +614,11 @@ void USBFS_InternalFinishSetup()
 
 int FSUSBSetup()
 {
+	// The serial number, from the chip's unique ID (usb_descriptors.h). Read
+	// as words; on this little-endian chip the bytes keep their memory order.
+	uint32_t uid[2] = { ESIG->UID0, ESIG->UID1 };
+	usb_serial_init( (const uint8_t *)uid );
+
 	RCC->APB2PCENR |= RCC_APB2Periph_AFIO | RCC_APB2Periph_GPIOC;
 	RCC->AHBPCENR |= RCC_USBFS | RCC_AHBPeriph_DMA1;
 

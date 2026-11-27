@@ -1,8 +1,8 @@
 // TVBOn: turns the TVs around you on or off, by infrared. Press A: the
 // badge sends the power-on code of each TV brand it knows (Samsung, LG,
 // Hisense, Sony, Panasonic, Philips, Toshiba): the arm to A fills up
-// green, faster and faster, then flashes while sparks fly off it on the
-// outline, more of them the longer it sends. Press B: the power-off
+// green, faster and faster, then flashes while a laser flickers along its
+// outline, wilder the longer it sends. Press B: the power-off
 // codes, the same in red to B. Brands with only a power toggle (TCL, Xiaomi, newer
 // Hisense, Philips and Toshiba, Sharp, Telefunken and others by Vestel,
 // Hitachi)
@@ -17,6 +17,10 @@
 #define TAP_MS 600           // A held longer is the menu (it opens at 1 s), not ON
 #define FILL_MS 700          // the arm fills up in this time, then flashes until the codes are out
 #define DONE_MS 600          // and this long after the last code
+#define ARM_HALF 26          // an arm's outline, either side of its tip's angle (1/256 turn)
+#define BEAMS 4              // laser beams at once
+#define BEAM_SPEED 2         // 1/4 mm per ms: a beam runs the arm in about 50 ms
+#define BEAM_LEN 24          // its length, 6 mm
 #define GAP_US 50000         // quiet after a NEC, Samsung or Panasonic frame
 #define SONY_FRAME_US 45000  // a Sony frame starts every 45 ms
 #define RC5_HALF_US 889      // half an RC5 bit
@@ -65,6 +69,7 @@ static const brand_t BRANDS[] = {
 #define BRAND_COUNT (sizeof BRANDS / sizeof *BRANDS)
 
 static const hh_api_t* hh;
+static int abs8(int8_t x) { return x < 0 ? -x : x; }
 static uint8_t mode, last;          // what goes out now (ON, OFF or IDLE), and what went out last
 static uint8_t frame, frames;       // the next frame of a run, and how many a run has
 static uint16_t buf[2][FRAME_MAX];  // two frames: the one going out, and the next
@@ -77,8 +82,8 @@ static bool a_tap;
 static uint8_t toggle;  // RC5's and RC6's toggle bit, new for each press
 static uint32_t run_ms;  // since the press
 static uint8_t blast_from;  // the frame the blast started at, frames while it fills up
-static uint8_t spark[HH_EDGE_COUNT];  // the sparks on the outline, fading
-static uint8_t tip_angle[2];          // where the arms to A and B point (polar)
+static uint8_t beam[BEAMS];   // the front of each laser beam (polar distance), 0: none
+static uint8_t tip_angle[2];  // where the arms to A and B point (polar)
 
 // A frame of pulse distance coding (NEC, Samsung, Panasonic): a leader,
 // then n bytes LSB first, each bit a mark of t and a space of t (0) or
@@ -266,19 +271,34 @@ static void arm(uint8_t which, bool red, uint8_t level, int lit) {
     }
 }
 
-// Sparks on the outline of the arm at angle a, flying off the blast: from
-// its tip at first, then more of them and down the arm's sides as e (0 ..
-// 255) grows; each fades in about 0.15 s
-static void sparks(uint8_t a, uint8_t e, uint32_t elapsed_ms) {
-    for (int j = 0; j < HH_EDGE_COUNT; j++) spark[j] = spark[j] > elapsed_ms * 2 ? spark[j] - elapsed_ms * 2 : 0;
-    int width = 8 + e * 20 / 255;  // half the arc, in 1/256 turn: the arm, not the dips beside it
-    for (int n = e ? 1 + e / 40 : 0, tries = 0; n > 0 && tries < 64; tries++) {
-        int j = (int)(hh->random() % HH_EDGE_COUNT);
-        int off = (int8_t)(hh->polar[hh->edge[j]][1] - a);
-        if (off < 0) off = -off;
-        if (off <= width) spark[j] = 255, n--;
+// The laser round the arm at angle a: beams shoot out along the arm's
+// outline, from its root to its tip, flickering at random, with crackle
+// round them; more of both as e (0 .. 255) grows, none at 0
+static void laser(uint8_t a, uint8_t e, uint32_t elapsed_ms) {
+    uint8_t root = 255;  // the outline's nearest LED on the arm (polar distance)
+    for (int j = 0; j < HH_EDGE_COUNT; j++)
+        if (abs8((int8_t)(hh->polar[hh->edge[j]][1] - a)) <= ARM_HALF && hh->polar[hh->edge[j]][0] < root)
+            root = hh->polar[hh->edge[j]][0];
+    for (int b = 0; b < BEAMS; b++) {
+        if (!beam[b]) continue;
+        uint32_t r = beam[b] + elapsed_ms * BEAM_SPEED;
+        beam[b] = r > 255 ? 0 : (uint8_t)r;
     }
-    for (int j = 0; j < HH_EDGE_COUNT; j++) hh->set(hh->edge[j], spark[j]);
+    if (e && hh->random() % 256 < 24u + e / 2)
+        for (int b = 0; b < BEAMS; b++)
+            if (!beam[b]) {
+                beam[b] = root;
+                break;
+            }
+    for (int j = 0; j < HH_EDGE_COUNT; j++) {
+        uint16_t s = hh->edge[j];
+        if (abs8((int8_t)(hh->polar[s][1] - a)) > ARM_HALF) continue;
+        uint8_t r = hh->polar[s][0], v = 0;
+        for (int b = 0; b < BEAMS; b++)
+            if (beam[b] && r <= beam[b] && r + BEAM_LEN >= beam[b]) v = (uint8_t)(96 + hh->random() % 160);
+        if (e && hh->random() % 1024 < e / 4u) v = 255;
+        hh->set(s, v);
+    }
 }
 
 static void tick(uint32_t elapsed_ms) {
@@ -295,7 +315,7 @@ static void tick(uint32_t elapsed_ms) {
 
     // The arms: dim, with a wave running out, while nothing happens. The
     // active one fills up, slowly and then faster, then blasts: it flashes,
-    // faster and faster, with sparks around it, until the codes are out.
+    // faster and faster, with a laser round it, until the codes are out.
     bool busy = mode != IDLE || done_ms;
     if (mode != IDLE) run_ms += elapsed_ms;
     if (mode != IDLE && run_ms >= FILL_MS && blast_from == frames) blast_from = frame;
@@ -312,7 +332,7 @@ static void tick(uint32_t elapsed_ms) {
     hh->clear();
     arm(ARM_A, false, busy ? (last == ON ? level : 40) : 90, busy && last == ON ? lit : 0);
     arm(ARM_B, true, busy ? (last == OFF ? level : 40) : 90, busy && last == OFF ? lit : 0);
-    sparks(tip_angle[last == OFF], blast ? e : 0, elapsed_ms);
+    laser(tip_angle[last == OFF], blast ? e : 0, elapsed_ms);
 
     // The grid: TV, then ON and OFF; while one goes out, that one bright
     word(5, 1, "TV", 255);

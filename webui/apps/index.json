@@ -171,9 +171,9 @@
   {
    "name": "TVBON",
    "file": "tvbon.hhapp",
-   "bytes": 2856,
+   "bytes": 2988,
    "api": 7,
-   "description": "TVBOn: turns the TVs around you on or off, by infrared. Press A: the badge sends the power-on code of each TV brand it knows (Samsung, LG, Hisense, Sony, Panasonic, Philips, Toshiba): the arm to A fills up green, faster and faster, then flashes while sparks fly off it on the outline, more of them the longer it sends. Press B: the power-off codes, the same in red to B. Brands with only a power toggle (TCL, Xiaomi, newer Hisense, Philips and Toshiba, Sharp, Telefunken and others by Vestel, Hitachi) get it with A and with B, first, so a TV that knows both ends with its own on or off. Philips's off is the standby button, which toggles on newer Philips TVs. A press takes about two seconds.",
+   "description": "TVBOn: turns the TVs around you on or off, by infrared. Press A: the badge sends the power-on code of each TV brand it knows (Samsung, LG, Hisense, Sony, Panasonic, Philips, Toshiba): the arm to A fills up green, faster and faster, then flashes while a laser flickers along its outline, wilder the longer it sends. Press B: the power-off codes, the same in red to B. Brands with only a power toggle (TCL, Xiaomi, newer Hisense, Philips and Toshiba, Sharp, Telefunken and others by Vestel, Hitachi) get it with A and with B, first, so a TV that knows both ends with its own on or off. Philips's off is the standby button, which toggles on newer Philips TVs. A press takes about two seconds.",
    "recommended": false
   },
   {

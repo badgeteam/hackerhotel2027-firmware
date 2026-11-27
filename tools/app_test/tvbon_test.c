@@ -233,22 +233,38 @@ static int bright_ranks(int which) {
     return n;
 }
 
-// The blast: over ms, the sparks on the outline (lit LEDs, summed over the
-// ticks), the farthest from angle a (1/256 turn), and whether the arm
-// flashed (all ranks full, and none)
+// The blast: over ms, the laser on the outline (lit LEDs, summed over the
+// ticks), how often a lit LED changed from one tick to the next, the
+// farthest from angle a (1/256 turn), whether every beam started at the
+// arm's root and only ran outward, and whether the arm flashed (all ranks
+// full, and none)
 typedef struct {
-    int sparks, far;
-    bool full, dark;
+    int lit, changed, far, beams;
+    bool outward, full, dark;
 } blast_t;
 static blast_t watch(uint32_t ms, uint8_t a, int which) {
-    blast_t b = {0, 0, false, false};
+    blast_t b = {0, 0, 0, 0, true, false, false};
+    uint8_t root = 255, was[HH_EDGE_COUNT], before[BEAMS];
+    for (int j = 0; j < HH_EDGE_COUNT; j++) {
+        was[j] = mock_leds[layout_edge[j]];
+        if (abs((int8_t)(layout_polar[layout_edge[j]][1] - a)) <= ARM_HALF && layout_polar[layout_edge[j]][0] < root)
+            root = layout_polar[layout_edge[j]][0];
+    }
     for (uint32_t t = 0; t < ms; t += 5) {
+        memcpy(before, beam, sizeof before);
         run(5, 0, 0);
+        for (int k = 0; k < BEAMS; k++) {  // a beam moves out, or a new one starts (also where one just ended)
+            if (!beam[k] || (before[k] && beam[k] > before[k])) continue;
+            b.beams++, b.outward &= beam[k] == root;
+        }
         for (int j = 0; j < HH_EDGE_COUNT; j++) {
-            if (!mock_leds[layout_edge[j]]) continue;
-            int off = abs((int8_t)(layout_polar[layout_edge[j]][1] - a));
-            b.sparks++;
-            if (off > b.far) b.far = off;
+            uint8_t v = mock_leds[layout_edge[j]];
+            if (v) {
+                int off = abs((int8_t)(layout_polar[layout_edge[j]][1] - a));
+                b.lit++, b.changed += v != was[j];
+                if (off > b.far) b.far = off;
+            }
+            was[j] = v;
         }
         int n = bright_ranks(which);
         b.full |= n == RANKS, b.dark |= n == 0;
@@ -262,7 +278,7 @@ static uint8_t tip(int which) {
     return 0;
 }
 
-static int edge_lit(void) {
+static int edge_lit(void) {  // the outline LEDs lit now
     int n = 0;
     for (int j = 0; j < HH_EDGE_COUNT; j++) n += mock_leds[layout_edge[j]] != 0;
     return n;
@@ -346,7 +362,7 @@ int main(void) {
     CHECK(mock_raws_sent == 1, "a tap of A starts at its release");
     CHECK(mock_leds[layout_grid[6][5]] == 255 && mock_leds[layout_grid[11][3]] == 40, "ON lights up, OFF dims");
     for (int t = 0; t < 3; t++) idle(200), fill[t] = bright_ranks(ARM_A);
-    CHECK(!edge_lit(), "no sparks while it fills up");
+    CHECK(!edge_lit(), "no laser while it fills up");
     idle(100);
     blast_t early = watch(300, tip(ARM_A), ARM_A);
     idle(500);
@@ -358,10 +374,13 @@ int main(void) {
     CHECK(fill[0] < fill[1] && fill[1] < fill[2] && fill[1] - fill[0] < fill[2] - fill[1] && !bright_ranks(ARM_B),
           "the arm to A fills up, slowly, then faster (%d, %d, %d)", fill[0], fill[1], fill[2]);
     CHECK(early.full && early.dark && late.full && late.dark, "then it flashes");
-    CHECK(sending && early.sparks && late.sparks > 2 * early.sparks,
-          "while it sends, sparks fly off it on the outline, more later (%d to %d)", early.sparks, late.sparks);
-    CHECK(early.far <= 16 && late.far > early.far && late.far <= 28,
-          "from the tip, then down the arm, never past it (%d, then %d of 256 from the tip)", early.far, late.far);
+    CHECK(sending && early.lit && late.lit > early.lit,
+          "while it sends, a laser runs along the arm's outline, wilder later (%d, then %d lit)", early.lit, late.lit);
+    CHECK(late.changed * 2 > late.lit, "flickering (%d of %d lit LEDs changed in a tick)", late.changed, late.lit);
+    CHECK(early.beams + late.beams > 10 && early.outward && late.outward,
+          "its beams start at the arm's root and shoot outward (%d beams)", early.beams + late.beams);
+    CHECK(early.far <= ARM_HALF && late.far <= ARM_HALF, "never past the arm (%d, %d of 256 from its tip)", early.far,
+          late.far);
     uint32_t total = 0;
     int sony = 0;
     for (int i = from; i < nsent; i++) total += sent[i].us, sony += sent[i].kind == 'Y' && sent[i].us == 45000;

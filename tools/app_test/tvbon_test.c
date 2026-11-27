@@ -195,6 +195,12 @@ static const want_t WANT[] = {
     {'N', NEC_BYTES(0x40BF7E81u), NEC_BYTES(0x40BF7F80u), 38000, 2},    // Toshiba: NEC 64:126 and 64:127
 };
 
+static int frames_per_run(void) {
+    int n = 0;
+    for (unsigned b = 0; b < sizeof WANT / sizeof *WANT; b++) n += WANT[b].repeats;
+    return n;
+}
+
 // Do sent[from..] hold the codes of a whole run, ON or OFF
 static bool run_was(int from, bool on, int* frames) {
     int k = from;
@@ -224,6 +230,41 @@ static int bright_ranks(int which) {
     arm_leds(which, c);
     int n = 0;
     for (int r = 0; r < RANKS; r++) n += c[r][0] == 255 || c[r][1] == 255;
+    return n;
+}
+
+// The blast: over ms, the sparks on the outline (lit LEDs, summed over the
+// ticks), the farthest from angle a (1/256 turn), and whether the arm
+// flashed (all ranks full, and none)
+typedef struct {
+    int sparks, far;
+    bool full, dark;
+} blast_t;
+static blast_t watch(uint32_t ms, uint8_t a, int which) {
+    blast_t b = {0, 0, false, false};
+    for (uint32_t t = 0; t < ms; t += 5) {
+        run(5, 0, 0);
+        for (int j = 0; j < HH_EDGE_COUNT; j++) {
+            if (!mock_leds[layout_edge[j]]) continue;
+            int off = abs((int8_t)(layout_polar[layout_edge[j]][1] - a));
+            b.sparks++;
+            if (off > b.far) b.far = off;
+        }
+        int n = bright_ranks(which);
+        b.full |= n == RANKS, b.dark |= n == 0;
+    }
+    return b;
+}
+
+static uint8_t tip(int which) {
+    for (int i = 0; i < HH_RGB_COUNT; i++)
+        if (layout_rgb[i].arm == which && layout_rgb[i].rank == RANKS - 1) return layout_polar[layout_rgb[i].r][1];
+    return 0;
+}
+
+static int edge_lit(void) {
+    int n = 0;
+    for (int j = 0; j < HH_EDGE_COUNT; j++) n += mock_leds[layout_edge[j]] != 0;
     return n;
 }
 
@@ -304,18 +345,28 @@ int main(void) {
     tap(HH_BTN_A);
     CHECK(mock_raws_sent == 1, "a tap of A starts at its release");
     CHECK(mock_leds[layout_grid[6][5]] == 255 && mock_leds[layout_grid[11][3]] == 40, "ON lights up, OFF dims");
-    for (int t = 0; t < 3; t++) idle(500), fill[t] = bright_ranks(ARM_A);
+    for (int t = 0; t < 3; t++) idle(200), fill[t] = bright_ranks(ARM_A);
+    CHECK(!edge_lit(), "no sparks while it fills up");
+    idle(100);
+    blast_t early = watch(300, tip(ARM_A), ARM_A);
+    idle(500);
+    blast_t late = watch(300, tip(ARM_A), ARM_A);
+    bool sending = nsent - from < frames_per_run();
     idle(3000);
     CHECK(run_was(from, true, &frames) && nsent == from + frames, "A sends the power-on codes (%d frames)",
           nsent - from);
-    CHECK(fill[0] < fill[1] && fill[1] < fill[2] && !bright_ranks(ARM_B), "the arm to A fills up (%d, %d, %d)",
-          fill[0], fill[1], fill[2]);
+    CHECK(fill[0] < fill[1] && fill[1] < fill[2] && fill[1] - fill[0] < fill[2] - fill[1] && !bright_ranks(ARM_B),
+          "the arm to A fills up, slowly, then faster (%d, %d, %d)", fill[0], fill[1], fill[2]);
+    CHECK(early.full && early.dark && late.full && late.dark, "then it flashes");
+    CHECK(sending && early.sparks && late.sparks > 2 * early.sparks && early.far < 48 && late.far > early.far + 30,
+          "while it sends, sparks fly round the outline, more and further later (%d to %d, %d to %d of 256)",
+          early.sparks, late.sparks, early.far, late.far);
     uint32_t total = 0;
     int sony = 0;
     for (int i = from; i < nsent; i++) total += sent[i].us, sony += sent[i].kind == 'Y' && sent[i].us == 45000;
     CHECK(total > 1800000 && total < 2600000, "in about two seconds (%u ms)", total / 1000);
     CHECK(sony == 3, "Sony frames 45 ms apart (%d)", sony);
-    CHECK(mock_leds[layout_grid[6][5]] == 150 && !bright_ranks(ARM_A), "then it is calm again");
+    CHECK(mock_leds[layout_grid[6][5]] == 150 && !bright_ranks(ARM_A) && !edge_lit(), "then it is calm again");
 
     // B: power off
     int on_from = from;

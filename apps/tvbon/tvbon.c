@@ -1,8 +1,9 @@
 // TVBOn: turns the TVs around you on or off, by infrared. Press A: the
 // badge sends the power-on code of each TV brand it knows (Samsung, LG,
-// Hisense, Sony, Panasonic, Philips, Toshiba), and the arm to A fills up
-// green as they go out. Press B: the power-off codes, and the arm to B
-// fills up red. Brands with only a power toggle (TCL, Xiaomi, newer
+// Hisense, Sony, Panasonic, Philips, Toshiba): the arm to A fills up
+// green, faster and faster, then flashes while sparks fly over the
+// outline, more and wider the longer it sends. Press B: the power-off
+// codes, the same in red to B. Brands with only a power toggle (TCL, Xiaomi, newer
 // Hisense, Philips and Toshiba, Sharp, Telefunken and others by Vestel,
 // Hitachi)
 // get it with A and with B, first, so a TV that knows both ends with its
@@ -14,7 +15,8 @@
 #define ARM_B 1              // the upper right arm, with B at its tip
 #define RANKS 7              // RGB LEDs on an arm, 0 nearest the centre
 #define TAP_MS 600           // A held longer is the menu (it opens at 1 s), not ON
-#define DONE_MS 600          // the arm flashes this long after the last code
+#define FILL_MS 700          // the arm fills up in this time, then flashes until the codes are out
+#define DONE_MS 600          // and this long after the last code
 #define GAP_US 50000         // quiet after a NEC, Samsung or Panasonic frame
 #define SONY_FRAME_US 45000  // a Sony frame starts every 45 ms
 #define RC5_HALF_US 889      // half an RC5 bit
@@ -73,6 +75,10 @@ static bool built;    // buf[next] holds frame `frame`
 static uint32_t ms, a_down, done_ms;
 static bool a_tap;
 static uint8_t toggle;  // RC5's and RC6's toggle bit, new for each press
+static uint32_t run_ms;  // since the press
+static uint8_t blast_from;  // the frame the blast started at, frames while it fills up
+static uint8_t spark[HH_EDGE_COUNT];  // the sparks on the outline, fading
+static uint8_t tip_angle[2];          // where the arms to A and B point (polar)
 
 // A frame of pulse distance coding (NEC, Samsung, Panasonic): a leader,
 // then n bytes LSB first, each bit a mark of t and a space of t (0) or
@@ -216,7 +222,8 @@ static void start(uint8_t m) {
     frame = 0;
     toggle ^= 1;
     built = false;
-    done_ms = 0;
+    done_ms = run_ms = 0;
+    blast_from = frames;
 }
 
 // Sends the next frame once the one before has gone out. The firmware reads
@@ -259,6 +266,22 @@ static void arm(uint8_t which, bool red, uint8_t level, int lit) {
     }
 }
 
+// Sparks on the outline around the arm at angle a: more of them and further
+// round the star as e (0 .. 255) grows; each fades in about 0.15 s
+static void sparks(uint8_t a, uint8_t e, uint32_t elapsed_ms) {
+    for (int j = 0; j < HH_EDGE_COUNT; j++) spark[j] = spark[j] > elapsed_ms * 2 ? spark[j] - elapsed_ms * 2 : 0;
+    if (e) {
+        int width = 16 + e * 112 / 255;  // half the arc, in 1/256 turn: up to the whole star
+        for (int n = 1 + e / 40; n > 0; n--) {
+            int j = (int)(hh->random() % HH_EDGE_COUNT);
+            int off = (int8_t)(hh->polar[hh->edge[j]][1] - a);
+            if (off < 0) off = -off;
+            if (off <= width) spark[j] = 255;
+        }
+    }
+    for (int j = 0; j < HH_EDGE_COUNT; j++) hh->set(hh->edge[j], spark[j]);
+}
+
 static void tick(uint32_t elapsed_ms) {
     ms += elapsed_ms;
     uint8_t p = hh->pressed(), h = hh->held();
@@ -272,17 +295,25 @@ static void tick(uint32_t elapsed_ms) {
     if (mode != IDLE) send();
 
     // The arms: dim, with a wave running out, while nothing happens. The
-    // active one fills up to full as the frames go out, then flashes.
+    // active one fills up, slowly and then faster, then blasts: it flashes,
+    // faster and faster, with sparks around it, until the codes are out.
     bool busy = mode != IDLE || done_ms;
-    int lit = mode != IDLE ? frame * RANKS / frames : 0;
+    if (mode != IDLE) run_ms += elapsed_ms;
+    if (mode != IDLE && run_ms >= FILL_MS && blast_from == frames) blast_from = frame;
+    bool blast = done_ms || (mode != IDLE && run_ms >= FILL_MS);
+    uint8_t e = 0;  // how far the blast has come, by the frames sent since it started
+    if (done_ms) e = 255;
+    else if (blast) e = (uint8_t)((frame - blast_from) * 255 / (frames - blast_from));
+    int lit = mode != IDLE ? (int)(RANKS * run_ms * run_ms / (FILL_MS * FILL_MS)) : 0;
     uint8_t level = 120;
-    if (done_ms) {
-        bool on = done_ms / 150 % 2 == 0;
+    if (blast) {
+        bool on = ms / (150 - e * 90 / 255) % 2 == 0;
         lit = on ? RANKS : 0, level = 40;
     }
     hh->clear();
     arm(ARM_A, false, busy ? (last == ON ? level : 40) : 90, busy && last == ON ? lit : 0);
     arm(ARM_B, true, busy ? (last == OFF ? level : 40) : 90, busy && last == OFF ? lit : 0);
+    sparks(tip_angle[last == OFF], blast ? e : 0, elapsed_ms);
 
     // The grid: TV, then ON and OFF; while one goes out, that one bright
     word(5, 1, "TV", 255);
@@ -293,6 +324,9 @@ static void tick(uint32_t elapsed_ms) {
 static void init(const hh_api_t* api) {
     hh = api;
     for (unsigned i = 0; i < BRAND_COUNT; i++) frames += BRANDS[i].repeats;
+    for (int i = 0; i < HH_RGB_COUNT; i++)
+        if (hh->rgb[i].rank == RANKS - 1 && (hh->rgb[i].arm == ARM_A || hh->rgb[i].arm == ARM_B))
+            tip_angle[hh->rgb[i].arm == ARM_B] = hh->polar[hh->rgb[i].r][1];
 }
 
 HH_APP(init, tick);

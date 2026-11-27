@@ -42,6 +42,15 @@ void standby(void) {
     EXTI->EVENR &= ~STANDBY_WAKE_LINES;
     EXTI->FTENR &= ~STANDBY_WAKE_LINES;
     EXTI->INTFR = STANDBY_WAKE_LINES;
+#if FUNCONF_ENABLE_HPE
+    // The interrupt handlers save no registers themselves (IRQ_HANDLER in
+    // funconfig.h): they need HPE on. CH643RM 2.3 says the system just
+    // continues after standby, so INTSYSCR should still hold what the
+    // startup wrote. Write it again anyway (the same 0x0b: HPE and nesting
+    // on) before any interrupt is enabled again, so that a wake can never
+    // leave HPE off.
+    __set_INTSYSCR(0x0b);
+#endif
 
     LEDMatrix_Init();
     WebUSB_Init();

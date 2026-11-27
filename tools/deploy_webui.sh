@@ -30,7 +30,7 @@ commit=$(git rev-parse --short HEAD)
 date=$(git log -1 --format=%cs HEAD)
 printf '{"commit": "%s", "date": "%s"}\n' "$commit" "$date" > "$tmp/webui/version.json"
 # The firmware the page's Firmware panel flashes: built from this commit
-if [ -n "$(git status --porcelain -- '*.c' '*.h' Makefile apps/hhapp.h)" ]; then
+if [ -n "$(git status --porcelain -- '*.c' '*.h' Makefile apps/hhapp.h tools/saverestore.S)" ]; then
 	echo "The firmware sources have uncommitted changes: commit them first, so the" >&2
 	echo "site's firmware is the one of $commit." >&2
 	exit 1

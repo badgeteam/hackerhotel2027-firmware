@@ -27,10 +27,10 @@ earn its place. This is how the space is split, and what uses it now:
 
 | Memory | Size | Use | In use now |
 |---|---|---|---|
-| Flash | 30 KB | firmware | 25.8 KB |
+| Flash | 30 KB | firmware | 23.3 KB |
 | Flash | 31 KB | item store: animations, texts and apps | what you store |
 | Flash | 1 KB | persistent record: name, brightness, boot item, app data | 2 × 512 B |
-| RAM | 8 KB | firmware data and stack | 5.0 KB data, the rest is stack |
+| RAM | 8 KB | firmware data and stack | 4.9 KB data, the rest is stack |
 | RAM | 12 KB | the app that runs (its code and data); while an animation plays, the animation decoder | snake: 1.4 KB code + 0.6 KB data; the decoder 4 KB |
 
 How we juggle space and usability:

@@ -159,7 +159,7 @@ static char* dec(unsigned v) {
 // Appends to the panel text, bounded
 static void put(const char* s) {
     char* p = S.put_at;
-    while (*s && p < S.panel_text + sizeof S.panel_text - 1) *p++ = *s++;
+    while (*s && p < &S.panel_text[sizeof S.panel_text - 1]) *p++ = *s++;
     *p = 0;
     S.put_at = p;
 }

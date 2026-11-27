@@ -39,7 +39,7 @@ const NO_ITEM = 0xff;
 // The firmware's app API version (HH_API_VERSION in apps/hhapp.h) that this
 // web interface was made with. A badge with an older one lacks commands or
 // modes the page uses: the page asks for a firmware update.
-const FIRMWARE_API = 6;
+const FIRMWARE_API = 7;
 
 // The status reply's result byte (STORE_ERR_* in store.h)
 const STORE_ERRORS = {
@@ -71,6 +71,12 @@ class LedMatrixDevice extends EventTarget {
 
 	get emulator() {
 		return !!this.device?.emulator;
+	}
+
+	// The badge's USB serial number: 16 hex digits from the chip's unique ID
+	// ("001" on older firmware). Empty for the emulator.
+	get serialNumber() {
+		return (this.device?.serialNumber || '').replace(/\0+$/, '');
 	}
 
 	// The emulator (tools/emu/emu.py --web) serves this page and takes the
@@ -159,6 +165,13 @@ class LedMatrixDevice extends EventTarget {
 		let d;
 		if (this.emulator) {
 			const r = await fetch('usb', { method: 'POST', body: new Uint8Array(bytes) });
+			if (r.status === 503) {
+				// USB unplugged in the emulator (V): a disconnect, as WebUSB
+				// reports when a badge is unplugged
+				this.device = null;
+				this.dispatchEvent(new CustomEvent('disconnect'));
+				return null;
+			}
 			if (!r.ok) throw new Error(`emulator: ${r.status} ${r.statusText}`);
 			d = new DataView(await r.arrayBuffer());
 		} else {

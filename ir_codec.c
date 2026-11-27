@@ -3,29 +3,28 @@
 
 // ---- Frames to send ----
 
+// A frame of a leader and bits, on the 38 kHz carrier
+static void frame(ir_frame_t* f, uint16_t leader_mark, uint16_t leader_space, uint16_t bits, uint8_t jvc) {
+    f->leader_mark = leader_mark;
+    f->leader_space = leader_space;
+    f->bits = bits;
+    f->jvc = jvc;
+    f->carrier_hz = IR_CARRIER_HZ;
+    f->raw = NULL;
+}
+
 void IrFrame_Nec(ir_frame_t* f, uint32_t data) {
-    f->leader_mark = IR_NEC_LEADER_MARK;
-    f->leader_space = IR_NEC_LEADER_SPACE;
-    f->bits = 32;
-    f->jvc = 0;
+    frame(f, IR_NEC_LEADER_MARK, IR_NEC_LEADER_SPACE, 32, 0);
     for (int i = 0; i < 4; i++) f->bytes[i] = (uint8_t)(data >> (8 * i));
 }
 
 void IrFrame_Shot(ir_frame_t* f, uint16_t bits) {
-    f->leader_mark = IR_SHOT_LEADER_MARK;
-    f->leader_space = IR_SHOT_LEADER_SPACE;
-    f->bits = 16;
-    f->jvc = 1;
+    frame(f, IR_SHOT_LEADER_MARK, IR_SHOT_LEADER_SPACE, 16, 1);
     f->bytes[0] = (uint8_t)bits;
     f->bytes[1] = (uint8_t)(bits >> 8);
 }
 
-void IrFrame_NecRepeat(ir_frame_t* f) {
-    f->leader_mark = IR_NEC_LEADER_MARK;
-    f->leader_space = IR_NEC_REPEAT_SPACE;
-    f->bits = 0;
-    f->jvc = 0;
-}
+void IrFrame_NecRepeat(ir_frame_t* f) { frame(f, IR_NEC_LEADER_MARK, IR_NEC_REPEAT_SPACE, 0, 0); }
 
 uint8_t Ir_Crc8(const uint8_t* p, unsigned n) {
     uint8_t c = 0;
@@ -38,20 +37,26 @@ uint8_t Ir_Crc8(const uint8_t* p, unsigned n) {
 
 bool IrFrame_Packet(ir_frame_t* f, uint8_t type, const uint8_t* data, uint8_t length) {
     if (length > IR_PACKET_DATA_MAX) return false;
-    f->leader_mark = IR_PACKET_LEADER_MARK;
-    f->leader_space = IR_PACKET_LEADER_SPACE;
+    frame(f, IR_PACKET_LEADER_MARK, IR_PACKET_LEADER_SPACE, (uint16_t)(8 * (length + 3)), 0);
     f->bytes[0] = type;
     f->bytes[1] = length;
     if (length) memcpy(&f->bytes[2], data, length);
     f->bytes[2 + length] = Ir_Crc8(f->bytes, 2u + length);
-    f->bits = (uint16_t)(8 * (length + 3));
-    f->jvc = 0;
     return true;
 }
 
-uint16_t IrFrame_Segments(const ir_frame_t* f) { return (uint16_t)(2 + 2 * f->bits + 1); }
+bool IrFrame_Raw(ir_frame_t* f, const uint16_t* us, uint16_t count, uint32_t carrier_hz) {
+    if (!count || carrier_hz < IR_RAW_CARRIER_MIN || carrier_hz > IR_RAW_CARRIER_MAX) return false;
+    f->carrier_hz = (uint16_t)carrier_hz;
+    f->raw = us;
+    f->raw_count = count;
+    return true;
+}
+
+uint16_t IrFrame_Segments(const ir_frame_t* f) { return f->raw ? f->raw_count : (uint16_t)(2 + 2 * f->bits + 1); }
 
 uint16_t IrFrame_SegmentUs(const ir_frame_t* f, uint16_t i) {
+    if (f->raw) return f->raw[i];
     if (i == 0) return f->leader_mark;
     if (i == 1) return f->leader_space;
     i -= 2;
@@ -60,6 +65,11 @@ uint16_t IrFrame_SegmentUs(const ir_frame_t* f, uint16_t i) {
     bool one = (f->bytes[bit / 8] >> (bit % 8)) & 1;
     if (f->jvc) return one ? IR_SHOT_ONE_SPACE : IR_SHOT_ZERO_SPACE;
     return one ? IR_ONE_SPACE : IR_ZERO_SPACE;
+}
+
+uint16_t Ir_CarrierPeriods(uint32_t us, uint32_t hz) {
+    uint32_t n = (us * hz + 500000) / 1000000;
+    return n ? (uint16_t)n : 1;
 }
 
 // ---- Receiving ----

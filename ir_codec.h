@@ -26,8 +26,16 @@
 //
 // A packet with n data bytes takes 6.75 ms + (n + 3) * 8 bits of 1.1 or
 // 2.2 ms: 0.2 s for a 10-letter name, 0.65 s at most.
+//
+// A raw frame (IrFrame_Raw) is any list of marks and spaces, on a carrier
+// of its own: for other remote controls (Sony, RC5, ...). The receiver
+// only knows the frames above.
 #include <stdbool.h>
 #include <stdint.h>
+
+#define IR_CARRIER_HZ 38000  // every frame but a raw one
+#define IR_RAW_CARRIER_MIN 20000
+#define IR_RAW_CARRIER_MAX 60000  // Ir_CarrierPeriods() stays within 32 bits
 
 #define IR_NEC_LEADER_MARK 9000
 #define IR_NEC_LEADER_SPACE 4500
@@ -48,12 +56,15 @@
 #define IR_PACKET_DATA_MAX 32
 #define IR_FRAME_BYTES (IR_PACKET_DATA_MAX + 3)  // type, length, data, CRC
 
-// A frame to send: its leader and its bits
+// A frame to send: its leader and its bits, or a raw frame's marks and spaces
 typedef struct {
     uint16_t leader_mark, leader_space;  // us
     uint16_t bits;                       // 0 (a repeat code) .. 8 * IR_FRAME_BYTES
     uint8_t jvc;                         // the bits in JVC timing (a shot), not NEC
     uint8_t bytes[IR_FRAME_BYTES];
+    uint16_t carrier_hz;
+    const uint16_t* raw;  // a raw frame: its marks and spaces in us, in the caller's array; else NULL
+    uint16_t raw_count;
 } ir_frame_t;
 
 void IrFrame_Nec(ir_frame_t* f, uint32_t data);  // 32 bits, as received
@@ -61,11 +72,17 @@ void IrFrame_NecRepeat(ir_frame_t* f);
 void IrFrame_Shot(ir_frame_t* f, uint16_t bits);  // 16 bits, CRC included (IrShot_Encode)
 // false if length > IR_PACKET_DATA_MAX
 bool IrFrame_Packet(ir_frame_t* f, uint8_t type, const uint8_t* data, uint8_t length);
+// count marks and spaces, starting with a mark, each us[i] us long; the
+// frame keeps the pointer, so us must stay as it is until it has gone out.
+// false if count is 0 or the carrier is outside IR_RAW_CARRIER_MIN .. MAX.
+bool IrFrame_Raw(ir_frame_t* f, const uint16_t* us, uint16_t count, uint32_t carrier_hz);
 
 // The frame as alternating marks and spaces, starting with a mark:
 // IrFrame_Segments() of them, segment i lasting IrFrame_SegmentUs(f, i)
 uint16_t IrFrame_Segments(const ir_frame_t* f);
 uint16_t IrFrame_SegmentUs(const ir_frame_t* f, uint16_t i);
+// us as whole periods of a carrier of hz, rounded, at least 1
+uint16_t Ir_CarrierPeriods(uint32_t us, uint32_t hz);
 
 uint8_t Ir_Crc8(const uint8_t* p, unsigned n);
 

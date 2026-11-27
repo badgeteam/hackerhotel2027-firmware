@@ -51,8 +51,8 @@ notes.
 |---|---|---|
 | Hold A (0.6 s): the menu, also in a game ([USAGE][u-always]) | done: [#34] | Hold A 0.7 s, or 1 s in an app. The app also gets that press of A. |
 | Tap, hold and chord rules: a chord never taps or holds ([USAGE][u-buttons]) | partly | A held together with another button still opens the menu. Each app reads `pressed()` and `held()` and makes its own rules. |
-| Hold ◀ + ▶ for 3 s: reboot into the USB boot ROM, after an arrow runs down the grid for a second ([USAGE][u-always]) | replaced: [#34], [#33] | UPDATE in the menu, or the firmware update in the web interface (`CMD_BOOT_ROM`). There is no chord and no arrow. |
-| The same chord, held while USB is plugged in ([BRINGUP][bringup], steps 3 and 10) | untracked | To reach the boot ROM, the menu must work. A button held at power-on is now the safe start: the badge skips the boot item ([#1]). |
+| Hold ◀ + ▶ for 3 s: reboot into the USB boot ROM, after an arrow runs down the grid for a second ([USAGE][u-always]) | done: [#77] | Hold C + D for 3 s: on the name tag, in the menu, in an app and in the factory test. The same arrow, then the boot ROM. UPDATE in the menu ([#34]) and the web interface's firmware update ([#33]) also reach it. |
+| The same chord, held while USB is plugged in ([BRINGUP][bringup], steps 3 and 10) | done: [#77] | C + D held at power-on first make the safe start (the badge skips the boot item, [#1]). After 3 s the arrow runs and the boot ROM starts. |
 | Hold A + B for 3 s: the bring-up test ([USAGE][u-bringup]) | partly: [#59] | The same two switches now only leave the factory test. See [Bring-up test](#bring-up-test). |
 | Tap A on the name tag or an animation: brightness ([USAGE][u-nametag]) | replaced | Outside apps, B is brighter and D dimmer. The level shows on the grid for a second. |
 | ◀ / ▶ on the name tag or an animation: previous / next screen ([USAGE][u-nametag]) | partly: `ledmatrix.c` | A tap of C shows the next: the name tag, then every animation and text in store order, then the name tag again. Apps are skipped: an app keeps C, so browsing into one would end the browsing. The old animations are apps now, and the recommended set holds only apps, so on a new badge C has nothing to browse until people store their own animations or texts. Only forward: B and D stay the brightness, and C + D is a chord. NAME TAG in the menu leaves an app, and the next tap of C starts the first animation or text. |
@@ -155,8 +155,8 @@ apps, the item store and firmware updates.
 | Pick what the badge shows | replaced: [#1] | **Start** next to the item in the web interface, or `tools/badge.py run N`. |
 | Set the brightness | done | USB command `0x32` BRIGHTNESS (1 .. 255, kept over power-off): **Brightness** in the web interface's **Your badge** (the 6 levels), and `tools/badge.py brightness N`. |
 | Read the state every second: what shows, the brightness, charging | partly | The page asks every second: mode, brightness, store, app API. There is no charging bit ([#9]). |
-| Windows: Microsoft OS 2.0 descriptor, WinUSB, no driver to install ([README][r-setup]) | untracked | `usb_config.h` has no BOS descriptor (bcdUSB 2.00). Not checked on Windows. |
-| USB serial number made from the chip's unique ID ([BRINGUP][bringup], step 2) | untracked | The serial number is always `001`. |
+| Windows: Microsoft OS 2.0 descriptor, WinUSB, no driver to install ([README][r-setup]) | done: [#77] | USB 2.1 with a BOS descriptor: the Microsoft OS 2.0 set (WINUSB and a DeviceInterfaceGUIDs property) and the WebUSB landing page. `tools/usb_test` checks every length. Not yet checked on Windows. |
+| USB serial number made from the chip's unique ID ([BRINGUP][bringup], step 2) | done: [#77] | 16 hex digits, from the first 8 bytes of the unique ID. `tools/badge.py list` and the web interface show it, and `tools/badge.py --serial` picks a badge. |
 | USB ID 1209:D035 | replaced | Now 1209:D643. |
 
 ## UART console
@@ -174,7 +174,7 @@ wants the UART's RX pin.
 | `show N` | replaced: [#1] | `tools/badge.py run N`. |
 | `level N` | replaced | `tools/badge.py brightness N` (1 .. 255), and the web interface. |
 | `hello` | partly: [#37] | SAY HI in the menu. No USB command. |
-| `test` | tracked: [#11] | |
+| `test` | partly: [#11] | `tools/badge.py bringup` walks the LEDs from the host. `docs/BRINGUP.md` has the rest as a checklist. |
 | `factory` | replaced: [#59] | `tools/badge.py factory` (USB command `0x52`). |
 | `factory skip` | untracked | |
 | `sponsors` | tracked: [#12] | |
@@ -188,7 +188,7 @@ This one is in `docs/FACTORY_TEST.md`.
 
 | Old feature | Status now | Notes |
 |---|---|---|
-| Runs at every power-on until it passes once; kept in flash | done: [#59] | Not in the emulator, which skips it at power-on. |
+| Runs at every power-on until it passes once; kept in flash | done: [#59] | The emulator skips it at power-on, except after `--fresh` (`tools/emu/emu.py`). |
 | LED and ROW: the volunteer taps B (good) or A (bad) | replaced: [#62] | Both run by themselves. A bad LED or row means the repair pile. |
 | KEY, fails after 20 s | done: [#59] | `make FACTORY_KEYS=0` leaves it out ([#62]). |
 | USB, fails after 10 s | done: [#59] | Also shows `CHG` while the battery charges. |
@@ -202,13 +202,15 @@ This one is in `docs/FACTORY_TEST.md`.
 
 The old bring-up test ([USAGE][u-bringup], [`src/selftest.rs`][selftest])
 checked a new board step by step, with a log on J3. Issue [#11] tracks it.
-The factory test now covers some of the steps.
+The factory test now covers some of the steps, `tools/badge.py bringup`
+walks the LEDs from the host, and `docs/BRINGUP.md` is the checklist for
+a new board.
 
 | Old step | Status now | Notes |
 |---|---|---|
-| COM: all 24 PWM channels on one COM line, PB0..PB15 in turn | partly: [#59] | The factory ROW step walks the rows and columns in the order you see, not in wire order. |
-| PWM: one PWM channel on all COM lines, PA0..PA23 in turn | partly: [#59] | The same. |
-| LED: one LED at a time, with its designator in the log (`slot 41: PB1 PA17 D35 green`) | tracked: [#11] | `webui/board_data.js` has the designators (`ref`), so a host tool could walk the LEDs over USB. |
+| COM: all 24 PWM channels on one COM line, PB0..PB15 in turn | done: [#59], `tools/badge.py` | The factory ROW step walks the rows and columns in the order you see. `tools/badge.py bringup --lines rows` walks them in wire order, with the designators on each line. |
+| PWM: one PWM channel on all COM lines, PA0..PA23 in turn | done: [#59], `tools/badge.py` | The same, with `--lines cols`. |
+| LED: one LED at a time, with its designator in the log (`slot 41: PB1 PA17 D35 green`) | done: `tools/badge.py` | `tools/badge.py bringup` lights one LED at a time over USB and prints its designator from `webui/board_data.js`, its colour, COM line, PWM channel and column resistor. No firmware bytes. `docs/BRINGUP.md`, step 9. |
 | ALL: every LED on at the current brightness, to measure the current | partly: [#59] | The factory LED step lights every LED, but only for 4.5 s. |
 | GRY: a grey ramp on the grid, the arms in five colours | tracked: [#11] | |
 | KEY: the buttons held | done: [#59] | The factory KEY step. |
@@ -231,10 +233,10 @@ The factory test now covers some of the steps.
 | Old feature | Status now | Notes |
 |---|---|---|
 | The firmware on the PC, the buttons drawn on the board ([USAGE][u-emu]) | done: [#3] | Apps run in a RISC-V interpreter. Keys A, B, C, D, or click. |
-| `C`: USB power on and off (charging) | untracked | `tools/emu/hw.c`: the emulated badge is always on USB and never charges. |
+| `C`: USB power on and off (charging) | done: `tools/emu` | `V` plugs USB power in and out (PC3). `U` makes the battery charge, stop, or go away: then CHRG (PB22) toggles, as the charger does without a battery. Buttons under the board do the same, and `tools/emu/headless.py` has `usb_power()`, `charging()` and `no_battery()`. |
 | `R`: reset | done: [#3] | `R` powers off and on; a key held then is held at power-on (safe start). |
 | A name kept over `R`, lost when the emulator closes | done: [#3] | The flash is a file, so everything stays. |
-| `--fresh`: the factory test, then the sponsor reel | untracked | The emulator skips the factory test at power-on. `tools/factory_test` starts it over USB. |
+| `--fresh`: the factory test, then the sponsor reel | partly: `tools/emu` | `--fresh` erases the persistent record (the items stay), so the factory test runs at power-on. It runs on a copy of the flash file; `--keep` erases the record in the file itself. There is no sponsor reel yet ([#12]). |
 | One shared infrared room (UDP 127.255.255.255:8028) | done: [#3], [#37] | |
 | stdin is the UART console | tracked: [#10] | stdin carries the emulator's own protocol now. |
 | `--web`: the setup page on localhost, any browser | done: [#3] | The whole web interface. |
@@ -242,7 +244,7 @@ The factory test now covers some of the steps.
 | `ir_game.py`: 4 in a row on two emulators, also with 30 % of packets lost | partly: [#38] | `tools/four_test` plays whole games on two emulators, without lost packets. |
 | USB protocol fuzz test, 200 000-frame soak | partly | `tools/app_test` gives every app random buttons in the emulator. No USB fuzz test. |
 | `tools/sim/docs_gifs.sh`: GIFs of every screen for the docs | untracked | The docs here have no GIFs. |
-| CI fails the build over 61440 bytes, the most the `wchisp` command-line tool can flash without harm there ([README][r-tools]) | untracked | The linker stops at 30720 B (`ledmatrix.ld`). The `wchisp` command-line tool can erase the start of the item store from 29697 B (see [Hardware notes](#hardware-notes)). Nothing checks for that. The firmware is 27964 B now. |
+| CI fails the build over 61440 bytes, the most the `wchisp` command-line tool can flash without harm there ([README][r-tools]) | untracked | The linker stops at 30720 B (`ledmatrix.ld`). The `wchisp` command-line tool can erase the start of the item store from 29697 B (see [Hardware notes](#hardware-notes)). Nothing checks for that. The firmware is 28568 B now. |
 | `tools/gen_layout.py` from the KiCad board | partly | Now from `webui/board_data.js`; the script that makes that file is missing ([#13]). |
 
 ## Hardware notes
@@ -295,7 +297,9 @@ Some may be out of date for the current hardware revision.
 - **Early silicon.** Chip ID (0x1FFFF704) bits 7:4 are the silicon
   revision. On revision 0, GPIO CFGHR cannot be read back.
 - **Standby current.** The old Rust firmware drew 2.84 mA in standby,
-  not the datasheet's 55 µA ([#14]).
+  not the datasheet's 55 µA ([#14]). But the IR receiver S1 is always on
+  (VCC through R28), and its listing gives up to 2.5 mA: it can account
+  for most of that. See `docs/BRINGUP.md`, step 12.
 
 ## Untracked gaps
 
@@ -317,25 +321,33 @@ decision first: is it worth the flash, and is it worth the work?
    so it would look as if C stopped working). Apps start from the menu.
    NAME TAG in the menu leaves an app, and the next tap of C starts the
    first animation or text.
-4. **A boot ROM chord.** C + D for 3 s reboots into the boot ROM, so a
-   badge with a broken menu can still be flashed over USB.
-5. **WinUSB on Windows.** A BOS descriptor with the Microsoft OS 2.0
-   descriptor, so Windows needs no driver install.
-6. **A unique USB serial number**, from the chip's unique ID, so two
-   badges on one PC can be told apart.
+4. **A boot ROM chord.** Done ([#77]): C + D for 3 s reboots into the boot ROM
+   (`ledmatrix.c`), so a badge with a broken menu can still be flashed
+   over USB.
+5. **WinUSB on Windows.** Done ([#77]): a BOS descriptor with the Microsoft OS
+   2.0 descriptor (`usb_descriptors.h`), so Windows needs no driver
+   install for the badge. The boot ROM still needs one.
+6. **A unique USB serial number.** Done ([#77]): from the chip's unique ID
+   (`usb_descriptors.h`), so two badges on one PC can be told apart.
 7. **Pull up the unused pads** (PC6–PC9, PC12, PC13, PC20, and PC0–PC2,
    PC14, PC15). Could be part of [#14].
 8. **Factory test overrides.** A way to pass IR untested, as B on `IR?`
    did, and to mark the test as passed (`factory skip`). This is a
    decision for the organisers of the flashing table.
-9. **Emulator: USB and charging.** A key that turns USB power on and off
-   and makes the badge charge, for [#9] and the factory test's USB step.
-10. **Emulator: a fresh start** that runs the factory test at power-on.
-11. **Bring-up from the host.** A tool that walks the LEDs one at a time
-    over USB and prints each designator from `webui/board_data.js`. It
-    needs no firmware bytes. Could be part of [#11].
+9. **Emulator: USB and charging.** Done (`tools/emu`): `V` turns USB
+   power on and off, and `U` makes the battery charge, stop, or go away
+   (CHRG then toggles), for [#9] and the factory test's USB step.
+10. **Emulator: a fresh start.** Done (`tools/emu`): `--fresh` runs the
+    factory test at power-on, on a copy of the flash file with the
+    persistent record erased.
+11. **Bring-up from the host.** Done: `tools/badge.py bringup` walks
+    the LEDs one at a time over USB and prints each designator from
+    `webui/board_data.js`, with its COM line, PWM channel and column
+    resistor. `--lines` lights whole COM lines or PWM channels. It needs
+    no firmware bytes.
 12. **A bring-up checklist** for this firmware, as the old BRINGUP.md
-    was: what to measure on a new board, and in which order.
+    was. Done: `docs/BRINGUP.md`, from visual inspection to the standby
+    current, with the parts and nets from the KiCad files.
 13. **More tests:** a USB protocol fuzz test, and 4 in a row on two
     emulators with lost packets.
 14. **GIFs in the docs**, recorded from the emulator.
@@ -415,3 +427,4 @@ decision first: is it worth the flash, and is it worth the work?
 [#59]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/59
 [#62]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/62
 [#66]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/66
+[#77]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/77

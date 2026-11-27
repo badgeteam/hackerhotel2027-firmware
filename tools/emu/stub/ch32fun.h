@@ -15,7 +15,7 @@ typedef struct { __IO uint32_t AHBPCENR, APB1PCENR, APB2PCENR; } RCC_TypeDef;
 typedef struct { __IO uint8_t BASE_CTRL, UDEV_CTRL; } USBFS_TypeDef;
 typedef struct { __IO uint32_t UID0, UID1, UID2; } ESG_TypeDef;
 
-extern GPIO_TypeDef emu_gpio[3];  // A, B, C; INDR of B and C carries the buttons
+extern GPIO_TypeDef emu_gpio[3];  // A, B, C; INDR of B and C carries the buttons, USB power and the charger
 extern AFIO_TypeDef emu_afio;
 extern RCC_TypeDef emu_rcc;
 extern USBFS_TypeDef emu_usbfs;
@@ -40,6 +40,8 @@ extern ESG_TypeDef emu_esig;
 #define GPIO_CFGLR_IN_PUPD 0x8
 
 #define RCC_USBFS (1u << 12)
+#define RCC_IOPBEN (1u << 3)  // power.c
+#define RCC_IOPCEN (1u << 4)
 #define RB_UC_RESET_SIE 0x04
 #define RB_UC_CLR_ALL 0x02
 #define UDP_PUE_MASK 0x0C
@@ -68,3 +70,6 @@ static inline void __enable_irq(void) {}
 // the firmware's printf goes to the emulator's log
 int emu_printf(const char* fmt, ...) __attribute__((format(__printf__, 1, 2)));
 #define printf emu_printf
+
+// ledmatrix.c: run the factory test at power-on, as the badge does (hw.c)
+extern bool emu_factory_at_power_on;

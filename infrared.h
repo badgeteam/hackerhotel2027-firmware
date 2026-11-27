@@ -33,6 +33,14 @@ bool infrared_deinit(void);
 bool infrared_send_nec(uint16_t address, uint8_t command);
 bool infrared_send_nec_raw(uint32_t data);  // 32 bits, sent LSB first
 bool infrared_send_nec_repeat(void);
+// Start sending count marks and spaces (starting with a mark, in us) on a
+// carrier of carrier_hz (IR_RAW_CARRIER_MIN .. MAX, ir_codec.h): for other
+// remote controls. us is read while it goes out: leave it as it is until
+// then. False while something else goes out, or for a bad count or carrier.
+bool infrared_send_raw(const uint16_t* us, uint16_t count, uint32_t carrier_hz);
+// Stop a raw frame that still goes out, LED off: its marks and spaces are
+// in the app's RAM, which the next app or animation takes over
+void infrared_abort_raw(void);
 bool infrared_tx_busy(void);
 // Decode the badge's own transmission too, as the receiver sees it (a
 // reflection, or straight from the LED): the factory test's IR step

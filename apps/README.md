@@ -94,6 +94,9 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   do not make a long press of A do something. The badge also leaves
   the app when the web interface sends a command (a frame, Stop, Run), or
   when the app calls `exit()`. After an app, the badge shows the name tag.
+- **The boot ROM.** Holding C and D together for 3 s reboots the badge
+  into its USB boot ROM, also from an app. Do not make people hold both
+  for that long.
 - **Saving.** `name()` gives the owner's name, which is set in the web
   interface or by an app with `set_name()`. An app can keep up to 28
   bytes with `save()` and `load()`, for example its high scores. The data
@@ -116,8 +119,8 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 ## Limits
 
 - **API version.** An app does not start on firmware with an older
-  `HH_API_VERSION` than the one it was built against (6: shots,
-  `ir_receive_shot`; 5: the infrared packets; 4: the helpers; 3: `polar`;
+  `HH_API_VERSION` than the one it was built against (7: raw infrared,
+  `ir_send_raw`; 6: shots, `ir_receive_shot`; 5: the infrared packets; 4: the helpers; 3: `polar`;
   2: the text calls); update the
   badge first. `tools/badge.py list` prints the firmware's version ("app API").
 

@@ -224,7 +224,7 @@ a new board.
 |---|---|---|
 | Sponsor reel: once, at the first power-on after the factory test; "THANKS TO", then each logo with the arms in the sponsor's colours ([USAGE][u-sponsors]) | tracked: [#12] | The logos are in the old repository's `assets/sponsors`, the tool is its `tools/sim/logo.py`. |
 | SPONSORS in the menu, `sponsors` on the console | tracked: [#12] | An animation item in the store can show logos now; playing it once needs the firmware. |
-| Charging screen: a battery that fills, over and over, while USB charges; a tap hides it; not over a game or the menu ([USAGE][u-always]) | tracked: [#9] | `Power_Charging()` reads CHRG (PB22), but only the factory test uses it. Apps have no `charging()`. |
+| Charging screen: a battery that fills, over and over, while USB charges; a tap hides it; not over a game or the menu ([USAGE][u-always]) | done in the NAMETAG app: [#9] | The firmware debounces CHRG (PB22, `power.c`) for the factory test and apps' `charging()`. The NAMETAG app, the boot item of the recommended set, shows the battery; a tap hides it. The firmware's own name tag, games and the menu show none. |
 | Standby until a button; the button only wakes | done: `standby.c`, [#34] | |
 | Unused pads pulled up, so they draw no current ([README][r-hw]) | untracked | No code in this firmware pulls up the unbonded or unconnected pads. This can matter for [#14]. |
 

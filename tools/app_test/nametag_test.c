@@ -4,7 +4,7 @@
 // shooter's colour, a banana's command 8 sets the team; the name swap
 // with the firmware's 'H' / 'R' packets: beacons, HELLOs, answers, the air
 // kept free, the friends table, the Bloom filter of hackers met (kept over
-// a power cycle), the panel, the millis wrap.
+// a power cycle), the panel, the millis wrap; the charging screen.
 #include "mock_hh.h"
 #include "../../apps/nametag/styles.c"
 #include "../../apps/nametag/nametag.c"
@@ -34,6 +34,7 @@ static void fresh(const char* name, uint32_t start) {
     mock_sent_n = mock_in_n = mock_shotq_n = 0;
     mock_shot_pending = mock_tx_busy = mock_air = mock_save_fail = false;
     mock_held_now = 0;
+    mock_charging = false;
     mock_log[0] = 0;
     mock_brightness = 255;
     snprintf(mock_name, sizeof mock_name, "%s", name);
@@ -546,6 +547,117 @@ static void panel(void) {
     CHECK(S.sv.met == 1 && S.sv.style == 1 && mock_saves == 0, "C22 save fails: met and style go on in RAM");
 }
 
+// The battery as the charging screen draws it: the outline at 120, the
+// lowest `rows` rows of the inside (x 6 .. 10, y 5 .. 12) at 255, nothing
+// else lit (the grid, the outline, the arms)
+static bool battery(int rows) {
+    bool ok = true;
+    for (int y = 0; y < HH_GRID_H; y++)
+        for (int x = 0; x < HH_GRID_W; x++) {
+            bool tip = y == 2 && x >= 7 && x <= 9;
+            bool outline = y >= 3 && y <= 14 && x >= 4 && x <= 12 && (y == 3 || y == 14 || x == 4 || x == 12);
+            bool fill = x >= 6 && x <= 10 && y >= 5 && y <= 12 && y >= 13 - rows;
+            ok &= px(x, y) == (tip || outline ? 120 : fill ? 255 : 0);
+        }
+    for (int i = 0; i < HH_EDGE_COUNT; i++) ok &= !mock_leds[layout_edge[i]];
+    for (int i = 0; i < HH_RGB_COUNT; i++) ok &= rgb_is(i, 0, 0, 0);
+    return ok;
+}
+
+static void charging(void) {
+    // C26: charging starts: the battery, filling a row every 300 ms
+    fresh("ALICE", 0);
+    run(1000, 0);
+    mock_charging = true;
+    run(40, 0);
+    CHECK(S.chg_on && battery(0), "C26 charging starts: the battery, empty");
+    run(300, 0);
+    CHECK(battery(1), "C26 300 ms later: a row");
+    run(2100, 0);
+    CHECK(battery(8), "C26 2.4 s: full");
+    run(600, 0);
+    CHECK(battery(8), "C26 full for 2 steps more");
+    run(300, 0);
+    CHECK(battery(0), "C26 then empty again");
+    bool always = true;
+    for (int f = 0; f < 150; f++) {
+        run(33, 0);
+        always &= S.chg_on && S.shown && px(4, 3) == 120 && px(3, 3) == 0;
+    }
+    CHECK(always, "C26 it stays while charging goes on");
+
+    // a press hides it, and does nothing else; it stays hidden
+    mock_brightness = 64;
+    run(5, HH_BTN_B);
+    run(100, 0);
+    CHECK(!S.chg_on && S.sv.style == 0 && mock_brightness == 64 && !strcmp(S.shown, "ALICE"),
+          "C26 B hides it: the name, style %d, brightness %d", S.sv.style, mock_brightness);
+    run(20000, 0);
+    CHECK(!S.chg_on && px(4, 3) != 120, "C26 not back while charging goes on");
+
+    // charging stops and starts: back; C hides it, and its release opens no panel
+    mock_charging = false;
+    run(100, 0);
+    mock_charging = true;
+    run(100, 0);
+    CHECK(S.chg_on && battery(0), "C26 charging stops and starts: back");
+    mock_held_now = HH_BTN_C;
+    run(5, HH_BTN_C);
+    run(100, 0);
+    mock_held_now = 0;
+    run(100, 0);
+    CHECK(!S.chg_on && !S.panel && !strcmp(S.shown, "ALICE"), "C26 a C tap hides it, no panel (%s)", S.shown);
+    run(5, HH_BTN_C);
+    run(40, 0);
+    CHECK(S.panel, "C26 the next C tap opens the panel");
+    run(5, HH_BTN_C);
+    run(40, 0);
+
+    // C held since before it came, + B: B hides it, and changes neither the
+    // brightness nor the style; the release of C opens no panel
+    mock_charging = false;
+    run(100, 0);
+    mock_held_now = HH_BTN_C;
+    run(5, HH_BTN_C);
+    mock_charging = true;
+    run(100, 0);
+    run(5, HH_BTN_B);
+    run(100, 0);
+    mock_held_now = 0;
+    run(100, 0);
+    CHECK(!S.chg_on && mock_brightness == 64 && S.sv.style == 0 && !S.panel,
+          "C26 C held, B hides it: brightness %d, style %d, no panel", mock_brightness, S.sv.style);
+
+    // charging stops: it goes by itself
+    mock_charging = false;
+    run(100, 0);
+    mock_charging = true;
+    run(1000, 0);
+    CHECK(S.chg_on, "C26 again");
+    mock_charging = false;
+    run(100, 0);
+    CHECK(!S.chg_on && !strcmp(S.shown, "ALICE") && px(4, 3) != 120, "C26 charging stops: it goes");
+
+    // under it the banana and the friends go on
+    mock_charging = true;
+    run(100, 0);
+    shot(3, HH_SHOT_SHOOT);
+    packet('R', "BOB", 3);
+    run(100, 0);
+    CHECK(S.chg_on && battery(0) && S.hits == 1 && S.sv.met == 1, "C26 a shot and a new friend under it: hits %u, met %u",
+          (unsigned)S.hits, S.sv.met);
+    run(5, HH_BTN_D);
+    run(40, 0);
+    CHECK(!S.chg_on && S.sv.style == 0, "C26 D hides it, style %d", S.sv.style);
+
+    // the app starts while charging: no battery (only when charging starts)
+    fresh("ALICE", 0);
+    mock_charging = true;
+    reinit();
+    run(1000, 0);
+    CHECK(!S.chg_on && !strcmp(S.shown, "ALICE"), "C26 started while charging: the name, no battery");
+}
+
 int main(void) {
     styles();
     core();
@@ -555,5 +667,6 @@ int main(void) {
     timing();
     table();
     panel();
+    charging();
     return mock_report("nametag");
 }

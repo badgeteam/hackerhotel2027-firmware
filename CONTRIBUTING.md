@@ -139,7 +139,7 @@ not run `make clean`.
 | `tools/bringup_test/run.sh` | `tools/badge.py bringup` lights the LED of each designator it prints, on the emulator |
 | `tools/usb_test/run.sh` | the USB descriptors (every length, for Windows), and the C + D boot ROM chord on the emulator |
 | `tools/board_test/run.sh` | `tools/extract_board_data.py` makes the same `webui/board_data.js` from the KiCad board (SKIP without the board) |
-| `tools/charge_test/run.sh` | the charger's debounce on the PC; the charging screen and apps' `charging()` on the emulator, with USB power in and out, charging and no battery |
+| `tools/charge_test/run.sh` | the charger's debounce on the PC; the NAMETAG app's charging screen and apps' `charging()` on the emulator, with USB power in and out, charging and no battery |
 | `tools/emu/rv32_test/run.sh` | the emulator's RISC-V interpreter |
 | `tools/isp_test/isp_test.js` | the web interface's firmware update, offline |
 

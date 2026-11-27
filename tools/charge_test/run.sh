@@ -1,8 +1,8 @@
 #!/bin/sh
-# The charging screen (charge.c) and the charger's debounce (power.c): the
-# debounce on the PC, then the screen and apps' charging() on the emulator,
-# with its USB power and charger (headless.py: usb_power(), charging(),
-# no_battery())
+# The charger's debounce (power.c) and the NAMETAG app's charging screen
+# (apps/nametag): the debounce on the PC, then the screen and apps'
+# charging() on the emulator, with its USB power and charger (headless.py:
+# usb_power(), charging(), no_battery())
 set -e
 here=$(dirname "$0")
 root="$here/../.."
@@ -16,6 +16,6 @@ cc -std=gnu11 -Wall -Wextra -O1 -fsanitize=address,undefined -DHH_EMU -I"$root/t
     -Wall -Wextra -I"$root/apps" -T "$root/apps/app.ld" -Wl,--no-relax -Wl,--no-warn-rwx-segments -nostartfiles \
     -o "$out/charging.elf" "$here/charging_app.c" "$root/apps/sdk.c"
 "${PREFIX:-riscv64-elf}-objcopy" -O binary -j .image "$out/charging.elf" "$out/charging.hhapp"
-make -s -C "$root/apps" APPS_OUT="$out" "$out/factory.hhapp" >/dev/null
+make -s -C "$root/apps" build/nametag.hhapp build/factory.hhapp >/dev/null
 make -s -C "$root/tools/emu"
-python3 "$here/emu_charge_test.py" "$out/charging.hhapp" "$out/factory.hhapp"
+python3 "$here/emu_charge_test.py" "$root/apps/build/nametag.hhapp" "$out/charging.hhapp" "$root/apps/build/factory.hhapp"

@@ -111,8 +111,9 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   one that B and D set outside an app. The badge keeps it when it is
   powered off.
 - **Charging.** `charging()` is true while the battery charges (API
-  version 8). Outside apps the badge shows a charging screen then, but not
-  over an app: an app that wants to show it draws its own.
+  version 8). The firmware shows no charging screen: an app that wants
+  one draws its own, as `nametag` does (a battery that fills up, hidden
+  by a tap until charging starts again).
 - **Gamma.** LED values are brightness as a screen shows it. The firmware
   applies gamma 2.2, so 128 looks half as bright.
 - **Safe start.** Hold any button while the badge powers on, and it does

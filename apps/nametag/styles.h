@@ -8,6 +8,7 @@
 #define STYLE_COUNT 7  // B / D cycle 0 .. STYLE_COUNT-1; trim from the end to fit the store
 #endif
 #define TEXT_Y 4       // the text's top row, as the firmware's name tag
+#define STYLE_BATTERY STYLE_COUNT  // not a style: the charging screen (style_start when it begins)
 
 extern const hh_api_t* hh;            // nametag.c, set in init()
 extern uint32_t nt_mask[HH_GRID_H];   // this frame's text: bit x of row y

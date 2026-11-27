@@ -11,12 +11,12 @@
 
 // The frames that went out, decoded: a brand's code and its carrier
 typedef struct {
-    char kind;  // 'N' NEC (9 ms leader), 'S' Samsung (4.5 ms), 'Y' Sony, 'P' Panasonic, 'R' RC5, '?' none of these
+    char kind;  // 'N' NEC (9 ms leader), 'S' Samsung (4.5 ms), 'Y' Sony, 'P' Panasonic, 'R' RC5, 'C' RC6, '?' none
     uint64_t code;  // the bits in the order they went out, the first the highest
     uint32_t carrier;
     uint32_t us;  // the whole frame, with its gap
 } sent_t;
-static sent_t sent[64];
+static sent_t sent[256];  // every frame of the test
 static int nsent;
 static uint32_t air_end;  // the frame going out ends then (mock_ms)
 static uint16_t air[FRAME_MAX];
@@ -74,8 +74,33 @@ static bool rc5_frame(const uint16_t* f, int n, uint64_t* code) {
     return true;
 }
 
+// RC6 mode 0: a leader of 2666 us mark and 889 us space, then units of 444
+// us: the start bit, 3 mode bits, the toggle bit at twice the length and
+// 16 bits, each a mark and a space (1) or a space and a mark (0)
+static bool rc6_frame(const uint16_t* f, int n, uint64_t* code) {
+    uint8_t unit[48] = {0};  // 1: mark
+    int u = 0;
+    if (n < 4 || !near(f[0], 2666) || !near(f[1], 889) || f[n - 1] < 40000) return false;
+    for (int i = 2; i < n - 1; i++) {
+        int units = (f[i] + 222) / 444;
+        if (units < 1 || units > 4 || !near(f[i], units * 444)) return false;
+        while (units--) {
+            if (u == 48) return false;
+            unit[u++] = !(i & 1);
+        }
+    }
+    *code = 0;
+    for (int b = 0, p = 0; b < 21; b++) {
+        int w = b == 4 ? 2 : 1;
+        if (unit[p] == unit[p + w]) return false;
+        *code = *code << 1 | unit[p];
+        p += 2 * w;
+    }
+    return true;
+}
+
 static void decode(const uint16_t* f, int n, uint32_t hz) {
-    sent_t* s = &sent[nsent++ % 64];
+    sent_t* s = &sent[nsent++ % 256];
     s->carrier = hz, s->us = 0, s->kind = '?';
     for (int i = 0; i < n; i++) s->us += f[i];
     if (distance_frame(f, n, 9000, 4500, 560, 1690, 32, &s->code)) s->kind = 'N';
@@ -83,6 +108,7 @@ static void decode(const uint16_t* f, int n, uint32_t hz) {
     else if (distance_frame(f, n, 3456, 1728, 432, 1296, 48, &s->code)) s->kind = 'P';
     else if (sony_frame(f, n, &s->code)) s->kind = 'Y';
     else if (rc5_frame(f, n, &s->code)) s->kind = 'R';
+    else if (rc6_frame(f, n, &s->code)) s->kind = 'C';
 }
 
 // One tick, with the transmitter busy while a frame goes out
@@ -98,7 +124,7 @@ static void run(uint32_t ms, uint8_t pressed, uint8_t held) {
     if (mock_raws_sent != before) {
         decode(mock_raw, mock_raw_count, mock_raw_carrier);
         memcpy(air, mock_raw_us, mock_raw_count * 2);
-        air_end = mock_ms + sent[(nsent - 1) % 64].us / 1000;
+        air_end = mock_ms + sent[(nsent - 1) % 256].us / 1000;
     }
 }
 
@@ -119,8 +145,11 @@ static void tap(uint8_t b) {
     ((uint64_t)REV8((x) >> 24 & 0xFF) << 24 | REV8((x) >> 16 & 0xFF) << 16 | REV8((x) >> 8 & 0xFF) << 8 | \
      REV8((x) & 0xFF))
 #define RC5_TOGGLE (1 << 11)
+#define RC6_TOGGLE (1 << 16)
+static uint64_t toggle_bit(const sent_t* s) { return s->kind == 'R' ? RC5_TOGGLE : s->kind == 'C' ? RC6_TOGGLE : 0; }
 
-// The power codes, as remote control lists give them
+// The power codes, as remote control lists give them. The toggles first,
+// as Flipper-IRDB has them (NEC: address and command bytes in send order)
 typedef struct {
     char kind;
     uint64_t on, off;
@@ -128,6 +157,13 @@ typedef struct {
     int repeats;
 } want_t;
 static const want_t WANT[] = {
+    {'N', NEC_BYTES(0xEAC717E8u), NEC_BYTES(0xEAC717E8u), 38000, 1},  // TCL: EA C7, 17 E8
+    {'N', NEC_BYTES(0x00BF0DF2u), NEC_BYTES(0x00BF0DF2u), 38000, 1},  // Hisense, newer
+    {'N', NEC_BYTES(0x007F0AF5u), NEC_BYTES(0x007F0AF5u), 38000, 1},  // Sharp
+    {'N', NEC_BYTES(0x027D46B9u), NEC_BYTES(0x027D46B9u), 38000, 1},  // Toshiba, newer
+    {'R', 0x304C, 0x304C, 36000, 1},                                    // Vestel: RC5 1:12
+    {'R', 0x30CC, 0x30CC, 36000, 1},                                    // Hitachi: RC5 3:12
+    {'C', 0x10000C, 0x10000C, 36000, 1},                                // Philips, newer: RC6 0:12
     {'S', 0xE0E09966, 0xE0E019E6, 38000, 2},                            // Samsung
     {'N', 0x20DF23DC, 0x20DFA35C, 38000, 2},                            // LG
     {'N', NEC_BYTES(0x04FB718Eu), NEC_BYTES(0x04FB728Du), 38000, 2},    // Hisense
@@ -143,7 +179,7 @@ static bool run_was(int from, bool on, int* frames) {
     for (unsigned b = 0; b < sizeof WANT / sizeof *WANT; b++)
         for (int r = 0; r < WANT[b].repeats; r++, k++) {
             const sent_t* s = &sent[k];
-            uint64_t code = s->kind == 'R' ? s->code & ~(uint64_t)RC5_TOGGLE : s->code;
+            uint64_t code = s->code & ~toggle_bit(s);
             if (k >= nsent || s->kind != WANT[b].kind || code != (on ? WANT[b].on : WANT[b].off) ||
                 s->carrier != WANT[b].carrier) {
                 printf("      frame %d: %c %llx at %u Hz\n", k - from, k < nsent ? s->kind : '-',
@@ -239,8 +275,8 @@ int main(void) {
     tap(HH_BTN_A);
     CHECK(mock_raws_sent == 1, "a tap of A starts at its release");
     CHECK(mock_leds[layout_grid[6][5]] == 255 && mock_leds[layout_grid[11][3]] == 40, "ON lights up, OFF dims");
-    for (int t = 0; t < 3; t++) idle(200), fill[t] = bright_ranks(ARM_A);
-    idle(2000);
+    for (int t = 0; t < 3; t++) idle(500), fill[t] = bright_ranks(ARM_A);
+    idle(3000);
     CHECK(run_was(from, true, &frames) && nsent == from + frames, "A sends the power-on codes (%d frames)",
           nsent - from);
     CHECK(fill[0] < fill[1] && fill[1] < fill[2] && !bright_ranks(ARM_B), "the arm to A fills up (%d, %d, %d)",
@@ -248,7 +284,7 @@ int main(void) {
     uint32_t total = 0;
     int sony = 0;
     for (int i = from; i < nsent; i++) total += sent[i].us, sony += sent[i].kind == 'Y' && sent[i].us == 45000;
-    CHECK(total > 1000000 && total < 1700000, "in about a second and a half (%u ms)", total / 1000);
+    CHECK(total > 1800000 && total < 2600000, "in about two seconds (%u ms)", total / 1000);
     CHECK(sony == 3, "Sony frames 45 ms apart (%d)", sony);
     CHECK(mock_leds[layout_grid[6][5]] == 150 && !bright_ranks(ARM_A), "then it is calm again");
 
@@ -260,14 +296,21 @@ int main(void) {
     CHECK(mock_leds[layout_grid[11][3]] == 255 && mock_leds[layout_grid[6][5]] == 40, "B: OFF lights up, ON dims");
     idle(400);
     CHECK(bright_ranks(ARM_B) && !bright_ranks(ARM_A), "the arm to B fills up");
-    idle(2000);
+    idle(3000);
     CHECK(run_was(from, false, &frames) && nsent == from + frames, "B sends the power-off codes (%d frames)",
           nsent - from);
-    int t[4], n = 0;
-    for (int i = on_from; i < nsent && n < 4; i++)
-        if (sent[i].kind == 'R') t[n++] = (int)(sent[i].code & RC5_TOGGLE);
-    CHECK(n == 4 && t[0] == t[1] && t[2] == t[3] && t[0] != t[2],
-          "RC5: a press's frames have the same toggle bit, the next press the other");
+    // RC5 and RC6: the toggle bit the same in a press, the other in the next
+    int set[2] = {0}, clear[2] = {0}, rc = 0;
+    for (unsigned b = 0; b < sizeof WANT / sizeof *WANT; b++)
+        rc += WANT[b].kind == 'R' || WANT[b].kind == 'C' ? WANT[b].repeats : 0;
+    for (int i = on_from; i < nsent; i++)
+        if (toggle_bit(&sent[i])) {
+            bool t = sent[i].code & toggle_bit(&sent[i]);
+            (t ? set : clear)[i >= from]++;
+        }
+    CHECK((set[0] == rc && clear[1] == rc) || (clear[0] == rc && set[1] == rc),
+          "RC5 and RC6: one toggle bit for a press, the other for the next (%d %d, %d %d)", set[0], clear[0], set[1],
+          clear[1]);
 
     // Holding A opens the menu: no codes
     from = nsent;
@@ -283,7 +326,7 @@ int main(void) {
     run(5, HH_BTN_B, HH_BTN_B);
     run(5, 0, 0);
     int switched = nsent;
-    idle(2500);
+    idle(3000);
     CHECK(sent[from].code == WANT[0].on && run_was(switched, false, &frames) && nsent == switched + frames,
           "B during ON: the power-off codes follow (%d frames)", nsent - switched);
 

@@ -2,9 +2,11 @@
 // badge sends the power-on code of each TV brand it knows (Samsung, LG,
 // Hisense, Sony, Panasonic, Philips, Toshiba), and the arm to A fills up
 // green as they go out. Press B: the power-off codes, and the arm to B
-// fills up red. ON sends only codes that switch a TV on, never the power
-// toggle; OFF too, except for Philips, whose off is the standby button: on
-// newer Philips TVs that toggles. A press takes about a second and a half.
+// fills up red. Brands with only a power toggle (TCL, newer Hisense,
+// Philips and Toshiba, Sharp, Telefunken and others by Vestel, Hitachi)
+// get it with A and with B, first, so a TV that knows both ends with its
+// own on or off. Philips's off is the standby button, which toggles on
+// newer Philips TVs. A press takes about two seconds.
 #include "hhapp.h"
 
 #define ARM_A 4              // the upper left arm, with A at its tip
@@ -15,26 +17,37 @@
 #define GAP_US 50000         // quiet after a NEC, Samsung or Panasonic frame
 #define SONY_FRAME_US 45000  // a Sony frame starts every 45 ms
 #define RC5_HALF_US 889      // half an RC5 bit
-#define RC5_GAP_US 65000     // RC5 repeats every 114 ms; one space holds at most 65 ms
+#define RC6_UNIT_US 444      // an RC6 half bit
+#define RC_GAP_US 65000      // after RC5 and RC6 (RC5 repeats every 114 ms; a space holds at most 65 ms)
 #define FRAME_MAX 100        // a Panasonic frame: leader, 48 bits, stop mark, gap
 
-enum { NEC, SAMSUNG, SONY, PANASONIC, RC5 };
+enum { NEC, SAMSUNG, SONY, PANASONIC, RC5, RC6 };
 enum { IDLE, ON, OFF };
 
 // The brands: a protocol, how often each frame goes out, the address and
-// the power-on and power-off commands (not the power toggle). NEC and
+// the power-on and power-off commands, or the power toggle twice for a
+// brand that has nothing else (Flipper-IRDB's most common one). NEC and
 // Samsung send the address bytes a0 a1, then the command and its inverse.
 // Sony sends the command's 7 bits, then a1 bits of the address a0.
 // Panasonic sends its vendor code, a0 a1, the command and a check byte.
-// RC5 (Philips) sends the address a0 and the command. LG goes before
-// Hisense: on an LG, Hisense's on and off are the green and red buttons,
-// so after LG's off the red one finds the TV off.
+// RC5 and RC6 (Philips) send the address a0 and the command. A toggle has
+// the same command for on and off, and goes out once: twice could count as
+// two presses. The toggles go first. LG goes before Hisense: on an LG,
+// Hisense's on and off are the green and red buttons, so after LG's off
+// the red one finds the TV off.
 typedef struct {
     uint8_t proto, repeats;
     uint8_t a0, a1;
     uint8_t on, off;
 } brand_t;
 static const brand_t BRANDS[] = {
+    {NEC, 1, 0xEA, 0xC7, 0x17, 0x17},  // TCL and other Roku TVs
+    {NEC, 1, 0x00, 0xBF, 0x0D, 0x0D},  // Hisense, newer
+    {NEC, 1, 0x00, 0x7F, 0x0A, 0x0A},  // Sharp, Blaupunkt
+    {NEC, 1, 0x02, 0x7D, 0x46, 0x46},  // Toshiba and Telefunken, newer
+    {RC5, 1, 0x01, 0, 0x0C, 0x0C},     // Telefunken, Finlux, Medion, JVC (Vestel)
+    {RC5, 1, 0x03, 0, 0x0C, 0x0C},     // Hitachi
+    {RC6, 1, 0x00, 0, 0x0C, 0x0C},     // Philips, newer
     {SAMSUNG, 2, 0x07, 0x07, 0x99, 0x98},
     {NEC, 2, 0x04, 0xFB, 0xC4, 0xC5},  // LG
     {NEC, 2, 0x04, 0xFB, 0x71, 0x72},  // Hisense (its RS-232/IR document, 2017)
@@ -55,7 +68,7 @@ static uint8_t next;  // the buffer for the next frame
 static bool built;    // buf[next] holds frame `frame`
 static uint32_t ms, a_down, done_ms;
 static bool a_tap;
-static uint8_t toggle;  // RC5's toggle bit, new for each press
+static uint8_t toggle;  // RC5's and RC6's toggle bit, new for each press
 
 // A frame of pulse distance coding (NEC, Samsung, Panasonic): a leader,
 // then n bytes LSB first, each bit a mark of t and a space of t (0) or
@@ -92,23 +105,51 @@ static uint16_t sony(uint16_t* f, uint8_t command, uint8_t address, uint8_t addr
     return k;
 }
 
-// A Philips RC5 frame at 36 kHz: 14 bits MSB first, each half space and half
-// mark (1) or the other way round (0): two start bits (both 1 for commands
-// below 64), the toggle bit, 5 address bits and 6 command bits. The leading
-// space does not go out: a frame starts with a mark.
+// Adds a stretch of mark or space to a frame of k entries: to the last one
+// if that is the same (marks are the even entries). A frame starts with a
+// mark, so a space at the start is left out.
+static uint16_t level(uint16_t* f, uint16_t k, bool mark, uint16_t us) {
+    if (k && (k % 2 == 1) == mark) f[k - 1] += us;
+    else if (k || mark) f[k++] = us;
+    return k;
+}
+
+// Ends a frame with the gap after RC5 and RC6
+static uint16_t rc_gap(uint16_t* f, uint16_t k) {
+    if (k % 2) f[k++] = RC_GAP_US;
+    else f[k - 1] = RC_GAP_US;
+    return k;
+}
+
+// A Philips RC5 frame at 36 kHz: 14 bits of 2 x 889 us, MSB first, each a
+// space and a mark (1) or a mark and a space (0): two start bits (both 1
+// for commands below 64), the toggle bit, 5 address bits, 6 command bits
 static uint16_t rc5(uint16_t* f, uint8_t address, uint8_t command) {
     uint16_t bits = (uint16_t)(3 << 12 | toggle << 11 | (address & 31) << 6 | (command & 63));
     uint16_t k = 0;
-    bool mark = false;  // the level of the last half
-    for (int i = 13; i >= 0; i--)
-        for (int h = 0; h < 2; h++) {
-            bool m = (bits >> i & 1) == h;
-            if (k && m == mark) f[k - 1] += RC5_HALF_US;
-            else if (k || m) f[k++] = RC5_HALF_US, mark = m;
-        }
-    if (mark) f[k++] = RC5_GAP_US;
-    else f[k - 1] = RC5_GAP_US;
-    return k;
+    for (int i = 13; i >= 0; i--) {
+        bool one = bits >> i & 1;
+        k = level(f, k, !one, RC5_HALF_US);
+        k = level(f, k, one, RC5_HALF_US);
+    }
+    return rc_gap(f, k);
+}
+
+// A Philips RC6 (mode 0) frame at 36 kHz: a leader of 2666 us mark and 889
+// us space, then bits of 2 x 444 us, MSB first, each a mark and a space
+// (1) or a space and a mark (0): the start bit (1), 3 mode bits (0), the
+// toggle bit at twice the length, 8 address bits, 8 command bits
+static uint16_t rc6(uint16_t* f, uint8_t address, uint8_t command) {
+    uint32_t bits = 1u << 20 | (uint32_t)toggle << 16 | (uint32_t)address << 8 | command;
+    uint16_t k = level(f, 0, true, 6 * RC6_UNIT_US);
+    k = level(f, k, false, 2 * RC6_UNIT_US);
+    for (int i = 20; i >= 0; i--) {
+        bool one = bits >> i & 1;
+        uint16_t us = i == 16 ? 2 * RC6_UNIT_US : RC6_UNIT_US;
+        k = level(f, k, one, us);
+        k = level(f, k, !one, us);
+    }
+    return rc_gap(f, k);
 }
 
 // Frame i of a run: the brands in order, each its number of repeats
@@ -129,6 +170,9 @@ static uint16_t build(uint16_t* f, uint8_t i, uint8_t m, uint32_t* hz) {
         case RC5:
             *hz = 36000;
             return rc5(f, b->a0, c);
+        case RC6:
+            *hz = 36000;
+            return rc6(f, b->a0, c);
         case SAMSUNG:
             *hz = 38000;
             return distance(f, 4500, 4500, 560, 1690, bytes, 4);

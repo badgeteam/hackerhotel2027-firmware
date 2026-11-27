@@ -1,4 +1,5 @@
 #include "nametag.h"
+#include "app_util.h"
 #include "ch643_ledpwm.h"
 #include "font.h"
 #include "layout.h"
@@ -43,12 +44,8 @@ static uint8_t triangle(uint8_t x) { return (uint8_t)(x < 128 ? 2 * x : 2 * (255
 
 // Hue h (0..255 is one turn), full value v, saturation 200 of 255
 static void hue(uint8_t h, uint8_t v, uint8_t rgb[3]) {
-    uint8_t region = h / 43, rem = (uint8_t)((h - region * 43) * 6);
-    uint8_t lo = (uint8_t)(v * 55 / 255);  // v * (255 - saturation)
-    uint8_t down = (uint8_t)(v - (v - lo) * rem / 255), up = (uint8_t)(lo + (v - lo) * rem / 255);
-    static const uint8_t order[6][3] = {{0, 1, 2}, {1, 0, 2}, {1, 2, 0}, {2, 1, 0}, {2, 0, 1}, {0, 2, 1}};
-    uint8_t parts[3] = {v, region & 1 ? down : up, lo};  // the strong, the moving and the weak channel
-    for (int c = 0; c < 3; c++) rgb[order[region][c]] = parts[c];
+    uint32_t c = AppUtil_Hsv(h, 200, v);  // the apps' HSV: no second copy in the firmware
+    rgb[0] = (uint8_t)(c >> 16), rgb[1] = (uint8_t)(c >> 8), rgb[2] = (uint8_t)c;
 }
 
 // The text: still and centred if it fits, else scrolling to the left, with

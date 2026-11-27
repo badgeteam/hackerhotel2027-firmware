@@ -124,7 +124,12 @@ static bool api_ir_send_shot(const hh_ir_shot_t* shot) {
     return infrared_send_shot(IrShot_Encode(&s));
 }
 
-static void api_factory_passed(void) { Persist_SetFactoryPassed(true); }
+// Written at once, not a second later: the badge may be unplugged as soon
+// as the pass shows
+static void api_factory_passed(void) {
+    Persist_SetFactoryPassed(true);
+    Persist_Flush(PERSIST_SETTLE_MS);
+}
 
 static const hh_api_t s_api = {
     .version = HH_API_VERSION,

@@ -188,9 +188,9 @@ This one is in `docs/FACTORY_TEST.md`.
 
 | Old feature | Status now | Notes |
 |---|---|---|
-| Runs at every power-on until it passes once; kept in flash | done: [#59] | The emulator skips it at power-on, except after `--fresh` (`tools/emu/emu.py`). |
+| Runs at every power-on until it passes once; kept in flash | done: [#59] | It runs at power-on while the factory test app is stored and the test has not passed; `factory.bin` or `tools/badge.py factory` stores the app. The emulator does the same, and `--fresh` stores the app (`tools/emu/emu.py`). |
 | LED and ROW: the volunteer taps B (good) or A (bad) | replaced: [#62] | Both run by themselves. A bad LED or row means the repair pile. |
-| KEY, fails after 20 s | done: [#59] | `make FACTORY_KEYS=0` leaves it out ([#62]). |
+| KEY, fails after 20 s | done: [#59] | `make factory-image FACTORY_KEYS=0` leaves it out ([#62]). |
 | USB, fails after 10 s | done: [#59] | Also shows `CHG` while the battery charges. |
 | IR, then `IR?` after 10 s; B passes it anyway, A fails it | partly: [#62] | `IR?` after 10 s, a fail after 30 s. There is no way to pass IR untested. |
 | A failed step: tap B to try it again | done: [#59] | |

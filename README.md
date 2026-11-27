@@ -254,13 +254,16 @@ A new badge gets the factory image, not only the firmware:
 make MINICHLINK=ch32fun/minichlink factory-image   # writes factory.bin
 ```
 
-`factory.bin` is all 62 KB of the flash: the firmware, a store with only
-the factory test app (`apps/factory`), and an empty persistent record.
-Flash it as above, with `factory.bin` in place of `ledmatrix.bin`. It
-erases the stored items, the name and the settings. The badge then runs
-the factory test at power-on until it passes, and the test deletes itself
-from the store. See `docs/FACTORY_TEST.md`. A firmware update starts no
-test; `tools/badge.py factory` runs it again.
+`factory.bin` fills the 62 KB of flash but its last page: the firmware,
+a store with only the factory test app (`apps/factory`), and an empty
+persistent record. Flash it as above, with `factory.bin` in place of
+`ledmatrix.bin` (writing it over the boot ROM is still to confirm on
+prototype 1). It erases the stored items, the name and the settings. The
+badge then runs the factory test at power-on until it passes, and the
+test deletes itself from the store. Install the recommended apps only
+after that: erasing the store takes the test with it. See
+`docs/FACTORY_TEST.md`. A firmware update starts no test;
+`tools/badge.py factory` runs it again.
 
 ## Web interface
 
@@ -365,8 +368,8 @@ The two buttons under the board do the same as **V** and **U**.
   (`apps/build/factory.hhapp`, `make -C apps`) is stored after the items,
   so the factory test runs. It runs on a copy of the flash file, so your
   own file stays as it was. `--fresh --keep` changes the file itself.
-  `--fresh --flash factory.bin` starts from the factory image itself (on
-  a copy too).
+  `--flash factory.bin` starts from the factory image itself, always on
+  a copy, so `factory.bin` keeps its test.
 - **Log.** The firmware's log appears in the terminal.
 
 `tools/emu/rv32_test/run.sh` checks the interpreter against the same

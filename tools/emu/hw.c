@@ -29,9 +29,11 @@
 //   hh27-emu [flash file [buttons held at power-on, hex]]
 //
 // The flash file holds the top 34 KB of the flash: 2 KB of the firmware's
-// part (not used), then the item store and the persistent record. A file
-// of all 62 KB, as `make factory-image` writes, works too: then its top
-// 34 KB are used (a freshly flashed badge, with the factory test app).
+// part (not used), then the item store and the persistent record. A whole
+// image, as `make factory-image` writes (62 KB less the last page), works
+// too: then its top 34 KB are used (a freshly flashed badge, with the
+// factory test app). The emulator changes the file it is given: emu.py
+// runs a whole image on a copy, so factory.bin keeps its test.
 //
 // "Interrupts": the firmware holds s_lock while it runs and lets go only
 // in Delay_Ms(); the reader thread takes it to hand over a USB packet,
@@ -381,7 +383,8 @@ void FlashPages_Program(uint32_t addr, const uint8_t* data) {
 // The store lives in a file, mapped at the address it has on the chip, so
 // the firmware's pointers into flash work as they are. A new file starts
 // erased (all 0xFF).
-#define FULL_FLASH (62 * 1024)  // a whole image (make factory-image)
+#define FULL_FLASH (62 * 1024)
+#define IMAGE_MIN (FULL_FLASH - 256)  // a whole image (tools/factory_image.py IMAGE_SIZE)
 
 static void map_flash(const char* path) {
     uintptr_t page = STORE_FLASH_BASE & ~0xFFFu;
@@ -392,12 +395,12 @@ static void map_flash(const char* path) {
         exit(1);
     }
     off_t old = lseek(fd, 0, SEEK_END);
-    off_t at = old == FULL_FLASH ? (off_t)(page - 0x08000000u) : 0;
-    if (old < (off_t)size) {
+    off_t at = old >= IMAGE_MIN ? (off_t)(page - 0x08000000u) : 0;
+    if (old < at + (off_t)size) {
         uint8_t ff[4096];
         memset(ff, 0xFF, sizeof ff);
-        for (off_t n = old; n < (off_t)size; n += sizeof ff)
-            if (write(fd, ff, sizeof ff) < 0) exit(1);
+        for (off_t n = old, end = at + (off_t)size; n < end; n += sizeof ff)
+            if (write(fd, ff, end - n < (off_t)sizeof ff ? (size_t)(end - n) : sizeof ff) < 0) exit(1);
     }
     void* p = mmap((void*)page, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED_NOREPLACE, fd, at);
     if (p != (void*)page) {

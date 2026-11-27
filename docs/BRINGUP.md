@@ -34,7 +34,7 @@ exist in this firmware.
 - A USB-C power meter, to put between the PC and the badge (steps 4, 5
   and 8).
 - `factory.bin` (`make MINICHLINK=ch32fun/minichlink factory-image`): the
-  firmware and the factory test app, all 62 KB of the flash
+  firmware and the factory test app, the 62 KB of flash but its last page
   (`docs/FACTORY_TEST.md`). Also minichlink (`make -C ch32fun/minichlink`)
   and pyusb for `tools/badge.py` (see `CONTRIBUTING.md`, "Build").
 - For SWD: a WCH-LinkE with [wlink](https://github.com/ch32-rs/wlink),
@@ -282,6 +282,11 @@ A blank chip stays in the boot ROM (step 4), so you need no button.
    ```sh
    ch32fun/minichlink/minichlink -w factory.bin flash -b
    ```
+
+   This writes up to the top of the flash **(to confirm on prototype 1)**.
+   If minichlink reports `Fault writing image`, flash `ledmatrix.bin`
+   the same way, then run `tools/badge.py factory` (the factory test
+   from the store, with `make -C apps` first).
 
 ### Over SWD, with a WCH-LinkE
 

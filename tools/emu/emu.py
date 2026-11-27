@@ -38,10 +38,14 @@ factory test runs at power-on. It runs on a copy of the flash file,
 which goes when the emulator closes: your flash file stays as it was.
 With --keep, it changes the flash file itself, and keeps what happens
 after. In both, R runs the factory test again until it passes, as on the
-badge; after the pass, the app deletes itself. --fresh --flash
-factory.bin starts from the factory image itself (all 62 KB, on a copy):
-the store empty but for the test. tools/badge.py factory also stores the
-test and starts it.
+badge; after the pass, the app deletes itself. tools/badge.py factory
+also stores the test and starts it.
+
+--flash factory.bin starts from the factory image itself: the store
+empty but for the test. A whole image always runs on a copy, with or
+without --fresh, and --keep does not go with it: a pass would otherwise
+take the test out of factory.bin, and badges flashed from it later would
+get none.
 
 --web serves the web interface (webui/) on http://127.0.0.1:8027/ (--port
 to change) and opens it (--no-browser not). Click "Connect emulator" there: the page then talks to the
@@ -71,6 +75,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+sys.path.insert(0, str(REPO / "tools"))
+import factory_image  # noqa: E402
 EMU = HERE / "build" / "hh27-emu"
 WEB_PORT = 8027
 IR_ADDR = ("127.255.255.255", 8028)
@@ -447,22 +453,25 @@ def main():
     args = p.parse_args()
     if args.keep and not args.fresh:
         p.error("--keep goes with --fresh")
+    # A whole image (factory.bin) always runs on a copy: a pass in the
+    # emulator would otherwise take the test out of the file for good
+    image = os.path.exists(args.flash) and factory_image.is_image(os.path.getsize(args.flash))
+    if image and args.keep:
+        p.error("--keep does not go with a whole image (%s): it runs on a copy" % args.flash)
     if not EMU.exists():
         sys.exit("%s is missing: run make -C tools/emu first" % EMU)
     Path(args.flash).parent.mkdir(parents=True, exist_ok=True)
     flash, scratch = args.flash, None
-    if args.fresh and not args.keep:  # a copy, so the flash file stays as it was
+    if (args.fresh and not args.keep) or image:  # a copy, so the flash file stays as it was
         scratch = tempfile.mkdtemp(prefix="hh27-emu-")
         flash = os.path.join(scratch, "flash.bin")
         if os.path.exists(args.flash):
             shutil.copyfile(args.flash, flash)
-        print("fresh start on a copy of %s" % args.flash)
+        print("%s on a copy of %s" % ("fresh start" if args.fresh else "the image", args.flash))
         for s in (signal.SIGTERM, signal.SIGHUP):  # killed or the terminal closed: still remove the copy
             signal.signal(s, lambda *a: sys.exit(0))
     try:
         if args.fresh:
-            sys.path.insert(0, str(REPO / "tools"))
-            import factory_image
             if not os.path.exists(factory_image.APP):
                 sys.exit("%s is missing: run make -C apps first" % factory_image.APP)
             if not factory_image.fresh(flash, open(factory_image.APP, "rb").read()):

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""The image for the flashing table: all 62 KB of the CH643's flash.
+"""The image for the flashing table: the CH643's 62 KB of flash, less its
+last page.
 
   make factory-image        (builds both parts, then runs this)
   python3 tools/factory_image.py ledmatrix.bin apps/build/factory.hhapp factory.bin
@@ -11,6 +12,14 @@ erased flash reads. A badge flashed with it runs the factory test at the
 first power-on (docs/FACTORY_TEST.md); the firmware deletes the app once
 the test has passed.
 
+The image is IMAGE_SIZE bytes: the last 256-byte page (0xFF, the second
+half of the record's copy 1) is left out. minichlink writes over the boot
+ROM in 56-byte chunks, one more than the image needs (pgm-wch-isp.c), and
+for a 62 KB image that chunk would end 16 bytes past the end of the flash.
+Without the last page it ends inside it. The record is still erased:
+minichlink erases every 1 KB sector the image touches (all 62), and
+copy 1's first page, written 0xFF, has no valid header for the firmware.
+
 The emulator (tools/emu) uses fresh() for its --fresh start.
 """
 import os
@@ -18,6 +27,7 @@ import struct
 import sys
 
 FLASH_SIZE = 62 * 1024
+IMAGE_SIZE = FLASH_SIZE - 256  # the last page left out (see above)
 STORE_BASE = 0x7800          # flash_pages.h STORE_FLASH_BASE - 0x08000000
 STORE_SIZE = 0x8000
 RECORD_SIZE = 0x400          # PERSIST_FLASH_SIZE, the top of the store
@@ -86,9 +96,10 @@ def fresh(path: str, app: bytes) -> bool:
     """The emulator's flash file at `path` as on a badge newly flashed with
     the factory image, but with its items kept: the persistent record
     erased, and the factory test app stored after the items, unless it is
-    there already. False if there is no room for the app."""
+    there already. False if there is no room for the app. A file of at
+    least IMAGE_SIZE bytes is a whole image (is_image())."""
     data = bytearray(open(path, "rb").read()) if os.path.exists(path) else bytearray()
-    base = STORE_BASE if len(data) == FLASH_SIZE else EMU_STORE
+    base = STORE_BASE if is_image(len(data)) else EMU_STORE
     data += b"\xff" * (base + STORE_SIZE - len(data))
     store = data[base:base + STORE_SIZE]
     erase_record(store)
@@ -96,6 +107,12 @@ def fresh(path: str, app: bytes) -> bool:
     data[base:base + STORE_SIZE] = store
     open(path, "wb").write(data)
     return ok
+
+
+def is_image(size: int) -> bool:
+    """A file this size is a whole image (factory.bin), not the emulator's
+    own flash file (34 or 36 KB: tools/emu/hw.c)"""
+    return size >= IMAGE_SIZE
 
 
 def check_app(app: bytes):
@@ -113,8 +130,8 @@ def factory_image(firmware: bytes, app: bytes) -> bytes:
     if not add_item(store, TYPE_APP, FACTORY, app):
         sys.exit("the app does not fit in the store")
     image = firmware + b"\xff" * (STORE_BASE - len(firmware)) + bytes(store)
-    assert len(image) == FLASH_SIZE
-    return image
+    assert len(image) == FLASH_SIZE and image[IMAGE_SIZE:] == b"\xff" * (FLASH_SIZE - IMAGE_SIZE)
+    return image[:IMAGE_SIZE]
 
 
 def main():
@@ -123,7 +140,7 @@ def main():
     firmware, app = open(sys.argv[1], "rb").read(), open(sys.argv[2], "rb").read()
     open(sys.argv[3], "wb").write(factory_image(firmware, app))
     print("%s: %d bytes: the firmware (%d bytes), and the store with %s (%d bytes, %d pages)" %
-          (sys.argv[3], FLASH_SIZE, len(firmware), FACTORY, len(app), len(item(TYPE_APP, FACTORY, app)) // PAGE))
+          (sys.argv[3], IMAGE_SIZE, len(firmware), FACTORY, len(app), len(item(TYPE_APP, FACTORY, app)) // PAGE))
 
 
 if __name__ == "__main__":

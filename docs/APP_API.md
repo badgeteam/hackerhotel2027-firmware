@@ -322,6 +322,12 @@ so an app that wants to show that it charges must draw it itself.
 | `void ir_loopback(bool on)` | On: `ir_receive_packet()` also gets the badge's own packets, as its receiver hears its own IR LED. Off again when the app stops. |
 | `void factory_passed(void)` | Only for the factory test (`apps/factory`, `docs/FACTORY_TEST.md`): the badge keeps that it passed the test. When the app, stored as `FACTORY`, then exits, the firmware deletes it from the store. |
 
+The store name `FACTORY` is kept for the factory test. The firmware runs
+an app stored under that name at every power-on while the test has not
+passed, before the boot item; hold A does not open the menu over it, and
+its brightness is not kept. Once the test has passed, the firmware
+deletes it. Give your app another name.
+
 ## Persistent data
 
 | Member | |

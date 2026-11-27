@@ -388,7 +388,11 @@ def bringup(badge, steps, start=0, auto=None, count=None, level=255, ask=input, 
 def factory(badge):
     """The factory test is an app (apps/factory), stored as FACTORY: the
     firmware starts it at power-on while it is stored, and deletes it once
-    it has passed. Stores it if it is not stored, and starts it."""
+    it has passed. Stores it if it is not stored, and starts it. A commit
+    makes the new item the boot item, so the old boot item is put back
+    with a run of it: it shows for one pass of the main loop (and its
+    init runs) before the test starts again, and the log shows the
+    test's first step twice."""
     s = badge.send(0xFF)
     if s["api"] < FACTORY_API:
         sys.exit("the badge's firmware has app API %d; the factory test needs %d: update the firmware" % (s["api"], FACTORY_API))

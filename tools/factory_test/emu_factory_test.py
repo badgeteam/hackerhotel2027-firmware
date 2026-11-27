@@ -21,6 +21,7 @@ import contextlib
 import io
 import os
 import runpy
+import shutil
 import sys
 import tempfile
 import time
@@ -252,6 +253,7 @@ def run(path):
         check(wait_for(lambda: logged(e, "factory PASS"), 4), "IR hears its own echo: PASS")
         check(b"T\x04TEST" in e.ir_sent, "it sent test packets: %r" % e.ir_sent[:1])
         check(wait_for(lambda: shows_still(e.wait_frames(), "OK"), 1), "OK")
+        shutil.copyfile(path, path + ".ok")  # the flash as the badge is unplugged at the OK
         check(name_tag(e, 6), "then the name tag")
         check(brightness(e) == 32, "and the badge's own brightness again: 32")
         check(items(e) == [], "the test deleted itself: the store is empty")
@@ -289,6 +291,17 @@ def after_pass(path):
         check(leave(e), "left")
         check(wait_for(lambda: e.usb(QUERY)[0] == MODE_APP and e.usb(QUERY)[4] == 0, 1), "back to the boot item")
         check(items(e) == ["ripple"], "on a badge that passed before, leaving deletes the test too")
+    finally:
+        e.stop()
+
+
+def unplugged_at_ok(path):
+    """Unplugged as soon as OK shows: the pass is kept, so no test at the
+    next power-on"""
+    e, started = power_on(path)
+    try:
+        check(not started, "unplugged at the OK: no test at the next power-on")
+        check(items(e) == [], "and the test deleted from the store: %r" % items(e))
     finally:
         e.stop()
 
@@ -349,6 +362,8 @@ def main():
         image = factory_image.factory_image(factory_image.FW_MARKER + b"emulator", app)
         path = os.path.join(tmp, "factory.bin")
         open(path, "wb").write(image)
+        check(len(image) == factory_image.IMAGE_SIZE == 62 * 1024 - 256,
+              "the image: 62 KB less the last page, so minichlink writes nothing past the flash (%d bytes)" % len(image))
         e, started = power_on(os.path.join(tmp, "new.bin"))
         check(not started, "a new, empty flash file: no test")
         e.stop()
@@ -359,6 +374,7 @@ def main():
         e.stop()
         new_badge(path)
         run(path)
+        unplugged_at_ok(path + ".ok")
         after_pass(path)
         unplugged(path)
         flash = os.path.join(tmp, "items.bin")  # the emulator's own flash file, with an item

@@ -17,6 +17,13 @@ A firmware update (USB boot ROM, the web interface, or `ledmatrix.bin`
 with minichlink or wlink) writes only the firmware's own pages. It starts
 no test: the test runs only when the app is in the store.
 
+For the same reason, install the recommended apps only after the OK.
+"Erase badge and install recommended apps" in the web interface,
+`tools/badge.py recommended` and `tools/badge.py erase` erase the store,
+and the test with it: a badge that has not passed is then not tested
+again. To get the test back, run `tools/badge.py factory` or flash
+`factory.bin` again.
+
 ## The factory image
 
 ```sh
@@ -24,15 +31,18 @@ make -C ch32fun/minichlink                         # once: the flash tool
 make MINICHLINK=ch32fun/minichlink factory-image   # writes factory.bin
 ```
 
-`factory.bin` is all 62 KB of the flash: the firmware, then the store with
-the factory test app, then an empty persistent record
-(`tools/factory_image.py` puts it together). Flashing it erases the stored
-items, the name and the settings. Flash it as `README.md` says for
-`ledmatrix.bin`, but with `factory.bin`:
+`factory.bin` fills the 62 KB of flash but its last page: the firmware,
+then the store with the factory test app, then an empty persistent record
+(`tools/factory_image.py` puts it together). The last page is erased
+anyway; without it, minichlink's last 56-byte chunk over the boot ROM
+stays inside the flash. Flashing it erases the stored items, the name and
+the settings. Flash it as `README.md` says for `ledmatrix.bin`, but with
+`factory.bin`:
 
 - Over USB, with the boot ROM: `ch32fun/minichlink/minichlink -w
-  factory.bin flash -b`. The web interface's firmware update writes only
-  the firmware, so it cannot flash `factory.bin`.
+  factory.bin flash -b` (to confirm on prototype 1). The web interface's
+  firmware update writes only the firmware, so it cannot flash
+  `factory.bin`.
 - With a WCH-LinkE: `wlink --speed low --chip CH643 flash --address
   0x08000000 factory.bin`.
 
@@ -112,3 +122,5 @@ that.
 > 5. **USB** and **IR** go by themselves. Keep it on USB.
 >    Amber **IR?**: hold your hand a few cm in front.
 > 6. Green **OK** and nothing odd in 2 or 3: good badge. Otherwise: repair pile.
+> 7. Recommended apps: only after the green **OK**. Erasing the badge
+>    before that takes the test away.

@@ -55,8 +55,8 @@ webui-firmware : $(TARGET).bin
 	# the version as built into the image (its FW_INFO marker), not as of now
 	printf '{"commit": "%s", "date": "%s", "bytes": %s}\n' "$$(grep -ao 'HH27-STARFISH-FW S[0-9]* [^[:cntrl:]]*' $(TARGET).bin | cut -d' ' -f3)" "$$(git log -1 --format=%cs HEAD)" "$$(stat -c %s $(TARGET).bin)" > webui/firmware/firmware.json
 
-# The image for the flashing table (docs/FACTORY_TEST.md): all 62 KB of the
-# flash. The firmware, then a store that holds only the factory test app
+# The image for the flashing table (docs/FACTORY_TEST.md): the 62 KB of
+# flash but its last page (tools/factory_image.py says why). The firmware, then a store that holds only the factory test app
 # (apps/factory), and an empty persistent record, so the test runs at the
 # first power-on. FACTORY_KEYS=0 leaves the test's KEY step out.
 FACTORY_KEYS?=1

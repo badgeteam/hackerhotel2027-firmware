@@ -139,6 +139,12 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   64-bit division: the toolchain's libgcc is 64-bit only.
 - **Stack.** The app runs on the firmware's stack, about 5 KB. Keep big
   arrays `static`.
+- **The name `FACTORY` is taken.** The firmware treats an app stored
+  under that name as the factory test (`docs/FACTORY_TEST.md`): it runs
+  at every power-on before the boot item, hold A does not open the menu,
+  its brightness is not kept, and once the badge has passed the test the
+  firmware deletes it. The web interface names an upload after its file,
+  so do not call your app `factory.hhapp`.
 - **gp.** The app must not use `gp`. The Makefile builds with
   `-msmall-data-limit=0` and links with `--no-relax`, so keep those flags.
 

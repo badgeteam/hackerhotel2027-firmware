@@ -208,7 +208,7 @@ int main(void) {
     uint32_t last_tick = funSysTick32();
     uint32_t hold_ms = 0;   // how long A has been down
     uint32_t boot_ms = 0;   // how long C + D have been down together
-    uint8_t chord_brightness = LEDMatrix_GetBrightness();  // from before C or D went down
+    uint8_t chord_brightness = own_brightness();  // from before C or D went down
     uint8_t last_mode = 0;  // to start the name tag when it comes on
     bool menu_open = false;
     uint32_t level_ms = 0;     // the brightness level shows this much longer
@@ -264,8 +264,9 @@ int main(void) {
         uint8_t held = buttons_down();
 
         // Hold C + D: the boot ROM, from the name tag, the menu, an app or
-        // the factory test. The brightness is kept from before the chord.
-        if (!(held & (HH_BTN_C | HH_BTN_D))) chord_brightness = LEDMatrix_GetBrightness();
+        // the factory test. The brightness is kept from before the chord,
+        // but the badge's own from the factory test (not its full brightness).
+        if (!(held & (HH_BTN_C | HH_BTN_D))) chord_brightness = s_factory ? own_brightness() : LEDMatrix_GetBrightness();
         boot_ms = (held & (HH_BTN_C | HH_BTN_D)) == (HH_BTN_C | HH_BTN_D) ? boot_ms + elapsed_ms : 0;
         if (boot_ms >= BOOT_HOLD_MS) boot_rom_arrow(chord_brightness);
 

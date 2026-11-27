@@ -5,6 +5,8 @@ second, then goes into the USB boot ROM (ledmatrix.c), on the emulator
 and in the factory test. C + D held for 2 s, and C or D alone, do nothing.
 The chord does not change the brightness: the press of D that starts it
 would otherwise make the LEDs one step darker, and the boot ROM keeps that.
+From the factory test it keeps the badge's own brightness, not the test's
+full brightness.
 
   python3 tools/usb_test/emu_boot_chord_test.py <factory.hhapp>
 
@@ -72,13 +74,19 @@ def shows(e, text):
     return shows_still(frame, text) or scroll_offset(frame, text) is not None
 
 
+STOP, MODE_NAMETAG = 0x26, 4
+
+
 def brightness(e):
     return e.usb(QUERY)[1]
 
 
-def goes_to_boot_rom(e, where, flash, d_first=False):
+def goes_to_boot_rom(e, where, flash, d_first=False, kept=None):
     """Holds C + D until the boot ROM. Then starts the badge again from the
-    same flash and checks that the brightness from before is still there."""
+    same flash and checks that the brightness from before (or `kept`) is
+    still there. With `kept`, the factory test runs again at that power-on:
+    it is stopped first, so the check reads the kept brightness, not the
+    test's own."""
     before = brightness(e)
     if d_first:  # D first, then C: that press of D makes the LEDs darker
         e.buttons(BTN_D)
@@ -93,6 +101,10 @@ def goes_to_boot_rom(e, where, flash, d_first=False):
     again = Emu(flash)
     try:
         again.wait_frames()
+        if kept is not None:
+            check(wait_for(lambda: shows(again, "LED"), 2), "%s: it runs again at the next power-on" % where)
+            check(again.usb(STOP)[0] == MODE_NAMETAG, "%s: stopped" % where)
+            before = kept
         now = brightness(again)
         check(now == before, "%s: the brightness after the boot ROM is as before (%d, was %d)" % (where, now, before))
     finally:
@@ -156,12 +168,14 @@ def main():
         finally:
             e.stop()
 
-        # The factory test
+        # The factory test, at full brightness: the badge's own is kept
         e = fresh(tmp, "factory")
         try:
+            own = brightness(e)
             check(e.store(2, "FACTORY", open(sys.argv[1], "rb").read())[2] == 0, "the factory test stored")
             check(wait_for(lambda: shows(e, "LED"), 2), "it starts, at LED")
-            goes_to_boot_rom(e, "factory test", flash_of(tmp, "factory"))
+            check(brightness(e) == 255, "it runs at full brightness (%d)" % brightness(e))
+            goes_to_boot_rom(e, "factory test", flash_of(tmp, "factory"), kept=own)
         finally:
             e.stop()
 

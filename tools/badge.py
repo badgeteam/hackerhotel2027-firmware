@@ -420,6 +420,16 @@ def main():
     b.add_argument("--level", type=int, default=255, help="the LED value, 1..255 (default 255)")
     args = p.parse_args()
 
+    if args.cmd == "bringup":
+        if not 1 <= args.level <= 255:
+            sys.exit("--level: 1 to 255")
+        if (args.auto is not None and args.auto <= 0) or (args.count is not None and args.count < 1):
+            sys.exit("--auto and --count: more than 0")
+        steps = bringup_steps(args.kind, args.lines)
+        start = find_step(steps, args.start) if args.start else 0
+        bringup(Badge(args.serial), steps, start, args.auto, args.count, args.level,
+                header=bringup_header(steps, args.lines))
+        return
     badge = Badge(args.serial)
     if args.cmd == "irlog":
         badge.ir_raw()  # drop what came in before

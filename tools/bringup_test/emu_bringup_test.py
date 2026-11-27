@@ -185,11 +185,31 @@ def run(e):
     b.send(badge.STOP)
 
 
+def command_line(e):
+    """tools/badge.py bringup from the command line: parsed and run, not only
+    the function (a lost dispatch once made it print the status and stop)"""
+    import contextlib
+    import io
+    saved_badge, saved_argv = badge.Badge, sys.argv
+    badge.Badge = lambda serial=None: EmuBadge(e)
+    sys.argv = ["badge.py", "bringup", "--kind", "edge", "--auto", "0.05", "--count", "2"]
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out):
+            badge.main()
+    finally:
+        badge.Badge, sys.argv = saved_badge, saved_argv
+    lines = out.getvalue().splitlines()
+    check(any(l.strip().startswith("1/71") for l in lines) and any(l.strip().startswith("2/71") for l in lines),
+          "badge.py bringup from the command line walks the LEDs (%d lines)" % len(lines))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         e = Emu(os.path.join(tmp, "a.bin"))
         try:
             run(e)
+            command_line(e)
         finally:
             e.stop()
     print("%s  bring-up walk: %d failures" % ("FAIL" if failures else "ok  ", failures))

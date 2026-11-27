@@ -358,9 +358,10 @@ int main(void) {
     CHECK(fill[0] < fill[1] && fill[1] < fill[2] && fill[1] - fill[0] < fill[2] - fill[1] && !bright_ranks(ARM_B),
           "the arm to A fills up, slowly, then faster (%d, %d, %d)", fill[0], fill[1], fill[2]);
     CHECK(early.full && early.dark && late.full && late.dark, "then it flashes");
-    CHECK(sending && early.sparks && late.sparks > 2 * early.sparks && early.far < 48 && late.far > early.far + 30,
-          "while it sends, sparks fly round the outline, more and further later (%d to %d, %d to %d of 256)",
-          early.sparks, late.sparks, early.far, late.far);
+    CHECK(sending && early.sparks && late.sparks > 2 * early.sparks,
+          "while it sends, sparks fly off it on the outline, more later (%d to %d)", early.sparks, late.sparks);
+    CHECK(early.far <= 16 && late.far > early.far && late.far <= 28,
+          "from the tip, then down the arm, never past it (%d, then %d of 256 from the tip)", early.far, late.far);
     uint32_t total = 0;
     int sony = 0;
     for (int i = from; i < nsent; i++) total += sent[i].us, sony += sent[i].kind == 'Y' && sent[i].us == 45000;

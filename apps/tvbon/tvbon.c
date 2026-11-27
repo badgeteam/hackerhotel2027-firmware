@@ -1,8 +1,8 @@
 // TVBOn: turns the TVs around you on or off, by infrared. Press A: the
 // badge sends the power-on code of each TV brand it knows (Samsung, LG,
 // Hisense, Sony, Panasonic, Philips, Toshiba): the arm to A fills up
-// green, faster and faster, then flashes while sparks fly over the
-// outline, more and wider the longer it sends. Press B: the power-off
+// green, faster and faster, then flashes while sparks fly off it on the
+// outline, more of them the longer it sends. Press B: the power-off
 // codes, the same in red to B. Brands with only a power toggle (TCL, Xiaomi, newer
 // Hisense, Philips and Toshiba, Sharp, Telefunken and others by Vestel,
 // Hitachi)
@@ -266,18 +266,17 @@ static void arm(uint8_t which, bool red, uint8_t level, int lit) {
     }
 }
 
-// Sparks on the outline around the arm at angle a: more of them and further
-// round the star as e (0 .. 255) grows; each fades in about 0.15 s
+// Sparks on the outline of the arm at angle a, flying off the blast: from
+// its tip at first, then more of them and down the arm's sides as e (0 ..
+// 255) grows; each fades in about 0.15 s
 static void sparks(uint8_t a, uint8_t e, uint32_t elapsed_ms) {
     for (int j = 0; j < HH_EDGE_COUNT; j++) spark[j] = spark[j] > elapsed_ms * 2 ? spark[j] - elapsed_ms * 2 : 0;
-    if (e) {
-        int width = 16 + e * 112 / 255;  // half the arc, in 1/256 turn: up to the whole star
-        for (int n = 1 + e / 40; n > 0; n--) {
-            int j = (int)(hh->random() % HH_EDGE_COUNT);
-            int off = (int8_t)(hh->polar[hh->edge[j]][1] - a);
-            if (off < 0) off = -off;
-            if (off <= width) spark[j] = 255;
-        }
+    int width = 8 + e * 20 / 255;  // half the arc, in 1/256 turn: the arm, not the dips beside it
+    for (int n = e ? 1 + e / 40 : 0, tries = 0; n > 0 && tries < 64; tries++) {
+        int j = (int)(hh->random() % HH_EDGE_COUNT);
+        int off = (int8_t)(hh->polar[hh->edge[j]][1] - a);
+        if (off < 0) off = -off;
+        if (off <= width) spark[j] = 255, n--;
     }
     for (int j = 0; j < HH_EDGE_COUNT; j++) hh->set(hh->edge[j], spark[j]);
 }

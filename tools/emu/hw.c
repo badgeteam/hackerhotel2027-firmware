@@ -26,12 +26,12 @@
 //   L <text>   (the firmware's log)
 //   B          (jumped to the boot ROM; the program then exits)
 //
-//   hh27-emu [flash file [buttons held at power-on, hex [fresh | factory]]]
+//   hh27-emu [flash file [buttons held at power-on, hex]]
 //
-// The emulator skips the factory test at power-on, because the tests start
-// it on a new flash file. "factory" powers on as the badge does: the
-// factory test runs if it has not passed yet. "fresh" also erases the
-// persistent record first, as on a newly flashed badge (the items stay).
+// The flash file holds the top 34 KB of the flash: 2 KB of the firmware's
+// part (not used), then the item store and the persistent record. A file
+// of all 62 KB, as `make factory-image` writes, works too: then its top
+// 34 KB are used (a freshly flashed badge, with the factory test app).
 //
 // "Interrupts": the firmware holds s_lock while it runs and lets go only
 // in Delay_Ms(); the reader thread takes it to hand over a USB packet,
@@ -381,6 +381,8 @@ void FlashPages_Program(uint32_t addr, const uint8_t* data) {
 // The store lives in a file, mapped at the address it has on the chip, so
 // the firmware's pointers into flash work as they are. A new file starts
 // erased (all 0xFF).
+#define FULL_FLASH (62 * 1024)  // a whole image (make factory-image)
+
 static void map_flash(const char* path) {
     uintptr_t page = STORE_FLASH_BASE & ~0xFFFu;
     size_t size = (STORE_FLASH_BASE + STORE_FLASH_SIZE) - page;
@@ -390,13 +392,14 @@ static void map_flash(const char* path) {
         exit(1);
     }
     off_t old = lseek(fd, 0, SEEK_END);
+    off_t at = old == FULL_FLASH ? (off_t)(page - 0x08000000u) : 0;
     if (old < (off_t)size) {
         uint8_t ff[4096];
         memset(ff, 0xFF, sizeof ff);
         for (off_t n = old; n < (off_t)size; n += sizeof ff)
             if (write(fd, ff, sizeof ff) < 0) exit(1);
     }
-    void* p = mmap((void*)page, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED_NOREPLACE, fd, 0);
+    void* p = mmap((void*)page, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED_NOREPLACE, fd, at);
     if (p != (void*)page) {
         fprintf(stderr, "cannot map the flash at 0x%lx\n", (unsigned long)page);
         exit(1);
@@ -472,11 +475,6 @@ static void* reader(void* arg) {
 
 int firmware_main(void);  // ledmatrix.c's main()
 
-bool emu_factory_at_power_on;  // ledmatrix.c: the factory test at power-on, as on the badge
-
-// "fresh": the persistent record (persist.c) erased, as on a newly flashed badge
-static void erase_record(void) { memset((void*)(uintptr_t)PERSIST_FLASH_BASE, 0xFF, PERSIST_FLASH_SIZE); }
-
 int main(int argc, char** argv) {
     const char* flash = argc > 1 ? argv[1] : "hh27-emu-flash.bin";
     map_flash(flash);
@@ -484,9 +482,6 @@ int main(int argc, char** argv) {
     map_ram(EMU_ROM_BASE, EMU_ROM_SIZE);  // the API table for apps (app.c)
     emu_esig.UID0 = (uint32_t)now_us() ^ (uint32_t)getpid() * 2654435761u;
     set_buttons(argc > 2 ? (uint8_t)strtoul(argv[2], NULL, 16) : 0);  // held at power-on
-    const char* power_on = argc > 3 ? argv[3] : "";
-    if (!strcmp(power_on, "fresh")) erase_record();
-    emu_factory_at_power_on = !strcmp(power_on, "fresh") || !strcmp(power_on, "factory");
 
     pthread_mutex_lock(&s_lock);
     pthread_t t;

@@ -23,6 +23,9 @@ with one click. `make webui` copies the built apps there and writes
 `webui/apps/index.json`, with each app's description taken from the
 comment at the top of its first `.c` file. Commit `webui/apps/` after a
 change to an app, so the site serves the new build.
+`apps/factory`, the factory test, is not in the library: `make
+factory-image` and `tools/badge.py factory` store it
+(`docs/FACTORY_TEST.md`).
 
 You need the same `riscv64-elf-gcc` as the firmware. Without a badge, try
 your app in the emulator: `python3 tools/emu/emu.py --web`, then add the
@@ -123,7 +126,8 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 ## Limits
 
 - **API version.** An app does not start on firmware with an older
-  `HH_API_VERSION` than the one it was built against (8: `charging`;
+  `HH_API_VERSION` than the one it was built against (9: `usb_power`,
+  `ir_loopback`, `factory_passed`; 8: `charging`;
   7: raw infrared, `ir_send_raw`; 6: shots, `ir_receive_shot`; 5: the infrared packets; 4: the helpers; 3: `polar`;
   2: the text calls); update the
   badge first. `tools/badge.py list` prints the firmware's version ("app API").

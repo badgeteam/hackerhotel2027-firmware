@@ -22,7 +22,7 @@ typedef struct {
     uint8_t boot_item;
     uint8_t brightness;  // 0: never saved (records before it had 0 here)
     uint8_t keys;  // MENU_KEYS_* (menu.h); 0 in records from before it
-    uint8_t factory;  // FACTORY_PASSED once the factory test passed (factory.h); 0 in records from before it
+    uint8_t factory;  // FACTORY_PASSED once the factory test passed (apps/factory); 0 in records from before it
     char name[PERSIST_NAME_LEN];  // NUL-padded
     uint8_t reserved2[16];
     app_slot_t apps[PERSIST_APP_SLOTS];

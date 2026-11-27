@@ -16,5 +16,6 @@ cc -std=gnu11 -Wall -Wextra -O1 -fsanitize=address,undefined -DHH_EMU -I"$root/t
     -Wall -Wextra -I"$root/apps" -T "$root/apps/app.ld" -Wl,--no-relax -Wl,--no-warn-rwx-segments -nostartfiles \
     -o "$out/charging.elf" "$here/charging_app.c" "$root/apps/sdk.c"
 "${PREFIX:-riscv64-elf}-objcopy" -O binary -j .image "$out/charging.elf" "$out/charging.hhapp"
+make -s -C "$root/apps" APPS_OUT="$out" "$out/factory.hhapp" >/dev/null
 make -s -C "$root/tools/emu"
-python3 "$here/emu_charge_test.py" "$out/charging.hhapp"
+python3 "$here/emu_charge_test.py" "$out/charging.hhapp" "$out/factory.hhapp"

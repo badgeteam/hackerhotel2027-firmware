@@ -29,15 +29,19 @@ The flash (items, name, settings) is kept in a file, by default
 ~/.cache/hh27-emu/flash.bin, so it survives R and a restart. The
 firmware's log appears in this terminal.
 
---fresh starts as a newly flashed badge: the persistent record (the name,
+--fresh starts as a badge newly flashed with the factory image (make
+factory-image), but with the items kept: the persistent record (the name,
 the settings, the boot item, whether the factory test passed, and what
-apps saved, such as high scores) erased, the items kept, so
-the factory test runs at power-on. It runs on a copy of the flash file,
+apps saved, such as high scores) erased, and the factory test app
+(apps/build/factory.hhapp, make -C apps) stored after the items, so the
+factory test runs at power-on. It runs on a copy of the flash file,
 which goes when the emulator closes: your flash file stays as it was.
-With --keep, it erases the record in the flash file itself, and keeps
-what happens after. In both, R runs the factory test again until it
-passes, as on the badge. Without --fresh the emulator skips it at
-power-on (USB command 0x52, tools/badge.py factory, starts it).
+With --keep, it changes the flash file itself, and keeps what happens
+after. In both, R runs the factory test again until it passes, as on the
+badge; after the pass, the app deletes itself. --fresh --flash
+factory.bin starts from the factory image itself (all 62 KB, on a copy):
+the store empty but for the test. tools/badge.py factory also stores the
+test and starts it.
 
 --web serves the web interface (webui/) on http://127.0.0.1:8027/ (--port
 to change) and opens it (--no-browser not). Click "Connect emulator" there: the page then talks to the
@@ -89,9 +93,8 @@ def load_board():
 class Badge:
     """hh27-emu as a child process; its lines go to a queue."""
 
-    def __init__(self, flash, held=0, power_on=None):
-        # power_on: "fresh" or "factory" (hw.c), or None: skip the factory test
-        self.p = subprocess.Popen([str(EMU), str(flash), "%x" % held] + ([power_on] if power_on else []),
+    def __init__(self, flash, held=0):
+        self.p = subprocess.Popen([str(EMU), str(flash), "%x" % held],
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
         self.lines = queue.Queue()
         self.usb_replies = queue.Queue()
@@ -218,9 +221,8 @@ BATTERY = ["does not charge", "charges", "none"]
 
 
 class App:
-    def __init__(self, flash, web, ir, port=WEB_PORT, browser=True, fresh=False):
+    def __init__(self, flash, web, ir, port=WEB_PORT, browser=True):
         self.flash, self.ir = flash, ir
-        self.power_word = "fresh" if fresh else None  # the first power-on; then "factory" (see power_on)
         self.vbus, self.battery = True, 0
         self.board = board = load_board()
         self.root = root = tk.Tk()
@@ -300,9 +302,7 @@ class App:
     def power_on(self):
         if self.badge:
             self.badge.stop()
-        self.badge = Badge(self.flash, self.held, self.power_word)
-        if self.power_word:  # after a fresh start, the next power-ons are as on the badge
-            self.power_word = "factory"
+        self.badge = Badge(self.flash, self.held)
         self.send_power()
         self.state = "on"
         self.show_status()
@@ -442,8 +442,8 @@ def main():
     p.add_argument("--no-browser", action="store_true", help="with --web: do not open the browser")
     p.add_argument("--no-ir", action="store_true", help="stay out of the shared infrared room")
     p.add_argument("--fresh", action="store_true",
-                   help="start as a newly flashed badge (the record erased, the factory test at power-on), on a copy of the flash file")
-    p.add_argument("--keep", action="store_true", help="with --fresh: erase the record (name, settings, apps' saved data) in the flash file itself, and keep the changes")
+                   help="start as a newly flashed badge (the record erased, the factory test app stored), on a copy of the flash file")
+    p.add_argument("--keep", action="store_true", help="with --fresh: erase the record (name, settings, apps' saved data) and store the factory test in the flash file itself, and keep the changes")
     args = p.parse_args()
     if args.keep and not args.fresh:
         p.error("--keep goes with --fresh")
@@ -460,7 +460,14 @@ def main():
         for s in (signal.SIGTERM, signal.SIGHUP):  # killed or the terminal closed: still remove the copy
             signal.signal(s, lambda *a: sys.exit(0))
     try:
-        App(flash, args.web, not args.no_ir, args.port, not args.no_browser, args.fresh).root.mainloop()
+        if args.fresh:
+            sys.path.insert(0, str(REPO / "tools"))
+            import factory_image
+            if not os.path.exists(factory_image.APP):
+                sys.exit("%s is missing: run make -C apps first" % factory_image.APP)
+            if not factory_image.fresh(flash, open(factory_image.APP, "rb").read()):
+                print("no room in the store for the factory test app: the record is erased, the test does not run")
+        App(flash, args.web, not args.no_ir, args.port, not args.no_browser).root.mainloop()
     finally:
         if scratch:
             shutil.rmtree(scratch, ignore_errors=True)

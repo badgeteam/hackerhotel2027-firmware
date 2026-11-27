@@ -124,6 +124,8 @@ static bool api_ir_send_shot(const hh_ir_shot_t* shot) {
     return infrared_send_shot(IrShot_Encode(&s));
 }
 
+static void api_factory_passed(void) { Persist_SetFactoryPassed(true); }
+
 static const hh_api_t s_api = {
     .version = HH_API_VERSION,
     .size = sizeof(hh_api_t),
@@ -165,6 +167,9 @@ static const hh_api_t s_api = {
     .ir_send_shot = api_ir_send_shot,
     .ir_send_raw = api_ir_send_raw,
     .charging = Power_Charging,
+    .usb_power = Power_Usb,
+    .ir_loopback = infrared_set_loopback,
+    .factory_passed = api_factory_passed,
 };
 _Static_assert(HH_IR_PACKET_MAX == IR_PACKET_DATA_MAX, "hhapp.h and infrared.h agree on the packet size");
 _Static_assert(IR_RAW_CARRIER_MIN == 20000 && IR_RAW_CARRIER_MAX == 60000, "hhapp.h gives the raw carrier range");
@@ -229,6 +234,7 @@ bool AppHost_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held) {
 
 void AppHost_Stop(void) {
     if (!s_app) return;
+    infrared_set_loopback(false);
     infrared_abort_raw();  // its marks and spaces are in the app's RAM
     s_app = NULL;
     LEDMatrix_Clear();

@@ -13,10 +13,13 @@ import os
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import factory_image  # noqa: E402
 EXE = os.path.join(ROOT, "tools", "emu", "build", "hh27-emu")
 COLS = 24          # HH_COLS: slot = row * COLS + col
 GRID_W, GRID_H = 17, 16
@@ -54,12 +57,14 @@ GRID_SLOTS = {s for row in GRID for s in row if s is not None}
 
 
 class Emu:
-    def __init__(self, flash, exe=EXE, fresh=False, factory=False):
-        """fresh: erase the persistent record first (the items stay), and run
-        the factory test at power-on. factory: run the factory test at
-        power-on if it has not passed yet, as the badge does (fresh does too)."""
-        power_on = ["fresh"] if fresh else ["factory"] if factory else []
-        self.p = subprocess.Popen([exe, flash, "0"] + power_on, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    def __init__(self, flash, exe=EXE, fresh=False):
+        """fresh: as a badge newly flashed with the factory image, the items
+        kept (factory_image.fresh(): the persistent record erased, the
+        factory test app stored), so the factory test runs at power-on.
+        Needs apps/build/factory.hhapp (make -C apps)."""
+        if fresh and not factory_image.fresh(flash, open(factory_image.APP, "rb").read()):
+            raise RuntimeError("fresh: no room in the store for the factory test app")
+        self.p = subprocess.Popen([exe, flash, "0"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   text=True, bufsize=1)
         self.replies = queue.Queue()
         self.pin_replies = queue.Queue()  # "Q": see pins()

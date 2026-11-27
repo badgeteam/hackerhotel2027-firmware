@@ -246,6 +246,22 @@ not start, or that has no firmware yet, where the USB way above cannot.
 `wlink flash --erase`) erases all of it: the stored items, the name and
 the settings too.
 
+## Flash for the flashing table
+
+A new badge gets the factory image, not only the firmware:
+
+```sh
+make MINICHLINK=ch32fun/minichlink factory-image   # writes factory.bin
+```
+
+`factory.bin` is all 62 KB of the flash: the firmware, a store with only
+the factory test app (`apps/factory`), and an empty persistent record.
+Flash it as above, with `factory.bin` in place of `ledmatrix.bin`. It
+erases the stored items, the name and the settings. The badge then runs
+the factory test at power-on until it passes, and the test deletes itself
+from the store. See `docs/FACTORY_TEST.md`. A firmware update starts no
+test; `tools/badge.py factory` runs it again.
+
 ## Web interface
 
 WebUSB needs Chrome, Edge or Opera, and a secure context: localhost is
@@ -342,12 +358,15 @@ The two buttons under the board do the same as **V** and **U**.
   no USB packets: the web interface shows the badge as disconnected, as
   when you unplug a badge. Without a battery, CHRG toggles every 100 ms,
   as the charger does.
-- **Fresh start.** The emulator skips the factory test at power-on.
-  `--fresh` starts as a newly flashed badge: the persistent record (name,
+- **Fresh start.** `--fresh` starts as a badge newly flashed with the
+  factory image, but the items stay: the persistent record (name,
   settings, boot item, factory test passed, and what apps saved, such as
-  high scores) is erased and the items stay, so the factory test runs. It
-  runs on a copy of the flash file, so your own file stays as it was.
-  `--fresh --keep` erases the record in the file itself.
+  high scores) is erased, and the factory test app
+  (`apps/build/factory.hhapp`, `make -C apps`) is stored after the items,
+  so the factory test runs. It runs on a copy of the flash file, so your
+  own file stays as it was. `--fresh --keep` changes the file itself.
+  `--fresh --flash factory.bin` starts from the factory image itself (on
+  a copy too).
 - **Log.** The firmware's log appears in the terminal.
 
 `tools/emu/rv32_test/run.sh` checks the interpreter against the same

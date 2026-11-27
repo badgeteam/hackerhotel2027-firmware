@@ -10,7 +10,9 @@ interface (webusb_protocol.h). Needs pyusb (pip install pyusb).
   tools/badge.py stop                      stop the running animation or app
   tools/badge.py delete INDEX              remove one item; the items after it move down one
   tools/badge.py erase                     erase every item (the name and app data stay)
-  tools/badge.py factory                   run the factory test now (docs/FACTORY_TEST.md)
+  tools/badge.py factory                   run the factory test now (docs/FACTORY_TEST.md):
+                                           store it (apps/build/factory.hhapp) unless it is
+                                           stored, and start it
   tools/badge.py recommended               erase, then install the recommended app set
                                            (webui/apps/index.json; make -C apps webui)
   tools/badge.py name [TEXT]               show or set the owner's name
@@ -52,6 +54,8 @@ TYPES = {1: "animation", 2: "app", 3: "text"}
 MODES = {1: "custom", 2: "animation or text", 3: "app", 4: "name tag"}
 ERRORS = {1: "bad command or index", 2: "the store is full", 3: "no such item", 4: "not a valid animation, app or text"}
 NONE = 0xFF
+FACTORY_API = 9  # the app API the factory test app needs (apps/hhapp.h)
+FACTORY_APP = os.path.join(ROOT, "apps", "build", "factory.hhapp")
 
 
 def serial_of(dev):
@@ -381,6 +385,33 @@ def bringup(badge, steps, start=0, auto=None, count=None, level=255, ask=input, 
     return bad
 
 
+def factory(badge):
+    """The factory test is an app (apps/factory), stored as FACTORY: the
+    firmware starts it at power-on while it is stored, and deletes it once
+    it has passed. Stores it if it is not stored, and starts it."""
+    s = badge.send(0xFF)
+    if s["api"] < FACTORY_API:
+        sys.exit("the badge's firmware has app API %d; the factory test needs %d: update the firmware" % (s["api"], FACTORY_API))
+    for i in range(s["count"]):
+        item = badge.check(badge.send(0x24, i), "info")["item"]
+        if item["type"] == 2 and item["name"] == "FACTORY":
+            badge.check(badge.send(0x25, i), "run")
+            print("factory test started on the badge (item %d)" % i)
+            return
+    if not os.path.exists(FACTORY_APP):
+        sys.exit("%s is missing: run make -C apps first" % FACTORY_APP)
+    data = open(FACTORY_APP, "rb").read()
+    badge.check(badge.send(0x21, 2, *b"FACTORY", timeout=10000), "begin")
+    for off in range(0, len(data), 60):
+        badge.check(badge.send(0x22, *data[off:off + 60]), "write")
+    done = badge.check(badge.send(0x23), "commit")  # it starts, and becomes the boot item
+    index = done["count"] - 1
+    if s["boot"] != NONE:  # the boot item from before, back: run it, then the test again
+        badge.check(badge.send(0x25, s["boot"], 1), "boot item")
+        badge.check(badge.send(0x25, index), "run")
+    print("factory test stored as item %d and started on the badge; it deletes itself once it passed" % index)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--serial", help="the badge with this serial number, when more than one is plugged in")
@@ -462,8 +493,7 @@ def main():
     elif args.cmd == "erase":
         badge.send(0x20, timeout=10000)
     elif args.cmd == "factory":
-        badge.send(0x52)
-        print("factory test started on the badge")
+        factory(badge)
     elif args.cmd == "recommended":
         here = os.path.join(ROOT, "webui", "apps")
         index = json.load(open(os.path.join(here, "index.json")))

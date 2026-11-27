@@ -175,7 +175,7 @@ wants the UART's RX pin.
 | `level N` | replaced | `tools/badge.py brightness N` (1 .. 255), and the web interface. |
 | `hello` | replaced: [#37] | The NAMETAG app: tap C. No USB command. |
 | `test` | partly: [#11] | `tools/badge.py bringup` walks the LEDs from the host. `docs/BRINGUP.md` has the rest as a checklist. |
-| `factory` | replaced: [#59] | `tools/badge.py factory` (USB command `0x52`). |
+| `factory` | replaced: [#59] | `tools/badge.py factory`: it stores the factory test app and starts it. |
 | `factory skip` | untracked | |
 | `sponsors` | tracked: [#12] | |
 | `progress` | tracked: [#6] | |
@@ -236,7 +236,7 @@ a new board.
 | `C`: USB power on and off (charging) | done: `tools/emu` | `V` plugs USB power in and out (PC3). `U` makes the battery charge, stop, or go away: then CHRG (PB22) toggles, as the charger does without a battery. Buttons under the board do the same, and `tools/emu/headless.py` has `usb_power()`, `charging()` and `no_battery()`. |
 | `R`: reset | done: [#3] | `R` powers off and on; a key held then is held at power-on (safe start). |
 | A name kept over `R`, lost when the emulator closes | done: [#3] | The flash is a file, so everything stays. |
-| `--fresh`: the factory test, then the sponsor reel | partly: `tools/emu` | `--fresh` erases the persistent record (the items stay), so the factory test runs at power-on. It runs on a copy of the flash file; `--keep` erases the record in the file itself. There is no sponsor reel yet ([#12]). |
+| `--fresh`: the factory test, then the sponsor reel | partly: `tools/emu` | `--fresh` erases the persistent record and stores the factory test app (the items stay), so the factory test runs at power-on. It runs on a copy of the flash file; `--keep` changes the file itself. There is no sponsor reel yet ([#12]). |
 | One shared infrared room (UDP 127.255.255.255:8028) | done: [#3], [#37] | |
 | stdin is the UART console | tracked: [#10] | stdin carries the emulator's own protocol now. |
 | `--web`: the setup page on localhost, any browser | done: [#3] | The whole web interface. |

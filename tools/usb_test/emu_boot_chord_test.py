@@ -6,7 +6,9 @@ and in the factory test. C + D held for 2 s, and C or D alone, do nothing.
 The chord does not change the brightness: the press of D that starts it
 would otherwise make the LEDs one step darker, and the boot ROM keeps that.
 
-  python3 tools/usb_test/emu_boot_chord_test.py
+  python3 tools/usb_test/emu_boot_chord_test.py <factory.hhapp>
+
+factory.hhapp is the factory test, apps/factory (run.sh builds it).
 """
 import os
 import sys
@@ -16,7 +18,6 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "emu"))
 from headless import *  # noqa: E402,F403
 
-FACTORY = 0x52
 failures = 0
 
 
@@ -158,8 +159,8 @@ def main():
         # The factory test
         e = fresh(tmp, "factory")
         try:
-            e.usb(FACTORY)
-            check(wait_for(lambda: shows(e, "LED"), 2), "USB 0x52: the factory test, at LED")
+            check(e.store(2, "FACTORY", open(sys.argv[1], "rb").read())[2] == 0, "the factory test stored")
+            check(wait_for(lambda: shows(e, "LED"), 2), "it starts, at LED")
             goes_to_boot_rom(e, "factory test", flash_of(tmp, "factory"))
         finally:
             e.stop()

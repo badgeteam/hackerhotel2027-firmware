@@ -19,10 +19,11 @@ debounced state, and the screen never shows over the app.
 The emulator's USB power and charger come from headless.py: usb_power(),
 charging(), no_battery() and pins().
 
-  python3 tools/charge_test/emu_charge_test.py <charging.hhapp>
+  python3 tools/charge_test/emu_charge_test.py <charging.hhapp> <factory.hhapp>
 
 charging.hhapp is tools/charge_test/charging_app.c built as an app (run.sh
 builds it): it prints "CHARGING 1" or "CHARGING 0" when charging() changes.
+factory.hhapp is the factory test, apps/factory (run.sh builds it too).
 """
 import os
 import subprocess
@@ -33,7 +34,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "emu"))
 from headless import *  # noqa: E402,F403
 
-SET_PIXEL, CLEAR, STORE_ERASE, STOP, FACTORY = 0x01, 0x05, 0x20, 0x26, 0x52
+SET_PIXEL, CLEAR, STORE_ERASE, STOP = 0x01, 0x05, 0x20, 0x26
 TYPE_APP, MODE_CUSTOM, MODE_PATTERN, MODE_APP, MODE_NAMETAG = 2, 1, 2, 3, 4
 NAME = "BOB"
 failures = 0
@@ -344,13 +345,14 @@ def run(e, app):
     seen = frames(e, 1.2)
     check(seen and not any(any(f[s] for s in OFF_TEXT) for f in seen), "a shot during it: no ring after C")
 
-    # The factory test over it takes over; after it no battery (without a
-    # boot item, which would start after the test and end it anyway)
+    # The factory test (an app) over it takes over; after it no battery
+    # (with the store erased first: no other boot item, which would start
+    # after the test and end it anyway)
     check(e.usb(STORE_ERASE)[2] == 0 and e.usb(STOP)[0] == MODE_NAMETAG, "the store erased: no boot item")
     charge_cycle(e)
     check(shows_battery(e), "again")
-    e.usb(FACTORY)
-    check(wait_for(lambda: shows_still(e.wait_frames(), "LED"), 2), "USB 0x52: the factory test, LED")
+    check(e.store(TYPE_APP, "FACTORY", open(sys.argv[2], "rb").read())[2] == 0, "the factory test stored")
+    check(wait_for(lambda: shows_still(e.wait_frames(), "LED"), 2), "it starts: LED")
     e.buttons(BTN_A | BTN_B)  # A + B held 3 s leaves it
     time.sleep(3.4)
     e.buttons(0)

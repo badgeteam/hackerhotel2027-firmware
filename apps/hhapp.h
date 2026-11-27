@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 #define HH_APP_MAGIC 0x50414848u  // "HHAP"
-#define HH_API_VERSION 8  // 2: draw_text, text_width; 3: polar; 4: the helpers; 5: IR packets; 6: shots; 7: raw IR; 8: charging
+#define HH_API_VERSION 9  // 2: draw_text, text_width; 3: polar; 4: the helpers; 5: IR packets; 6: shots; 7: raw IR; 8: charging; 9: USB power, IR loopback, the factory test
 
 #define HH_APP_RAM_BASE 0x20002000u
 #define HH_APP_RAM_SIZE 0x3000u  // 12 KB: the image and its .bss
@@ -222,6 +222,16 @@ typedef struct {
     // and the charger's CHRG line has been low for half a second). The
     // badge cannot tell how full the battery is.
     bool (*charging)(void);
+
+    // HH_API_VERSION 9. usb_power: true while USB powers the badge (VBUS on
+    // PC3). ir_loopback(true): ir_receive_packet() also gets the badge's
+    // own packets, as its receiver hears its own IR LED; off again when
+    // the app stops. factory_passed: for the factory test (apps/factory,
+    // docs/FACTORY_TEST.md) only: the badge keeps that it passed, and the
+    // firmware deletes the app from the store when it exits.
+    bool (*usb_power)(void);
+    void (*ir_loopback)(bool on);
+    void (*factory_passed)(void);
 } hh_api_t;
 
 // The start of every app image, at HH_APP_RAM_BASE. HH_APP() fills it in.

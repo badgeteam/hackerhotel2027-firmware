@@ -33,9 +33,10 @@ exist in this firmware.
   "Flash over USB".
 - A USB-C power meter, to put between the PC and the badge (steps 4, 5
   and 8).
-- `ledmatrix.bin` (`make MINICHLINK=ch32fun/minichlink ledmatrix.bin`),
-  minichlink (`make -C ch32fun/minichlink`) and pyusb for
-  `tools/badge.py` (see `CONTRIBUTING.md`, "Build").
+- `factory.bin` (`make MINICHLINK=ch32fun/minichlink factory-image`): the
+  firmware and the factory test app, all 62 KB of the flash
+  (`docs/FACTORY_TEST.md`). Also minichlink (`make -C ch32fun/minichlink`)
+  and pyusb for `tools/badge.py` (see `CONTRIBUTING.md`, "Build").
 - For SWD: a WCH-LinkE with [wlink](https://github.com/ch32-rs/wlink),
   and a 1 × 6 pin header at 1.27 mm pitch for J3. J3 is not in the BOM,
   so the assembled boards come without it.
@@ -267,6 +268,8 @@ leave a battery on J2 when you do not use it: see "What you need".
 ## 6. First flash
 
 Use one of the two ways. Over USB, you need no probe and no header.
+Flash `factory.bin`, not `ledmatrix.bin`: only the factory image has the
+factory test (step 8) in its store.
 
 ### Over USB
 
@@ -277,7 +280,7 @@ A blank chip stays in the boot ROM (step 4), so you need no button.
 2. Flash:
 
    ```sh
-   ch32fun/minichlink/minichlink -w ledmatrix.bin flash -b
+   ch32fun/minichlink/minichlink -w factory.bin flash -b
    ```
 
 ### Over SWD, with a WCH-LinkE
@@ -298,11 +301,11 @@ firmware does not start.
 
    ```sh
    wlink --speed low --chip CH643 reset   # must print "Attached chip: CH643"
-   wlink --speed low --chip CH643 flash --address 0x08000000 ledmatrix.bin
+   wlink --speed low --chip CH643 flash --address 0x08000000 factory.bin
    ```
 
    minichlink also knows the CH643 and the WCH-LinkE
-   (`ch32fun/minichlink/minichlink -w ledmatrix.bin flash -b`)
+   (`ch32fun/minichlink/minichlink -w factory.bin flash -b`)
    **(to confirm on prototype 1)**.
 6. To read the firmware's log, keep the probe on and run
    `ch32fun/minichlink/minichlink -T`.
@@ -353,8 +356,9 @@ on.
 
 ## 8. The factory test
 
-1. Power the badge from USB. After the first flash, the test starts by
-   itself. Else run `tools/badge.py factory`.
+1. Power the badge from USB. After the first flash with `factory.bin`, the
+   test starts by itself. Else run `tools/badge.py factory`: it stores the
+   test app and starts it.
 2. Do the steps on the card in `docs/FACTORY_TEST.md`.
 3. Before the LED step, disconnect the battery from J2, or wait until
    CHRG is high (step 5). Else the meter also shows the charge current.

@@ -103,11 +103,11 @@ When no app runs and the menu is closed:
   with one button, forward is the way round the ring. The menu's BUTTONS
   setting changes only the menu and the name editor, not this.
 
-**The menu** lists the name tag, SAY HI, every stored animation, text and
-app, and the badge's settings. The name of the entry shows on the grid,
-the outline shows where you are in the list, and the arms show the group:
-orange the name tag and SAY HI, purple animations, blue texts, green apps,
-white settings.
+**The menu** lists the name tag, every stored animation, text and app,
+and the badge's settings. The name of the entry shows on the grid, the
+outline shows where you are in the list, and the arms show the group:
+orange the name tag, purple animations, blue texts, green apps, white
+settings.
 
 | In the menu | |
 |---|---|
@@ -115,9 +115,6 @@ white settings.
 | **Tap A** | start it (or change the setting) |
 | **Hold A** | close the menu, and go on with what ran before |
 | no button for 20 s | the menu closes |
-
-**SAY HI** swaps names with another badge over infrared: see
-[Meeting other badges](#meeting-other-badges).
 
 The settings in the menu:
 
@@ -163,7 +160,7 @@ Further:
   to hide it: that tap does nothing else, so B and D do not change the
   brightness. It goes by itself when charging stops, and comes back only
   when charging starts again. It does not show over an app, a picture
-  from the web interface, the menu, the factory test or a greeting. Apps
+  from the web interface, the menu or the factory test. Apps
   can ask with `charging()` (`docs/APP_API.md`).
 
 ## Build
@@ -358,18 +355,22 @@ code built for the PC.
 
 ## Meeting other badges
 
-Hold your badge so that its infrared LED and receiver face the other
-badge, close by. Open the menu (hold **A**), press **D** once to reach
-**SAY HI**, and tap **A**.
+The **NAMETAG** app (`apps/nametag`, in the recommended set, and the item
+a badge starts at power-on) swaps names over infrared. Badges that run it
+learn each other's names by themselves and show `HI` and the other's
+name. Tap **C** to see how many hackers you met and who is near; that
+also says hello at once. Hold your badge so that its infrared LED and
+receiver face the other badge, close by.
 
-- Your badge shows `HI?` and sends your name.
-- The other badge answers with its name, whatever it shows, as long as no
-  app runs there. Both badges show `HI` and the other's name, scrolling
-  through once.
-- Without an answer, your badge tries 4 times in 6 seconds, then shows
-  `NO REPLY`.
-- **B**, **C** or **D** ends the greeting early. What ran before then
-  goes on.
+The firmware itself does not swap names: outside apps, a badge answers no
+HELLO and drops the packets. Badges with older firmware still have SAY HI
+in the menu; the NAMETAG app answers it, and they answer the app's HELLO.
+
+An upload makes the new item the one that starts at power-on, so after
+an upload the badge swaps no names. To swap names again, choose NAMETAG
+among the apps (green) in the menu, or star it in the web interface. The
+menu's NAME TAG entry (orange) is the plain name tag, and it does not
+swap names.
 
 **4 in a row** (`apps/four`, in the web interface's App library) plays
 against another badge over infrared. Start it on both badges and point
@@ -378,8 +379,7 @@ first starts. C / D aim, B drops. Drop a disc before another badge
 answers, and you play against your own badge. After 20 s without an
 answer from the other badge, the game ends.
 
-An app gets the infrared to itself: a badge that runs an app does not
-answer a SAY HI. The packets (`ir_codec.h`) can carry up to 32 bytes, and apps can
+An app gets the infrared to itself. The packets (`ir_codec.h`) can carry up to 32 bytes, and apps can
 send and receive them too (`apps/README.md`).
 
 ## What the badge stores
@@ -430,12 +430,12 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/app_test/run.sh` | checks the apps: game rules on the PC (`mock_hh.h` stands in for the firmware), that no app draws over its own text in the same tick (`overdraw_run.c`, `MOCK_OVERDRAW=all` lists the octagon's clipped pixels too; a text read back with `get()` and then cleared is a mask, as in the name tag, and not checked, nor is what the app draws over that pixel later in the tick), then every app in the emulator with random buttons |
 | `tools/text_test/run.sh` | checks text items: the web interface's payloads, played on the emulator |
 | `tools/four_test/run.sh` | checks 4 in a row: its rules on the PC, and whole games on two emulators |
-| `tools/ir_test/run.sh` | checks the infrared codec with a model of the receiver, and the name swap on two emulators |
+| `tools/ir_test/run.sh` | checks the infrared codec with a model of the receiver, and raw frames from an app on the emulator |
 | `tools/board_test/run.sh` | checks that `tools/extract_board_data.py` makes the committed `webui/board_data.js` from the board (SKIP without it) |
 | `tools/bringup_test/run.sh` | checks `tools/badge.py bringup` on the emulator: the LED of each printed designator lights, and the badge shows its name tag after |
 | `tools/nametag_test/run.sh` | checks how the name tag shows banana shots, on the emulator |
 | `tools/usb_test/run.sh` | checks the USB descriptors' lengths on the PC, and the C + D boot ROM chord on the emulator |
-| `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge, banana shots, on emulators |
+| `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge that drops packets, a badge with older firmware (SAY HI), banana shots, on emulators |
 | `tools/brightness_test/run.sh` | checks the brightness on the emulator: the start value, the USB command and `tools/badge.py brightness`, the level on the grid |
 | `tools/browse_test/run.sh` | checks that a tap of C steps through the animations and texts on the emulator and skips the apps, and that long presses and C + D do not |
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, USB power and charging, a fresh start, the text on the grid |

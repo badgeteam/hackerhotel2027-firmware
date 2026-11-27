@@ -61,11 +61,11 @@ notes.
 
 | Old feature | Status now | Notes |
 |---|---|---|
-| The menu: label on the grid, place on the outline, group on the arms, 20 s timeout ([USAGE][u-menu]) | done: [#34] | Groups now: orange the name tag and SAY HI, purple animations, blue texts, green apps, white settings. C / D step; the new BUTTONS setting makes it B / D. |
+| The menu: label on the grid, place on the outline, group on the arms, 20 s timeout ([USAGE][u-menu]) | done: [#34] | Groups now: orange the name tag, purple animations, blue texts, green apps, white settings. C / D step; the new BUTTONS setting makes it B / D. |
 | Fixed entries: NAME, HACKER HOTEL, 6 animations, 11 games, VICTORY, EDIT NAME, LIGHT, SPONSORS, SLEEP | replaced: [#1], [#34] | The menu lists the items in the store. The animations and games are apps in `apps/`. A new badge gets the recommended set (`apps/recommended.txt`, **Erase badge and install recommended apps** in the web interface's App library). It holds 3 of the 6 old animations and 6 of the 11 old games. The rest are in the web interface's App library. For VICTORY and SPONSORS, see [Challenges](#challenges-and-the-victory-dance) and [Sponsor reel](#sponsor-reel-charging-and-standby). |
 | LIGHT: 5 levels (night, 5 %, 12.5 %, 31 %, full), a bar on the grid, 12.5 % at first start ([USAGE][u-menu]) | done: [#34], [#48], `menu.c` | BRIGHTNESS has 6 levels (8, 16, 32, 64, 128, 255). Six dots under the label show the level; B / D outside apps show them for a second. A new badge starts at 32 (12.5 %). |
 | SLEEP: dark until a button; that button only wakes; USB disconnects | done: [#34], `standby.c` | The same behaviour. The standby current is not measured: [#14]. |
-| New in this firmware | done | BUTTONS ([#34]), UPDATE ([#34]), SAY HI ([#37]), safe start ([#1]). |
+| New in this firmware | done | BUTTONS ([#34]), UPDATE ([#34]), safe start ([#1]). |
 
 ## Name tag and your name
 
@@ -138,8 +138,8 @@ a badge with only the recommended set cannot play all five challenges.
 | Old feature | Status now | Notes |
 |---|---|---|
 | Packets: NEC-style pulse distance on 38 kHz, with a type, a length and a CRC ([README][r-ir]) | done: [#37] | `ir_codec.c`, up to 32 data bytes. Apps get `ir_send_packet()` and `ir_receive_packet()` (app API 5). |
-| Name swap: B on the name tag sends the name; the other badge says HI and sends its name back ([USAGE][u-ir]) | done: [#37] | SAY HI in the menu. 4 tries in 6 s, then `NO REPLY`. Issue [#8] is still open. |
-| A greeting that arrives while the menu, the editor or a game is open waits, and shows after | partly: [#37] | A badge that runs an app does not answer: the app gets the packets. |
+| Name swap: B on the name tag sends the name; the other badge says HI and sends its name back ([USAGE][u-ir]) | replaced: [#37] | The NAMETAG app (`apps/nametag`, the recommended set's boot item) swaps names by itself, and C says hello at once. The firmware's SAY HI is gone, to save 1 KB of flash: outside apps a badge answers no HELLO. The app still swaps names with badges whose firmware has SAY HI. Badge friends in the app: [#72]. |
+| A greeting that arrives while the menu, the editor or a game is open waits, and shows after | partly: [#37] | Only the NAMETAG app greets. Another app gets the packets; outside apps the firmware drops them. |
 | 4 in a row between two badges: 0.8 s resend, a check every 3 s, `link lost` after 20 s, the moves in the log ([USAGE][u-four]) | done: [#38] | The same timings. The log goes out over SWIO. |
 | New in this firmware | done | Banana and Time Blaster shots ([#54]), the banana app ([#55]), the raw IR log (`tools/badge.py irlog`, [#53]). |
 
@@ -173,7 +173,7 @@ wants the UART's RX pin.
 | `name TEXT` | replaced: [#2] | `tools/badge.py name TEXT`. |
 | `show N` | replaced: [#1] | `tools/badge.py run N`. |
 | `level N` | replaced | `tools/badge.py brightness N` (1 .. 255), and the web interface. |
-| `hello` | partly: [#37] | SAY HI in the menu. No USB command. |
+| `hello` | replaced: [#37] | The NAMETAG app: tap C. No USB command. |
 | `test` | partly: [#11] | `tools/badge.py bringup` walks the LEDs from the host. `docs/BRINGUP.md` has the rest as a checklist. |
 | `factory` | replaced: [#59] | `tools/badge.py factory` (USB command `0x52`). |
 | `factory skip` | untracked | |
@@ -399,7 +399,6 @@ decision first: is it worth the flash, and is it worth the work?
 [#2]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/2
 [#3]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/3
 [#6]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/6
-[#8]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/8
 [#9]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/9
 [#10]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/10
 [#11]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/11
@@ -427,4 +426,5 @@ decision first: is it worth the flash, and is it worth the work?
 [#59]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/59
 [#62]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/62
 [#66]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/66
+[#72]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/72
 [#77]: https://github.com/badgeteam/hackerhotel2027-firmware/issues/77

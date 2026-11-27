@@ -173,13 +173,13 @@ def run_kept(e):
     time.sleep(1.3)
     e.usb(STOP)
 
-    # The menu's BRIGHTNESS: NAME TAG, SAY HI, (no items), EDIT NAME, BRIGHTNESS
+    # The menu's BRIGHTNESS: NAME TAG, (no items), EDIT NAME, BRIGHTNESS
     e.usb(BRIGHTNESS, 16)
     e.buttons(BTN_A)
     time.sleep(1.0)
     e.buttons(0)
     time.sleep(0.15)
-    for _ in range(3):
+    for _ in range(2):
         e.press(BTN_D)
     check(level_shown(e.wait_frames()) == 1, "the menu's BRIGHTNESS shows the level (16: 2 dots)")
     e.press(BTN_A)

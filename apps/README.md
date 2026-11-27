@@ -83,7 +83,8 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
   byte and up to 32 data bytes, with a CRC on air. A packet with 10 data
   bytes takes 0.2 s. Nothing confirms that a packet arrived: let the
   other badge answer, and send again if no answer comes. Types `'H'` and
-  `'R'` are the name swap: while an app runs, it gets those too. In the
+  `'R'` are the name swap (`apps/nametag`, and older firmware's SAY HI):
+  while an app runs, it gets those too. In the
   emulator, the badges on one PC share the infrared.
 - **Buttons.** `pressed()` gives the buttons that went down since the last
   tick, and `held()` gives the buttons that are down now. The bits are

@@ -16,9 +16,9 @@
 #define TEXT_Y 4                 // the label's top row
 #define KEY_NEXT HH_BTN_D
 
-// The menu's entries: the name tag, SAY HI, the store's items, then the settings
-enum { ENTRY_NAMETAG, ENTRY_SAY_HI, ENTRY_ITEM, ENTRY_EDIT, ENTRY_BRIGHTNESS, ENTRY_KEYS, ENTRY_SLEEP, ENTRY_UPDATE };
-#define ENTRIES_BEFORE_ITEMS 2
+// The menu's entries: the name tag, the store's items, then the settings
+enum { ENTRY_NAMETAG, ENTRY_ITEM, ENTRY_EDIT, ENTRY_BRIGHTNESS, ENTRY_KEYS, ENTRY_SLEEP, ENTRY_UPDATE };
+#define ENTRIES_BEFORE_ITEMS 1
 #define ENTRIES_AFTER_ITEMS 5
 
 // The characters of the name editor, in the order previous / next step
@@ -48,7 +48,7 @@ static unsigned entry_count(void) { return ENTRIES_BEFORE_ITEMS + Store_Count() 
 
 static int entry_kind(unsigned e, uint8_t* item) {
     unsigned items = Store_Count();
-    if (e < ENTRIES_BEFORE_ITEMS) return (int)e;  // ENTRY_NAMETAG, ENTRY_SAY_HI
+    if (e < ENTRIES_BEFORE_ITEMS) return ENTRY_NAMETAG;
     if (e < ENTRIES_BEFORE_ITEMS + items) {
         *item = (uint8_t)(e - ENTRIES_BEFORE_ITEMS);
         return ENTRY_ITEM;
@@ -127,17 +127,14 @@ void Menu_DrawBrightness(void) {
     for (int i = 0; i < HH_BRIGHTNESS_LEVELS; i++) set_slot(layout_grid[MENU_LEVEL_Y][3 + 2 * i], i <= level ? 255 : 40);
 }
 
-void Menu_Arms(uint8_t r, uint8_t g, uint8_t b, uint8_t rank_min) {
+void Menu_Arms(uint8_t r, uint8_t g, uint8_t b) {
     for (int i = 0; i < HH_RGB_COUNT; i++) {
         const hh_rgb_t* led = &layout_rgb[i];
-        bool on = led->rank >= rank_min;
-        LEDMatrix_SetSlot(led->r, on ? r : 0);
-        LEDMatrix_SetSlot(led->g, on ? g : 0);
-        LEDMatrix_SetSlot(led->b, on ? b : 0);
+        LEDMatrix_SetSlot(led->r, r);
+        LEDMatrix_SetSlot(led->g, g);
+        LEDMatrix_SetSlot(led->b, b);
     }
 }
-
-static void arms(uint8_t r, uint8_t g, uint8_t b) { Menu_Arms(r, g, b, 0); }
 
 // The outline lights the part from..to of 0..total, clockwise from the top
 static void outline(unsigned from, unsigned to, unsigned total) {
@@ -160,7 +157,7 @@ static void draw_menu(void) {
     int kind = entry_kind(s_cursor, &item);
     const store_item_t* it = kind == ENTRY_ITEM ? Store_Item(item) : NULL;
     // by entry kind; an item shows its name ("?" if it has gone)
-    static const char* const LABELS[] = {"NAME TAG", "SAY HI", "?", "EDIT NAME", "BRIGHTNESS", "BUTTONS C D", "SLEEP", "UPDATE"};
+    static const char* const LABELS[] = {"NAME TAG", "?", "EDIT NAME", "BRIGHTNESS", "BUTTONS C D", "SLEEP", "UPDATE"};
     const char* text = LABELS[kind];
     if (it) text = it->name;
     if (kind == ENTRY_KEYS && Persist_Keys() == MENU_KEYS_VERTICAL) text = "BUTTONS B D";
@@ -168,18 +165,18 @@ static void draw_menu(void) {
     Text_DrawLabel(label, TEXT_Y, s_shown_ms, 255);
     if (kind == ENTRY_BRIGHTNESS) Menu_DrawBrightness();
     outline(s_cursor, s_cursor + 1, entry_count());
-    // The arms show the group: the name tag and SAY HI orange, animations
-    // purple, texts blue, apps green, the badge's settings white
-    if (kind == ENTRY_NAMETAG || kind == ENTRY_SAY_HI)
-        arms(255, 110, 0);
+    // The arms show the group: the name tag orange, animations purple,
+    // texts blue, apps green, the badge's settings white
+    if (kind == ENTRY_NAMETAG)
+        Menu_Arms(255, 110, 0);
     else if (kind == ENTRY_ITEM && it && it->type == STORE_TYPE_ANIMATION)
-        arms(150, 0, 255);
+        Menu_Arms(150, 0, 255);
     else if (kind == ENTRY_ITEM && it && it->type == STORE_TYPE_TEXT)
-        arms(0, 120, 255);
+        Menu_Arms(0, 120, 255);
     else if (kind == ENTRY_ITEM)
-        arms(0, 255, 60);
+        Menu_Arms(0, 255, 60);
     else
-        arms(120, 120, 120);
+        Menu_Arms(120, 120, 120);
 }
 
 static unsigned name_length(void) {  // without the blanks at the end
@@ -200,7 +197,7 @@ static void draw_editor(void) {
         for (int dx = 0; dx < FONT_W; dx++) set_slot(layout_grid[TEXT_Y + FONT_H][(HH_GRID_W - FONT_W) / 2 + dx], 255);
     unsigned len = name_length();
     outline(0, s_pos + 1u, (len > s_pos ? len : s_pos) + 1u);  // how far into the name
-    arms(120, 120, 120);
+    Menu_Arms(120, 120, 120);
 }
 
 static void start_editor(void) {
@@ -260,7 +257,6 @@ menu_result_t Menu_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held, uint
         if (a == 1) {
             switch (entry_kind(s_cursor, item)) {
                 case ENTRY_NAMETAG: return MENU_NAMETAG;
-                case ENTRY_SAY_HI: return MENU_SAY_HI;
                 case ENTRY_ITEM: return MENU_RUN;
                 case ENTRY_EDIT: start_editor(); break;
                 case ENTRY_BRIGHTNESS:  // the next level, from the top back to the lowest

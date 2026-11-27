@@ -47,8 +47,6 @@ static void set(uint16_t slot, uint8_t v) {
     LEDMatrix_SetSlot(slot, v);
 }
 
-static void arms(uint8_t r, uint8_t g, uint8_t b) { Menu_Arms(r, g, b, 0); }
-
 static void center(const char* s, int row, uint8_t v) { Text_Draw((HH_GRID_W - Text_Width(s)) / 2, row, s, v); }
 
 // The outline fills up as the steps go by
@@ -143,13 +141,13 @@ factory_status_t Factory_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held
     }
 
     if (s_state == PASS) {
-        arms(0, 255, 40);
+        Menu_Arms(0, 255, 40);
         for (int j = 0; j < HH_EDGE_COUNT; j++) set(layout_edge[j], 200);
         center("OK", 4, 255);
         return now == 0 ? FACTORY_PASSED : now >= PASS_MS ? done() : FACTORY_BUSY;
     }
     if (s_state == FAIL) {
-        arms(blink ? 255 : 60, 0, 0);
+        Menu_Arms(blink ? 255 : 60, 0, 0);
         center(NAME[s_step], 2, 255);
         center("B", 9, 60);
         if (pressed & HH_BTN_B) start(s_step);
@@ -173,7 +171,7 @@ factory_status_t Factory_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held
             for (uint16_t s = 0; s < HH_SLOTS; s++) set(s, 255);
             if (ph >= 1500) {
                 unsigned c = (ph - 1500) / 1000;
-                arms(c == 0 ? 255 : 0, c == 1 ? 255 : 0, c == 2 ? 255 : 0);
+                Menu_Arms(c == 0 ? 255 : 0, c == 1 ? 255 : 0, c == 2 ? 255 : 0);
             }
             if (t >= LED_MS) next();  // look: all lit, the right colours?
             break;
@@ -215,7 +213,7 @@ factory_status_t Factory_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held
             } else {
                 // nothing heard yet: keep listening, and ask
                 center("IR?", 2, blink ? 255 : 90);
-                arms(255, 120, 0);
+                Menu_Arms(255, 120, 0);
                 if (t >= IR_FAIL_MS) {
                     fail("nothing heard");
                     break;

@@ -360,6 +360,9 @@ class App:
                 self.room.send(a, cmd)
             elif kind == "P" and self.room:
                 self.room.send_packet(bytes.fromhex(rest))
+            elif kind == "R":  # a raw frame: no other badge decodes it, so show it here
+                v = list(map(int, rest.split()))
+                print("IR raw: %d marks and spaces at %d Hz, %.1f ms" % (len(v) - 1, v[0], sum(v[1:]) / 1000))
         if self.room and self.badge:
             for line in self.room.received():
                 self.badge.send(line)

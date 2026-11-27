@@ -7,11 +7,10 @@
 #define IR_RX_PIN 19  // PB19: IR receiver output (10k pull-up R27), low = carrier present
 #define IR_RX_LINE (1u << IR_RX_PIN)
 
-// Carrier: TIM2 CH1 PWM on PB21 (TIM2_RM = 001, CH1/PB21; CH643RM 8.3.2.1)
-#define IR_CARRIER_HZ 38000
+// Carrier: TIM2 CH1 PWM on PB21 (TIM2_RM = 001, CH1/PB21; CH643RM 8.3.2.1),
+// at the frame's carrier_hz (IR_CARRIER_HZ, or a raw frame's own), on for
+// a third of each period
 #define IR_CARRIER_PERIOD (FUNCONF_SYSTEM_CORE_CLOCK / IR_CARRIER_HZ)  // TIM2 ticks
-#define IR_CARRIER_DUTY (IR_CARRIER_PERIOD / 3)
-#define US_TO_CARRIER_PERIODS(us) (((us) * IR_CARRIER_HZ + 500000) / 1000000)
 
 #define NEC_REPEAT_TIMEOUT_MS 250  // repeats arrive every 108ms while a button is held
 
@@ -27,6 +26,7 @@ static ir_frame_t s_tx_frame;
 static uint16_t s_tx_count;
 static uint16_t s_tx_index;
 static uint16_t s_tx_remaining;
+static uint16_t s_tx_duty;  // TIM2 ticks the carrier is on, per period
 static volatile bool s_tx_busy;
 
 static ir_rx_t s_rx;  // forward: reset when our own transmission ends
@@ -37,7 +37,9 @@ static void pb_set_mode(unsigned pin, GPIO_CFGLR_PIN_MODE_Typedef mode) {
     *cfg = (*cfg & ~(0xFu << shift)) | ((uint32_t)mode << shift);
 }
 
-static uint16_t segment_periods(uint16_t i) { return (uint16_t)US_TO_CARRIER_PERIODS((uint32_t)IrFrame_SegmentUs(&s_tx_frame, i)); }
+static uint16_t segment_periods(uint16_t i) {
+    return Ir_CarrierPeriods(IrFrame_SegmentUs(&s_tx_frame, i), s_tx_frame.carrier_hz);
+}
 
 // CH1CVR is preloaded, so each value takes effect for exactly one whole carrier
 // period, starting at the next update event
@@ -49,7 +51,7 @@ static void tx_schedule_next_period(void) {
         }
         s_tx_remaining = segment_periods(s_tx_index);
     }
-    TIM2->CH1CVR = (s_tx_index & 1) ? 0 : IR_CARRIER_DUTY;
+    TIM2->CH1CVR = (s_tx_index & 1) ? 0 : s_tx_duty;
 }
 
 // Sends s_tx_frame
@@ -59,8 +61,11 @@ static void tx_start(void) {
     s_tx_index = 0;
     s_tx_remaining = segment_periods(0);
 
-    TIM2->CH1CVR = IR_CARRIER_DUTY;  // first period of the leader mark
-    TIM2->SWEVGR = TIM_UG;           // restart the period and latch it now
+    uint32_t period = FUNCONF_SYSTEM_CORE_CLOCK / s_tx_frame.carrier_hz;
+    s_tx_duty = (uint16_t)(period / 3);
+    TIM2->ATRLR = (uint16_t)(period - 1);
+    TIM2->CH1CVR = s_tx_duty;  // first period of the first mark
+    TIM2->SWEVGR = TIM_UG;     // restart the period and latch both now
     TIM2->INTFR = (uint16_t)~TIM_UIF;
     tx_schedule_next_period();
     TIM2->DMAINTENR |= TIM_UIE;
@@ -112,6 +117,27 @@ bool infrared_send_shot(uint16_t bits) {
     IrFrame_Shot(&s_tx_frame, bits);
     tx_start();
     return true;
+}
+
+bool infrared_send_raw(const uint16_t* us, uint16_t count, uint32_t carrier_hz) {
+    if (!s_initialized || s_tx_busy || !IrFrame_Raw(&s_tx_frame, us, count, carrier_hz)) return false;
+    tx_start();
+    return true;
+}
+
+void infrared_abort_raw(void) {
+    if (!s_initialized) return;  // nothing goes out, and the timer's interrupt stays off
+    NVIC_DisableIRQ(TIM2_IRQn);
+    if (s_tx_busy && s_tx_frame.raw) {
+        TIM2->DMAINTENR &= ~TIM_UIE;
+        TIM2->CH1CVR = 0;
+        TIM2->SWEVGR = TIM_UG;  // latch it: the output inactive (LED off) at once
+        TIM2->CTLR1 &= ~TIM_CEN;
+        TIM2->INTFR = (uint16_t)~TIM_UIF;
+        IrRx_Reset(&s_rx);
+        s_tx_busy = false;
+    }
+    NVIC_EnableIRQ(TIM2_IRQn);
 }
 
 void infrared_set_loopback(bool on) {

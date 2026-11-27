@@ -430,6 +430,25 @@ static bool m_ir_send_shot(const hh_ir_shot_t* s) {
     return true;
 }
 
+// Raw IR frames the app sent: the last one (its first 512 marks and
+// spaces, and where the app keeps it) and how many. Fails while
+// mock_tx_busy, and as the firmware does for count 0 or a carrier out of
+// range.
+static uint16_t mock_raw[512];
+static const uint16_t* mock_raw_us;
+static uint16_t mock_raw_count;
+static uint32_t mock_raw_carrier;
+static unsigned mock_raws_sent;
+static bool m_ir_send_raw(const uint16_t* us, uint16_t count, uint32_t carrier_hz) {
+    if (mock_tx_busy || !count || carrier_hz < 20000 || carrier_hz > 60000) return false;
+    mock_raw_count = count;
+    mock_raw_carrier = carrier_hz;
+    mock_raw_us = us;
+    memcpy(mock_raw, us, sizeof(uint16_t) * (count < 512 ? count : 512));
+    mock_raws_sent++;
+    return true;
+}
+
 static const hh_api_t mock_api = {
     .version = HH_API_VERSION, .size = sizeof(hh_api_t),
     .set = m_set, .get = m_get, .clear = m_clear, .set_brightness = m_set_brightness, .brightness = m_brightness,
@@ -441,7 +460,7 @@ static const hh_api_t mock_api = {
     .set_rgb = m_set_rgb, .set_linear = m_set_linear, .sin8 = AppUtil_Sin8, .hsv = AppUtil_Hsv,
     .isqrt = AppUtil_Isqrt, .atan8 = AppUtil_Atan8, .draw_number = m_draw_number,
     .step_brightness = m_step_brightness, .ir_send_packet = m_ir_send_packet, .ir_receive_packet = m_ir_receive_packet,
-    .ir_receive_shot = m_ir_receive_shot, .ir_send_shot = m_ir_send_shot,
+    .ir_receive_shot = m_ir_receive_shot, .ir_send_shot = m_ir_send_shot, .ir_send_raw = m_ir_send_raw,
 };
 
 // The test's checks

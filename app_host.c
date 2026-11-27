@@ -57,6 +57,18 @@ static bool api_ir_send_packet(uint8_t type, const void* data, uint8_t length) {
     return infrared_send_packet(type, (const uint8_t*)data, length);
 }
 
+// The firmware reads us[] while the frame goes out, after this returns: it
+// must be the app's own data (a const table or a global), all of it in the
+// app's RAM. An array on the stack (below HH_APP_RAM_BASE) is reused as soon
+// as tick() returns, so it is refused.
+static bool api_ir_send_raw(const uint16_t* us, uint16_t count, uint32_t carrier_hz) {
+#ifndef HH_EMU  // the emulator checks the app's address (tools/emu/app.c)
+    uint32_t a = (uint32_t)(uintptr_t)us;
+    if ((a & 1) || a < HH_APP_RAM_BASE || a + 2u * count > (uint32_t)(uintptr_t)s_app->bss_end) return false;
+#endif
+    return infrared_send_raw(us, count, carrier_hz);
+}
+
 static bool api_ir_receive_packet(hh_ir_packet_t* packet) {
     infrared_packet_t p;
     if (!infrared_receive_packet(&p)) return false;
@@ -158,8 +170,10 @@ static const hh_api_t s_api = {
     .ir_receive_packet = api_ir_receive_packet,
     .ir_receive_shot = api_ir_receive_shot,
     .ir_send_shot = api_ir_send_shot,
+    .ir_send_raw = api_ir_send_raw,
 };
 _Static_assert(HH_IR_PACKET_MAX == IR_PACKET_DATA_MAX, "hhapp.h and infrared.h agree on the packet size");
+_Static_assert(IR_RAW_CARRIER_MIN == 20000 && IR_RAW_CARRIER_MAX == 60000, "hhapp.h gives the raw carrier range");
 
 static bool in_image(uint32_t addr, uint32_t load_end) {
     return addr >= HH_APP_RAM_BASE + sizeof(hh_app_header_t) && addr < load_end;
@@ -221,6 +235,7 @@ bool AppHost_Tick(uint32_t elapsed_ms, uint8_t pressed, uint8_t held) {
 
 void AppHost_Stop(void) {
     if (!s_app) return;
+    infrared_abort_raw();  // its marks and spaces are in the app's RAM
     s_app = NULL;
     LEDMatrix_Clear();
 }

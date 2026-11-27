@@ -119,8 +119,8 @@ The firmware calls `init()` once and then `tick()` about every 5 ms.
 ## Limits
 
 - **API version.** An app does not start on firmware with an older
-  `HH_API_VERSION` than the one it was built against (6: shots,
-  `ir_receive_shot`; 5: the infrared packets; 4: the helpers; 3: `polar`;
+  `HH_API_VERSION` than the one it was built against (7: raw infrared,
+  `ir_send_raw`; 6: shots, `ir_receive_shot`; 5: the infrared packets; 4: the helpers; 3: `polar`;
   2: the text calls); update the
   badge first. `tools/badge.py list` prints the firmware's version ("app API").
 

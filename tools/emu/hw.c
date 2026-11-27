@@ -14,6 +14,7 @@
 //   I <address> <command>  (IR sent)     i <address> <command>  (IR received)
 //   P <packet, hex>  (IR packet sent)    p <packet, hex>  (IR packet received)
 //                    a packet: type, length, data (no CRC)
+//   R <carrier Hz> <us> <us> ...  (a raw IR frame sent: marks and spaces)
 //                                        s <team> <trigger> <command> <parameter>
 //                                          (a banana shot received, ir_codec.h)
 //                                        v 1 / v 0  (USB power in / out)
@@ -235,6 +236,7 @@ int USBFS_SendEndpoint(int ep, int len) {
 static infrared_nec_message_t s_ir_queue[16];
 static unsigned s_ir_head, s_ir_tail;
 static uint64_t s_ir_busy_until;
+static bool s_ir_raw;  // what goes out (or went out last) is a raw frame
 static bool s_ir_on;
 
 void infrared_init(void) { s_ir_on = true; }
@@ -247,6 +249,7 @@ bool infrared_tx_busy(void) { return now_us() < s_ir_busy_until; }
 bool infrared_send_nec(uint16_t address, uint8_t command) {
     if (!s_ir_on || infrared_tx_busy()) return false;
     s_ir_busy_until = now_us() + 68000;  // a NEC frame takes about 68 ms
+    s_ir_raw = false;
     out_line("I %u %u", address, command);
     return true;
 }
@@ -279,6 +282,7 @@ bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length) {
     ones += 4;  // about half the CRC's bits
     unsigned bits = 8 * (length + 3u);
     s_ir_busy_until = now_us() + 6750 + bits * 1124 + ones * 1125 + 562;
+    s_ir_raw = false;
     out_hex('P', p, 2u + length);
     if (s_ir_loopback) ir_packet_received(p, 2 + length);
     return true;
@@ -286,6 +290,27 @@ bool infrared_send_packet(uint8_t type, const uint8_t* data, uint8_t length) {
 bool infrared_send_shot(uint16_t bits) {  // the emulator has no shots yet: nobody hears it
     (void)bits;
     return true;
+}
+// Raw frames: nobody hears them, but they go out as long as on the badge
+bool infrared_send_raw(const uint16_t* us, uint16_t count, uint32_t carrier_hz) {
+    ir_frame_t f;
+    if (!s_ir_on || infrared_tx_busy() || !IrFrame_Raw(&f, us, count, carrier_hz)) return false;
+    uint64_t total = 0;
+    pthread_mutex_lock(&s_out);
+    fprintf(stdout, "R %u", (unsigned)carrier_hz);  // not printf: that is the firmware's log
+    for (uint16_t i = 0; i < count; i++) {
+        fprintf(stdout, " %u", us[i]);
+        total += us[i];
+    }
+    fputc('\n', stdout);
+    fflush(stdout);
+    pthread_mutex_unlock(&s_out);
+    s_ir_busy_until = now_us() + total;
+    s_ir_raw = true;
+    return true;
+}
+void infrared_abort_raw(void) {
+    if (s_ir_raw) s_ir_busy_until = 0;
 }
 // Shots: the receiver keeps 7, as infrared.c does
 static ir_shot_t s_ir_shots[7];

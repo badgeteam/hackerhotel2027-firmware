@@ -9,7 +9,7 @@ trap 'rm -rf "$out"' EXIT
 # A text pixel that the app draws over in the same tick fails (mock_hh.h);
 # -g lets the report name the line that drew over it
 export MOCK_OVERDRAW=1
-for t in util simon whack breakout flappy pong startris chase maze hilo snake eye banana nametag bottle four; do
+for t in util simon whack breakout flappy pong startris chase maze hilo snake eye banana nametag bottle four tvbon; do
     cc -std=gnu11 -Wall -Wextra -O1 -g -fsanitize=address,undefined -I"$root" -I"$root/apps" \
         -o "$out/$t" "$here/${t}_test.c" "$root/layout.c" -lm
     "$out/$t"

@@ -171,9 +171,9 @@
   {
    "name": "TVBON",
    "file": "tvbon.hhapp",
-   "bytes": 1752,
+   "bytes": 1996,
    "api": 7,
-   "description": "TVBOn: turns the TVs around you on or off, by infrared. Press A: the badge sends the power-on code of each TV brand it knows (Samsung, LG, Sony, Panasonic), and the arm to A fills up green as they go out. Press B: the power-off codes, and the arm to B fills up red. Only codes that switch one way are sent, so ON never turns a TV off and OFF never turns one on. A press takes under a second.",
+   "description": "TVBOn: turns the TVs around you on or off, by infrared. Press A: the badge sends the power-on code of each TV brand it knows (Samsung, LG, Hisense, Sony, Panasonic, Philips, Toshiba), and the arm to A fills up green as they go out. Press B: the power-off codes, and the arm to B fills up red. ON sends only codes that switch a TV on, never the power toggle; OFF too, except for Philips, whose off is the standby button: on newer Philips TVs that toggles. A press takes about a second and a half.",
    "recommended": false
   },
   {

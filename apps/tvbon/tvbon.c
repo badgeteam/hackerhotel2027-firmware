@@ -1,9 +1,10 @@
 // TVBOn: turns the TVs around you on or off, by infrared. Press A: the
 // badge sends the power-on code of each TV brand it knows (Samsung, LG,
-// Sony, Panasonic), and the arm to A fills up green as they go out. Press
-// B: the power-off codes, and the arm to B fills up red. Only codes that
-// switch one way are sent, so ON never turns a TV off and OFF never turns
-// one on. A press takes under a second.
+// Hisense, Sony, Panasonic, Philips, Toshiba), and the arm to A fills up
+// green as they go out. Press B: the power-off codes, and the arm to B
+// fills up red. ON sends only codes that switch a TV on, never the power
+// toggle; OFF too, except for Philips, whose off is the standby button: on
+// newer Philips TVs that toggles. A press takes about a second and a half.
 #include "hhapp.h"
 
 #define ARM_A 4              // the upper left arm, with A at its tip
@@ -13,9 +14,11 @@
 #define DONE_MS 600          // the arm flashes this long after the last code
 #define GAP_US 50000         // quiet after a NEC, Samsung or Panasonic frame
 #define SONY_FRAME_US 45000  // a Sony frame starts every 45 ms
+#define RC5_HALF_US 889      // half an RC5 bit
+#define RC5_GAP_US 65000     // RC5 repeats every 114 ms; one space holds at most 65 ms
 #define FRAME_MAX 100        // a Panasonic frame: leader, 48 bits, stop mark, gap
 
-enum { NEC, SAMSUNG, SONY, PANASONIC };
+enum { NEC, SAMSUNG, SONY, PANASONIC, RC5 };
 enum { IDLE, ON, OFF };
 
 // The brands: a protocol, how often each frame goes out, the address and
@@ -23,6 +26,9 @@ enum { IDLE, ON, OFF };
 // Samsung send the address bytes a0 a1, then the command and its inverse.
 // Sony sends the command's 7 bits, then a1 bits of the address a0.
 // Panasonic sends its vendor code, a0 a1, the command and a check byte.
+// RC5 (Philips) sends the address a0 and the command. LG goes before
+// Hisense: on an LG, Hisense's on and off are the green and red buttons,
+// so after LG's off the red one finds the TV off.
 typedef struct {
     uint8_t proto, repeats;
     uint8_t a0, a1;
@@ -31,8 +37,11 @@ typedef struct {
 static const brand_t BRANDS[] = {
     {SAMSUNG, 2, 0x07, 0x07, 0x99, 0x98},
     {NEC, 2, 0x04, 0xFB, 0xC4, 0xC5},  // LG
+    {NEC, 2, 0x04, 0xFB, 0x71, 0x72},  // Hisense (its RS-232/IR document, 2017)
     {SONY, 3, 0x01, 5, 0x2E, 0x2F},     // a TV: device 1
     {PANASONIC, 2, 0x80, 0x00, 0x3E, 0x3F},
+    {RC5, 2, 0x00, 0, 0x3F, 0x0C},     // Philips: system 0; off is standby
+    {NEC, 2, 0x40, 0xBF, 0x7E, 0x7F},  // Toshiba
 };
 #define BRAND_COUNT (sizeof BRANDS / sizeof *BRANDS)
 
@@ -46,6 +55,7 @@ static uint8_t next;  // the buffer for the next frame
 static bool built;    // buf[next] holds frame `frame`
 static uint32_t ms, a_down, done_ms;
 static bool a_tap;
+static uint8_t toggle;  // RC5's toggle bit, new for each press
 
 // A frame of pulse distance coding (NEC, Samsung, Panasonic): a leader,
 // then n bytes LSB first, each bit a mark of t and a space of t (0) or
@@ -82,6 +92,25 @@ static uint16_t sony(uint16_t* f, uint8_t command, uint8_t address, uint8_t addr
     return k;
 }
 
+// A Philips RC5 frame at 36 kHz: 14 bits MSB first, each half space and half
+// mark (1) or the other way round (0): two start bits (both 1 for commands
+// below 64), the toggle bit, 5 address bits and 6 command bits. The leading
+// space does not go out: a frame starts with a mark.
+static uint16_t rc5(uint16_t* f, uint8_t address, uint8_t command) {
+    uint16_t bits = (uint16_t)(3 << 12 | toggle << 11 | (address & 31) << 6 | (command & 63));
+    uint16_t k = 0;
+    bool mark = false;  // the level of the last half
+    for (int i = 13; i >= 0; i--)
+        for (int h = 0; h < 2; h++) {
+            bool m = (bits >> i & 1) == h;
+            if (k && m == mark) f[k - 1] += RC5_HALF_US;
+            else if (k || m) f[k++] = RC5_HALF_US, mark = m;
+        }
+    if (mark) f[k++] = RC5_GAP_US;
+    else f[k - 1] = RC5_GAP_US;
+    return k;
+}
+
 // Frame i of a run: the brands in order, each its number of repeats
 static uint16_t build(uint16_t* f, uint8_t i, uint8_t m, uint32_t* hz) {
     const brand_t* b = BRANDS;
@@ -97,6 +126,9 @@ static uint16_t build(uint16_t* f, uint8_t i, uint8_t m, uint32_t* hz) {
             bytes[2] = b->a0, bytes[3] = b->a1, bytes[4] = c, bytes[5] = b->a0 ^ b->a1 ^ c;
             *hz = 36700;
             return distance(f, 3456, 1728, 432, 1296, bytes, 6);
+        case RC5:
+            *hz = 36000;
+            return rc5(f, b->a0, c);
         case SAMSUNG:
             *hz = 38000;
             return distance(f, 4500, 4500, 560, 1690, bytes, 4);
@@ -109,6 +141,7 @@ static uint16_t build(uint16_t* f, uint8_t i, uint8_t m, uint32_t* hz) {
 static void start(uint8_t m) {
     mode = last = m;
     frame = 0;
+    toggle ^= 1;
     built = false;
     done_ms = 0;
 }

@@ -11,7 +11,7 @@
 
 // The frames that went out, decoded: a brand's code and its carrier
 typedef struct {
-    char kind;  // 'N' NEC (9 ms leader), 'S' Samsung (4.5 ms), 'Y' Sony, 'P' Panasonic, '?' none of these
+    char kind;  // 'N' NEC (9 ms leader), 'S' Samsung (4.5 ms), 'Y' Sony, 'P' Panasonic, 'R' RC5, '?' none of these
     uint64_t code;  // the bits in the order they went out, the first the highest
     uint32_t carrier;
     uint32_t us;  // the whole frame, with its gap
@@ -52,6 +52,28 @@ static bool sony_frame(const uint16_t* f, int n, uint64_t* code) {
     return true;
 }
 
+// RC5: halves of 0.889 ms, each bit a space and a mark (1) or a mark and a
+// space (0), 14 bits; the first half, a space, does not go out
+static bool rc5_frame(const uint16_t* f, int n, uint64_t* code) {
+    uint8_t half[28] = {0};  // 1: mark
+    int h = 1;
+    if (n < 2 || f[n - 1] < 40000) return false;
+    for (int i = 0; i < n - 1; i++) {
+        int halves = (f[i] + 444) / 889;
+        if (halves < 1 || halves > 2 || !near(f[i], halves * 889)) return false;
+        while (halves--) {
+            if (h == 28) return false;
+            half[h++] = !(i & 1);
+        }
+    }
+    *code = 0;
+    for (int b = 0; b < 14; b++) {
+        if (half[2 * b] == half[2 * b + 1]) return false;
+        *code = *code << 1 | half[2 * b + 1];
+    }
+    return true;
+}
+
 static void decode(const uint16_t* f, int n, uint32_t hz) {
     sent_t* s = &sent[nsent++ % 64];
     s->carrier = hz, s->us = 0, s->kind = '?';
@@ -60,6 +82,7 @@ static void decode(const uint16_t* f, int n, uint32_t hz) {
     else if (distance_frame(f, n, 4500, 4500, 560, 1690, 32, &s->code)) s->kind = 'S';
     else if (distance_frame(f, n, 3456, 1728, 432, 1296, 48, &s->code)) s->kind = 'P';
     else if (sony_frame(f, n, &s->code)) s->kind = 'Y';
+    else if (rc5_frame(f, n, &s->code)) s->kind = 'R';
 }
 
 // One tick, with the transmitter busy while a frame goes out
@@ -89,6 +112,14 @@ static void tap(uint8_t b) {
     run(5, 0, 0);
 }
 
+// NEC as some lists write it: the bytes in the order they go out, each
+// sent LSB first (Hisense's 04FB718E)
+#define REV8(b) ((((b) * 0x0802u & 0x22110u) | ((b) * 0x8020u & 0x88440u)) * 0x10101u >> 16 & 0xFF)
+#define NEC_BYTES(x)                                                                          \
+    ((uint64_t)REV8((x) >> 24 & 0xFF) << 24 | REV8((x) >> 16 & 0xFF) << 16 | REV8((x) >> 8 & 0xFF) << 8 | \
+     REV8((x) & 0xFF))
+#define RC5_TOGGLE (1 << 11)
+
 // The power codes, as remote control lists give them
 typedef struct {
     char kind;
@@ -97,10 +128,13 @@ typedef struct {
     int repeats;
 } want_t;
 static const want_t WANT[] = {
-    {'S', 0xE0E09966, 0xE0E019E6, 38000, 2},          // Samsung
-    {'N', 0x20DF23DC, 0x20DFA35C, 38000, 2},          // LG
-    {'Y', 0x750, 0xF50, 40000, 3},                    // Sony TV: command 46 and 47, device 1
-    {'P', 0x400401007C7D, 0x40040100FCFD, 36700, 2},  // Panasonic
+    {'S', 0xE0E09966, 0xE0E019E6, 38000, 2},                            // Samsung
+    {'N', 0x20DF23DC, 0x20DFA35C, 38000, 2},                            // LG
+    {'N', NEC_BYTES(0x04FB718Eu), NEC_BYTES(0x04FB728Du), 38000, 2},    // Hisense
+    {'Y', 0x750, 0xF50, 40000, 3},                                      // Sony TV: command 46 and 47, device 1
+    {'P', 0x400401007C7D, 0x40040100FCFD, 36700, 2},                    // Panasonic
+    {'R', 0x303F, 0x300C, 36000, 2},                                    // Philips: RC5 0:63 and 0:12 (standby)
+    {'N', NEC_BYTES(0x40BF7E81u), NEC_BYTES(0x40BF7F80u), 38000, 2},    // Toshiba: NEC 64:126 and 64:127
 };
 
 // Do sent[from..] hold the codes of a whole run, ON or OFF
@@ -109,7 +143,8 @@ static bool run_was(int from, bool on, int* frames) {
     for (unsigned b = 0; b < sizeof WANT / sizeof *WANT; b++)
         for (int r = 0; r < WANT[b].repeats; r++, k++) {
             const sent_t* s = &sent[k];
-            if (k >= nsent || s->kind != WANT[b].kind || s->code != (on ? WANT[b].on : WANT[b].off) ||
+            uint64_t code = s->kind == 'R' ? s->code & ~(uint64_t)RC5_TOGGLE : s->code;
+            if (k >= nsent || s->kind != WANT[b].kind || code != (on ? WANT[b].on : WANT[b].off) ||
                 s->carrier != WANT[b].carrier) {
                 printf("      frame %d: %c %llx at %u Hz\n", k - from, k < nsent ? s->kind : '-',
                        (unsigned long long)s->code, s->carrier);
@@ -213,11 +248,12 @@ int main(void) {
     uint32_t total = 0;
     int sony = 0;
     for (int i = from; i < nsent; i++) total += sent[i].us, sony += sent[i].kind == 'Y' && sent[i].us == 45000;
-    CHECK(total > 600000 && total < 1300000, "in under a second and a half (%u ms)", total / 1000);
+    CHECK(total > 1000000 && total < 1700000, "in about a second and a half (%u ms)", total / 1000);
     CHECK(sony == 3, "Sony frames 45 ms apart (%d)", sony);
     CHECK(mock_leds[layout_grid[6][5]] == 150 && !bright_ranks(ARM_A), "then it is calm again");
 
     // B: power off
+    int on_from = from;
     from = nsent;
     run(5, HH_BTN_B, HH_BTN_B);
     run(5, 0, 0);
@@ -227,6 +263,11 @@ int main(void) {
     idle(2000);
     CHECK(run_was(from, false, &frames) && nsent == from + frames, "B sends the power-off codes (%d frames)",
           nsent - from);
+    int t[4], n = 0;
+    for (int i = on_from; i < nsent && n < 4; i++)
+        if (sent[i].kind == 'R') t[n++] = (int)(sent[i].code & RC5_TOGGLE);
+    CHECK(n == 4 && t[0] == t[1] && t[2] == t[3] && t[0] != t[2],
+          "RC5: a press's frames have the same toggle bit, the next press the other");
 
     // Holding A opens the menu: no codes
     from = nsent;

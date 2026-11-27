@@ -30,6 +30,13 @@ EXTRA_CFLAGS+=-DFW_VERSION=\"$(FW_VERSION)\"
 # The factory test's KEY step (factory.h); FACTORY_KEYS=0: the test runs by itself
 FACTORY_KEYS?=1
 EXTRA_CFLAGS+=-DFACTORY_KEYS=$(FACTORY_KEYS)
+# Smaller code: switch as compare chains, not jump tables (with -Os they
+# are smaller here); and align data only as its type needs, not to words (a
+# byte array read as words says aligned(4) itself). -mstrict-align: the
+# QingKe V4 core traps on a misaligned load or store, and some options
+# (-mtune=size) turn it off
+SIZE_CFLAGS:=-mstrict-align -fno-jump-tables -malign-data=natural
+EXTRA_CFLAGS+=$(SIZE_CFLAGS)
 
 include ch32fun/ch32fun/ch32fun.mk
 

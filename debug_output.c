@@ -17,7 +17,7 @@ void debug_output_write(const char* buf, int size) {
         calls_since_recheck = 0;  // worth another real attempt, in case a debugger just attached
     }
 
-    char buffer[4] = {0};
+    char buffer[4] __attribute__((aligned(4))) = {0};  // read as one word
     int place = 0;
     uint32_t lastdmd;
     uint32_t timeout = FUNCONF_DEBUGPRINTF_TIMEOUT;  // Give up after ~40ms

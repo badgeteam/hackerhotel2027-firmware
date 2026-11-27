@@ -75,7 +75,7 @@ Python 3 and Node.js. For `tools/badge.py` you need pyusb
 
 The firmware has 30 KB of flash. The item store and the persistent record
 have the rest, so the firmware cannot grow past 30 KB: the link fails.
-In November 2026 the firmware is about 28.6 KB, so there is little room.
+In November 2026 the firmware is about 27.5 KB, so there is little room.
 
 Check the `FLASH` line that the build prints:
 

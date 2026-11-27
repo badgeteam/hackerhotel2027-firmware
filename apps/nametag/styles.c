@@ -222,6 +222,14 @@ static int grid_px(const hh_api_t* h, uint8_t st, int x, int y, uint32_t t) {
             }
             return m ? 255 : 0;
 #endif
+        case STYLE_BATTERY: {  // the charging screen (nametag.c): a battery, upright; t - z.t0: ms since it began
+            unsigned u = x - 4, w = y - 2;  // from its top left corner
+            if (u > 8 || w > 12 || (!w && u - 3 > 2)) return 0;  // off it: x 4 .. 12, y 2 .. 14, but y 2 only x 7 .. 9
+            if (!w || u - 1 > 6 || w - 2 > 9) return 120;  // the tip (y 2), the outline (x 4 and 12, y 3 and 14)
+            // inside, x 6 .. 10 of y 5 .. 12 fill from the bottom, a row more every 300 ms: 0 .. 8 rows, then full for
+            // 2 steps more
+            return u - 2 <= 4 && w - 3 <= 7 && w + (t - z.t0) / 300 % 11 >= 11 ? 255 : 0;
+        }
 #if STYLE_COUNT > 6
         case 6: {
             int dx = x - nt_text_x, c = z.tw.c;

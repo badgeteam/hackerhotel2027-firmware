@@ -1,7 +1,9 @@
 #!/bin/sh
 # The NAMETAG app (apps/nametag) on emulated badges linked by infrared:
 # badge friends, the panel, a power cycle, a plain firmware badge, the
-# banana, the style kept. Its logic on the PC is tools/app_test/nametag_test.c.
+# banana, the style kept, a friend under the charging screen. Its logic on
+# the PC is tools/app_test/nametag_test.c; its charging screen is tested in
+# tools/charge_test.
 set -e
 here=$(dirname "$0")
 root="$here/../.."

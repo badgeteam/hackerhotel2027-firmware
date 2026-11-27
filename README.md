@@ -154,14 +154,18 @@ Further:
   then does not start the boot item, so an app that hangs cannot lock up
   the badge.
 - **Brightness.** The badge keeps the brightness when it is powered off.
-- **Charging.** When the battery starts to charge (plug in USB, also with
-  the badge already on), a battery on the grid fills up row by row, over
-  and over. The badge cannot tell how full the battery is. Tap any button
-  to hide it: that tap does nothing else, so B and D do not change the
-  brightness. It goes by itself when charging stops, and comes back only
-  when charging starts again. It does not show over an app, a picture
-  from the web interface, the menu or the factory test. Apps
-  can ask with `charging()` (`docs/APP_API.md`).
+- **Charging.** When the battery starts to charge (plug in USB, also
+  with the badge already on), the NAMETAG app (the boot item of the
+  recommended set) shows a battery on the grid that fills up row by row,
+  over and over. The badge cannot tell how full the battery is. Tap any
+  button to hide it: that tap does nothing else, so B and D do not
+  change the style. It goes by itself when charging stops, and comes
+  back only when charging starts again. If the app starts while the
+  battery already charges (from the menu, after a web upload, after the
+  factory test), it shows no battery until charging starts again. The
+  firmware itself shows no charging screen
+  (not on its own name tag, not over other apps); apps can ask with
+  `charging()` (`docs/APP_API.md`).
 
 ## Build
 
@@ -458,7 +462,7 @@ the persistent record at 61 .. 62 KB. In RAM, the firmware is at
 | `tools/bringup_test/run.sh` | checks `tools/badge.py bringup` on the emulator: the LED of each printed designator lights, and the badge shows its name tag after |
 | `tools/nametag_test/run.sh` | checks how the name tag shows banana shots, on the emulator |
 | `tools/usb_test/run.sh` | checks the USB descriptors' lengths on the PC, and the C + D boot ROM chord on the emulator |
-| `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge that drops packets, a badge with older firmware (SAY HI), banana shots, on emulators |
+| `tools/nametag_app_test/run.sh` | checks the NAMETAG app (`apps/nametag`): badges that meet, the panel, a power cycle, a plain badge that drops packets, a badge with older firmware (SAY HI), banana shots, on emulators (its charging screen: `tools/charge_test/run.sh`) |
 | `tools/brightness_test/run.sh` | checks the brightness on the emulator: the start value, the USB command and `tools/badge.py brightness`, the level on the grid |
 | `tools/browse_test/run.sh` | checks that a tap of C steps through the animations and texts on the emulator and skips the apps, and that long presses and C + D do not |
 | `tools/emu/headless.py` | the emulator without a window, for tests: USB, buttons, infrared, USB power and charging, a fresh start, the text on the grid |

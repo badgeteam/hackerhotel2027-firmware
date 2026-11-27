@@ -310,9 +310,12 @@ In the emulator, each raw frame shows in the terminal, and
 |---|---|
 | `bool charging(void)` | True while the battery charges. The firmware reads the charger's CHRG line and takes a change only after it holds for 500 ms, so a line that toggles (no battery) keeps the state it had before it started to toggle. |
 
-The badge cannot tell how full the battery is. Outside apps the firmware
-shows a charging screen when charging starts; it never shows over an app,
-so an app that wants to show that it charges must draw it itself.
+The badge cannot tell how full the battery is. The firmware shows no
+charging screen, so an app that wants to show that it charges draws it
+itself. `apps/nametag` does: when `charging()` turns true it shows a
+battery that fills up row by row, until a button press hides it or
+`charging()` turns false. It reads `charging()` in `init()` too, so it
+shows the battery only when charging starts while it runs.
 
 ## Power, infrared and the factory test (9)
 

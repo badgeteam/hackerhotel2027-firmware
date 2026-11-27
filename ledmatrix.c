@@ -5,7 +5,6 @@
 #include "bootloader.h"
 #include "buttons.h"
 #include "ch32fun.h"
-#include "charge.h"
 #include "ch643_ledpwm.h"
 #include "debug_output.h"
 #include "infrared.h"
@@ -216,9 +215,7 @@ int main(void) {
     bool outside = false;      // the previous pass ran outside apps, to its end
     uint32_t c_ms = 0;         // how long C has been down
     bool c_tap = false;        // C went down outside apps, and so far it is a tap
-    bool charge = false;  // charge.h has the LEDs; what they showed before is saved
-    // what ran when the menu opened, or the charging screen started (never both at once)
-    uint8_t menu_mode = 0, menu_item = STORE_NONE;
+    uint8_t menu_mode = 0, menu_item = STORE_NONE;  // what ran when it opened
 
     while (1) {
         LEDMatrix_Show();  // what the previous pass drew (the app, the menu, the name tag, the host)
@@ -245,20 +242,9 @@ int main(void) {
 
         if (WebUSB_BootRomDue(elapsed_ms)) enter_boot_rom();
 
-        // Charging starts: the charging screen (charge.h), but not over an
-        // app (the factory test is one), what the host drew (custom mode) or
-        // the menu
-        if (Power_Tick(elapsed_ms) && g_app_mode != APP_MODE_APP && g_app_mode != APP_MODE_CUSTOM && !menu_open) {
-            save_leds();
-            menu_mode = g_app_mode;  // the menu is closed, so its record is free
-            menu_item = g_running_item;
-            Charge_Start();
-            charge = true;
-        }
-        // While the charging screen or the menu is on, what ran before waits;
-        // a command from the host that changes what runs ends either
-        if ((charge || menu_open) && (g_app_mode != menu_mode || (item_runs() && g_running_item != menu_item)))
-            charge = menu_open = false;
+        // The charger's state, for apps' charging() and the factory test
+        // (the NAMETAG app shows a charging screen)
+        Power_Tick(elapsed_ms);
 
         uint8_t buttons = buttons_poll();
         uint8_t held = buttons_down();
@@ -275,11 +261,12 @@ int main(void) {
         // while it is on (and not those left from an app: see below)
         ir_shot_t shot;
         while (g_app_mode != APP_MODE_APP && infrared_receive_shot(&shot))
-            if (g_app_mode == APP_MODE_NAMETAG && !menu_open && !charge)
+            if (g_app_mode == APP_MODE_NAMETAG && !menu_open)
                 Nametag_Shot(shot.team, shot.command);
 
         // The menu (menu.h). While it is open, what ran before waits; a
-        // command from the host that changes what runs closes it (above).
+        // command from the host that changes what runs closes it.
+        if (menu_open && (g_app_mode != menu_mode || (item_runs() && g_running_item != menu_item))) menu_open = false;
         if (menu_open) {
             uint8_t item = STORE_NONE;
             menu_result_t r = Menu_Tick(elapsed_ms, buttons, held, &item);
@@ -310,10 +297,6 @@ int main(void) {
         // but not from the factory test
         hold_ms = held & HH_BTN_A && !s_factory ? hold_ms + elapsed_ms : 0;
         if (hold_ms >= (g_app_mode == APP_MODE_APP ? MENU_HOLD_APP_MS : MENU_HOLD_MS)) {
-            if (charge) {  // the menu puts back what the charging screen covered (A held since before it came)
-                restore_leds();
-                charge = false;
-            }
             save_leds();
             menu_mode = g_app_mode;
             menu_item = g_running_item;
@@ -348,20 +331,6 @@ int main(void) {
         // next app
         infrared_packet_t packet;
         while (infrared_receive_packet(&packet)) {}
-
-        // The charging screen: what ran before waits. A button ends it, and
-        // that press does nothing else; the end of charging ends it too.
-        if (charge && (buttons || !Power_Charging())) {
-            restore_leds();
-            charge = false;
-            buttons = 0;
-        }
-        if (charge) {
-            Charge_Draw(elapsed_ms);
-            last_mode = g_app_mode;
-            Delay_Ms(TICK_MS);
-            continue;
-        }
 
         // Outside apps, B and D are the brightness
         if (buttons & HH_BTN_B) Menu_StepBrightness(1);
@@ -417,8 +386,8 @@ int main(void) {
         // The brightness level goes over the frame only for the next
         // LEDMatrix_Show(): then what was under it comes back, so what runs
         // needs to draw nothing again when the level goes. The saved LEDs
-        // are free here: the menu and the charging screen keep them only
-        // while they are on, and neither is on at the end of this pass.
+        // are free here: the menu keeps them only while it is open, and it
+        // is not open at the end of this pass.
         if (level_ms && outside) {
             save_leds();
             Menu_DrawBrightness();

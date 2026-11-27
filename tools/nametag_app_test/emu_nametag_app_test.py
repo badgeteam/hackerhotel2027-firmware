@@ -6,7 +6,9 @@ the hackers met survive a power cycle; a badge with this firmware and no
 app answers no HELLO and drops the packets, so its next app does not get
 them; a badge with older firmware (a model of its SAY HI) answers the
 app's HELLO, and the app answers its SAY HI in time; banana shots count
-and colour the arms; the style is kept.
+and colour the arms; the style is kept; a friend heard under the
+charging screen still counts and says hi once a tap hides it (the
+charging screen itself: tools/charge_test).
 
   python3 tools/nametag_app_test/emu_nametag_app_test.py APP.hhapp
 """
@@ -69,6 +71,13 @@ def logged(emu, text):
 def rgb(frame, led):
     r, g, b = RGB[led][:3]
     return frame[r], frame[g], frame[b]
+
+
+def battery(frame):
+    """The charging screen: the battery's outline (x 4 .. 12, y 3 .. 14) lit,
+    the outline LEDs dark"""
+    ring = [GRID[y][x] for y in range(3, 15) for x in range(4, 13) if y in (3, 14) or x in (4, 12)]
+    return all(frame[s] for s in ring) and not any(frame[s] for s in EDGE)
 
 
 class OldFirmwareBadge:
@@ -273,6 +282,16 @@ def run(app, paths, emus):
     a = emus[0] = restart(a, paths[0], [])
     check(wait_for(lambda: logged(a, "nametag: style 5 met 2"), 5), "E6 D twice: style 5 (GLITCH) after a power cycle, met 2 (%r)" %
           [line for line in a.log if "nametag" in line])
+
+    # E7: the battery charges: the charging screen; a new friend under it
+    # counts, and says hi once a tap hides it
+    a.charging(True)
+    check(wait_for(lambda: battery(a.wait_frames()), 3), "E7 charging starts: the battery")
+    a.send("p " + b"N\x06ERIN\x00\x1f".hex())  # a beacon from a NAMETAG badge
+    check(wait_for(lambda: logged(a, "nametag: new ERIN"), 2), "E7 under it a beacon: A learns ERIN")
+    check(battery(a.wait_frames()), "E7 the battery stays")
+    a.press(BTN_C)
+    check(wait_for(lambda: shows(a, "HI ERIN"), 2), "E7 C hides it: HI ERIN")
 
 
 if __name__ == "__main__":

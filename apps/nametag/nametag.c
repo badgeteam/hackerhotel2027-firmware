@@ -9,10 +9,13 @@
 // brightness. Badges with older firmware (it had SAY HI in the menu) and
 // no app nearby show "HI <your name>" when this one says hello, at most
 // every 10 min; badges with this firmware and no app do not answer.
+// When the battery starts to charge, a battery fills up on the grid, over
+// and over; tap any button to hide it until charging starts again.
 
 // This file: what shows (the name, a hit count, a team, "HI <name>", the
-// panel), the buttons, the saved data, the banana's shots and the name
-// swap. styles.c gives every text its look.
+// panel), the buttons, the saved data, the banana's shots, the name swap
+// and the charging screen. styles.c gives every text its look, and draws
+// the battery (STYLE_BATTERY).
 //
 // Infrared: the packets of older firmware's SAY HI (greet.c, gone from the
 // firmware since), 'H' HELLO and 'R' REPLY, with the owner's name and,
@@ -109,6 +112,7 @@ static struct {
     uint32_t hits;      // this session's, not saved
     uint32_t shot_team, heal, new_team, bright_lvl, src, npop, pop_head, pop_count;
     uint32_t reply_pending, hello_now, panel, c_on, c_used;
+    uint32_t chg, chg_on;  // charging(); the battery shows
     char num[12];       // dec()
     save_t sv;
     friend_t fr[FRIENDS];  // the most recently heard first
@@ -154,8 +158,10 @@ static char* dec(unsigned v) {
 
 // Appends to the panel text, bounded
 static void put(const char* s) {
-    while (*s && S.put_at < S.panel_text + sizeof S.panel_text - 1) *S.put_at++ = *s++;
-    *S.put_at = 0;
+    char* p = S.put_at;
+    while (*s && p < &S.panel_text[sizeof S.panel_text - 1]) *p++ = *s++;
+    *p = 0;
+    S.put_at = p;
 }
 
 // The friends heard in the last NEAR_MS: the first ones of the table
@@ -456,6 +462,7 @@ static void init(const hh_api_t* api) {
     S.hit_t = S.team_t = S.dial_t = S.bright_t = S.new_t = S.ret_t = S.last_hello = S.last_frame = now - OLD;
     S.src = SRC_NONE;
     S.quiet_until = now;
+    S.chg = api->charging();  // the battery shows only when charging starts
     S.beacon_at = now + 1000 + rnd(2000);
     S.query_at = now + 5000 + rnd(10000);
     restyle(now);
@@ -474,12 +481,20 @@ static void tick(uint32_t elapsed_ms) {
 
     // Buttons: B / D the style, C the panel, C held + B / D the brightness
     uint8_t pressed = h->pressed(), held = h->held();
+    uint32_t chg = h->charging();
+    if (chg != S.chg) {
+        S.chg = S.chg_on = chg;     // starts: the battery shows; stops: it goes
+        if (chg) style_start(now);  // no glow left on the outline; the style starts afresh after
+    }
     if (held & HH_BTN_C) {
         if (!S.c_on) S.c_on = 1, S.c_down = now, S.c_used = 0;
     } else if (S.c_on) {
         S.c_on = 0;
         if (!S.c_used && now - S.c_down < TAP_MS) toggle_panel();
     }
+    // While the battery shows, a press hides it and does nothing else
+    // (nor does the release of C)
+    if (S.chg_on) S.c_used = 1, S.chg_on = !pressed, pressed = 0;
     int dir = pressed & HH_BTN_B ? 1 : pressed & HH_BTN_D ? -1 : 0;
     if (dir && (held & HH_BTN_C)) {
         S.bright_lvl = (uint32_t)h->step_brightness(dir);
@@ -518,7 +533,10 @@ static void tick(uint32_t elapsed_ms) {
 
     if (now - S.last_frame >= FRAME_MS) {
         S.last_frame = now;
-        frame(now);
+        if (S.chg_on)
+            style_draw(STYLE_BATTERY, now);  // the battery alone
+        else
+            frame(now);
     }
 }
 

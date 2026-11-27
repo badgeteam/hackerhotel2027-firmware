@@ -62,8 +62,10 @@ static void led_matrix_gpio_deinit(void) {
     }
 }
 
-// Frame ISR (fires once per row, during the inter-row blanking window)
-static void ledpwm_load_row(unsigned row) {
+// Frame ISR (fires once per row, during the inter-row blanking window).
+// The loop invariants out of the loop, which the Makefile turns off for
+// the rest of the firmware: without that the row takes 48 instructions more
+__attribute__((optimize("move-loop-invariants"))) static void ledpwm_load_row(unsigned row) {
     for (unsigned g = 0; g < LED_MATRIX_COLS / 3; g++) {
         uint8_t red = scale(s_brightness[row][g]);
         uint8_t green = scale(s_brightness[row][g + LED_MATRIX_COLS / 3]);

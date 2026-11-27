@@ -29,6 +29,15 @@ uint32_t AppUtil_Hsv(uint8_t h, uint8_t s, uint8_t v) {
     return (uint32_t)vals[pick[region][0]] << 16 | (uint32_t)vals[pick[region][1]] << 8 | vals[pick[region][2]];
 }
 
+uint32_t g_random = 0x20275EA5u;
+
+uint32_t AppUtil_Random(void) {
+    g_random ^= g_random << 13;
+    g_random ^= g_random >> 17;
+    g_random ^= g_random << 5;
+    return g_random;
+}
+
 uint32_t AppUtil_Isqrt(uint32_t n) {
     uint32_t r = 0;
     for (uint32_t b = 1u << 30; b; b >>= 2) {

@@ -20,7 +20,6 @@ static const char* s_text; // a text item's text; NULL: the owner's name
 static unsigned s_len;
 static uint8_t s_speed = NAME_SPEED;
 static uint8_t s_style = TEXT_STYLE_NAMETAG;
-static uint32_t s_rand = 0x20275EA5u;
 static uint32_t s_shot_left;  // of the last shot's effect; 0: none
 static uint8_t s_shot_team, s_shot_command;
 
@@ -29,12 +28,7 @@ static const uint8_t TEAM[8][3] = {
     {255, 0, 0}, {0, 255, 0}, {0, 60, 255}, {255, 200, 0}, {255, 0, 200}, {0, 200, 255}, {255, 255, 255}, {255, 90, 0},
 };
 
-static uint8_t random8(void) {
-    s_rand ^= s_rand << 13;
-    s_rand ^= s_rand >> 17;
-    s_rand ^= s_rand << 5;
-    return (uint8_t)(s_rand >> 24);
-}
+static uint8_t random8(void) { return (uint8_t)(AppUtil_Random() >> 24); }
 
 static void set_slot(uint16_t slot, uint8_t v) { LEDMatrix_SetSlot(slot, v); }
 static uint8_t get_slot(uint16_t slot) { return LEDMatrix_GetSlot(slot); }

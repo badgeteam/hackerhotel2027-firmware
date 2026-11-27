@@ -127,13 +127,17 @@ void Menu_DrawBrightness(void) {
     for (int i = 0; i < HH_BRIGHTNESS_LEVELS; i++) set_slot(layout_grid[MENU_LEVEL_Y][3 + 2 * i], i <= level ? 255 : 40);
 }
 
-static void arms(uint8_t r, uint8_t g, uint8_t b) {
+void Menu_Arms(uint8_t r, uint8_t g, uint8_t b, uint8_t rank_min) {
     for (int i = 0; i < HH_RGB_COUNT; i++) {
-        set_slot(layout_rgb[i].r, r);
-        set_slot(layout_rgb[i].g, g);
-        set_slot(layout_rgb[i].b, b);
+        const hh_rgb_t* led = &layout_rgb[i];
+        bool on = led->rank >= rank_min;
+        LEDMatrix_SetSlot(led->r, on ? r : 0);
+        LEDMatrix_SetSlot(led->g, on ? g : 0);
+        LEDMatrix_SetSlot(led->b, on ? b : 0);
     }
 }
+
+static void arms(uint8_t r, uint8_t g, uint8_t b) { Menu_Arms(r, g, b, 0); }
 
 // The outline lights the part from..to of 0..total, clockwise from the top
 static void outline(unsigned from, unsigned to, unsigned total) {

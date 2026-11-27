@@ -42,3 +42,7 @@ int Menu_BrightnessLevel(void);
 // moment when B or D change the brightness outside apps.
 #define MENU_LEVEL_Y 13
 void Menu_DrawBrightness(void);
+
+// The arms in one colour, as the menu, the factory test and the greeting
+// show them: the RGB LEDs of rank rank_min and up (0: all), the others dark
+void Menu_Arms(uint8_t r, uint8_t g, uint8_t b, uint8_t rank_min);

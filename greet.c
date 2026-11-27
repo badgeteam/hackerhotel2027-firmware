@@ -5,6 +5,7 @@
 #include "font.h"
 #include "infrared.h"
 #include "layout.h"
+#include "menu.h"
 #include "persist.h"
 
 #define CALL_EVERY_MS 1500  // HELLO again (a HELLO and a REPLY take 1.3 s at most)
@@ -110,16 +111,6 @@ bool Greet_Tick(uint32_t elapsed_ms) {
 
 static void set_slot(uint16_t slot, uint8_t v) { LEDMatrix_SetSlot(slot, v); }
 
-static void arms(uint8_t r, uint8_t g, uint8_t b, uint8_t rank_min) {
-    for (int i = 0; i < HH_RGB_COUNT; i++) {
-        const hh_rgb_t* led = &layout_rgb[i];
-        bool on = led->rank >= rank_min;
-        set_slot(led->r, on ? r : 0);
-        set_slot(led->g, on ? g : 0);
-        set_slot(led->b, on ? b : 0);
-    }
-}
-
 void Greet_Draw(void) {
     LEDMatrix_Clear();
     if (s_state == CALLING) {
@@ -128,14 +119,14 @@ void Greet_Draw(void) {
         Text_DrawLabel("HI?", TEXT_Y, s_ms, 255);
         unsigned head = s_ms / 20 % HH_EDGE_COUNT;
         for (unsigned k = 0; k < 8; k++) set_slot(layout_edge[(head + HH_EDGE_COUNT - k) % HH_EDGE_COUNT], (uint8_t)(255 - 30 * k));
-        arms(0, 90, 255, (uint8_t)(6 - s_ms / 120 % 7));
+        Menu_Arms(0, 90, 255, (uint8_t)(6 - s_ms / 120 % 7));
     } else if (s_state == SHOWING) {
         // The other badge's name; the arms green, the outline lit
         Text_DrawLabel(s_text, TEXT_Y, s_ms, 255);
         for (unsigned j = 0; j < HH_EDGE_COUNT; j++) set_slot(layout_edge[j], (j + s_ms / 60) % 6 ? 60 : 255);
-        arms(0, 255, 60, 0);
+        Menu_Arms(0, 255, 60, 0);
     } else if (s_state == FAILED) {
         Text_DrawLabel("NO REPLY", TEXT_Y, s_ms, 255);
-        arms(255, 40, 0, 0);
+        Menu_Arms(255, 40, 0, 0);
     }
 }

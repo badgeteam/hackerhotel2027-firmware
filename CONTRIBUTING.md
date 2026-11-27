@@ -88,6 +88,15 @@ not have to be in the firmware, make it an app: an app takes space only
 on the badges that store it. Shared code that many apps need belongs in
 the firmware, once, through the app API.
 
+To save flash, the firmware does not print a crash report. On a crash
+(an illegal instruction, a bad address) it stops, and the debug output
+over SWIO (`minichlink -T`) stays silent. To find a crash, set
+`FUNCONF_DEBUG_HARDFAULT` to 1 in `funconfig.h` and build again. The
+fault handler then prints four hex numbers: MEPC, MSTATUS, MTVAL and
+MCAUSE. `riscv64-elf-addr2line -e ledmatrix.elf <MEPC>` gives the line
+that crashed. Set it back to 0 before you commit: the report costs about
+170 B.
+
 ## Tests
 
 Every change comes with tests: a new test, or a change to an existing

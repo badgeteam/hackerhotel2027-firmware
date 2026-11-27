@@ -195,12 +195,6 @@ static const want_t WANT[] = {
     {'N', NEC_BYTES(0x40BF7E81u), NEC_BYTES(0x40BF7F80u), 38000, 2},    // Toshiba: NEC 64:126 and 64:127
 };
 
-static int frames_per_run(void) {
-    int n = 0;
-    for (unsigned b = 0; b < sizeof WANT / sizeof *WANT; b++) n += WANT[b].repeats;
-    return n;
-}
-
 // Do sent[from..] hold the codes of a whole run, ON or OFF
 static bool run_was(int from, bool on, int* frames) {
     int k = from;
@@ -234,21 +228,22 @@ static int bright_ranks(int which) {
 }
 
 // The blast: over ms, the laser on the outline (lit LEDs, summed over the
-// ticks), how often a lit LED changed from one tick to the next, the
-// farthest from angle a (1/256 turn), whether every beam started at the
-// arm's root and only ran outward, and whether the arm flashed (all ranks
-// full, and none)
+// ticks), how often a lit LED changed from one tick to the next, how many
+// lit LEDs were on the arm's lower side (between its tip and the dip away
+// from the top arm), whether every beam started at the root of the arm's
+// upper side and only ran outward, and the arm itself: all ranks full,
+// none, or some (each on its own: the overload)
 typedef struct {
-    int lit, changed, far, beams;
-    bool outward, full, dark;
+    int lit, changed, lower, beams;
+    bool outward, full, dark, some;
 } blast_t;
 static blast_t watch(uint32_t ms, uint8_t a, int which) {
-    blast_t b = {0, 0, 0, 0, true, false, false};
+    blast_t b = {0, 0, 0, 0, true, false, false, false};
     uint8_t root = 255, was[HH_EDGE_COUNT], before[BEAMS];
     for (int j = 0; j < HH_EDGE_COUNT; j++) {
         was[j] = mock_leds[layout_edge[j]];
-        if (abs((int8_t)(layout_polar[layout_edge[j]][1] - a)) <= ARM_HALF && layout_polar[layout_edge[j]][0] < root)
-            root = layout_polar[layout_edge[j]][0];
+        int up = (int8_t)(layout_polar[layout_edge[j]][1] - a) * (a < 128 ? -1 : 1);  // towards the top arm
+        if (up >= 0 && up <= 26 && layout_polar[layout_edge[j]][0] < root) root = layout_polar[layout_edge[j]][0];
     }
     for (uint32_t t = 0; t < ms; t += 5) {
         memcpy(before, beam, sizeof before);
@@ -259,15 +254,12 @@ static blast_t watch(uint32_t ms, uint8_t a, int which) {
         }
         for (int j = 0; j < HH_EDGE_COUNT; j++) {
             uint8_t v = mock_leds[layout_edge[j]];
-            if (v) {
-                int off = abs((int8_t)(layout_polar[layout_edge[j]][1] - a));
-                b.lit++, b.changed += v != was[j];
-                if (off > b.far) b.far = off;
-            }
+            int up = (int8_t)(layout_polar[layout_edge[j]][1] - a) * (a < 128 ? -1 : 1);
+            if (v) b.lit++, b.changed += v != was[j], b.lower += up <= -3 && up >= -26;
             was[j] = v;
         }
         int n = bright_ranks(which);
-        b.full |= n == RANKS, b.dark |= n == 0;
+        b.full |= n == RANKS, b.dark |= n == 0, b.some |= n > 0 && n < RANKS;
     }
     return b;
 }
@@ -363,24 +355,35 @@ int main(void) {
     CHECK(mock_leds[layout_grid[6][5]] == 255 && mock_leds[layout_grid[11][3]] == 40, "ON lights up, OFF dims");
     for (int t = 0; t < 3; t++) idle(200), fill[t] = bright_ranks(ARM_A);
     CHECK(!edge_lit(), "no laser while it fills up");
+    // The blast, in slices of 100 ms until it is over: the first third, the
+    // middle and the last
     idle(100);
-    blast_t early = watch(300, tip(ARM_A), ARM_A);
-    idle(500);
-    blast_t late = watch(300, tip(ARM_A), ARM_A);
-    bool sending = nsent - from < frames_per_run();
+    blast_t part[3] = {{0}, {0}, {0}};
+    blast_t slice[40];
+    int ns = 0;
+    while ((mode != IDLE || done_ms) && ns < 40) slice[ns++] = watch(100, tip(ARM_A), ARM_A);
     idle(3000);
+    bool outward = true, flash = true;
+    int beams = 0, lower = 0;
+    for (int i = 0; i < ns; i++) {
+        blast_t* p = &part[i * 3 / ns];
+        p->lit += slice[i].lit, p->changed += slice[i].changed, p->some |= slice[i].some;
+        p->full |= slice[i].full, p->dark |= slice[i].dark;
+        beams += slice[i].beams, outward &= slice[i].outward, lower += slice[i].lower;
+    }
+    for (int i = 0; i < 2; i++) flash &= part[i].full && part[i].dark;  // the last third overloads
     CHECK(run_was(from, true, &frames) && nsent == from + frames, "A sends the power-on codes (%d frames)",
           nsent - from);
     CHECK(fill[0] < fill[1] && fill[1] < fill[2] && fill[1] - fill[0] < fill[2] - fill[1] && !bright_ranks(ARM_B),
           "the arm to A fills up, slowly, then faster (%d, %d, %d)", fill[0], fill[1], fill[2]);
-    CHECK(early.full && early.dark && late.full && late.dark, "then it flashes");
-    CHECK(sending && early.lit && late.lit > early.lit,
-          "while it sends, a laser runs along the arm's outline, wilder later (%d, then %d lit)", early.lit, late.lit);
-    CHECK(late.changed * 2 > late.lit, "flickering (%d of %d lit LEDs changed in a tick)", late.changed, late.lit);
-    CHECK(early.beams + late.beams > 10 && early.outward && late.outward,
-          "its beams start at the arm's root and shoot outward (%d beams)", early.beams + late.beams);
-    CHECK(early.far <= ARM_HALF && late.far <= ARM_HALF, "never past the arm (%d, %d of 256 from its tip)", early.far,
-          late.far);
+    CHECK(ns > 9 && flash, "then it flashes (%d slices of 100 ms)", ns);
+    CHECK(!part[0].lit && part[1].lit < part[2].lit && part[2].lit > 300,
+          "a laser only from halfway, building up to the end (%d, %d, %d lit)", part[0].lit, part[1].lit, part[2].lit);
+    CHECK(part[2].changed * 2 > part[2].lit, "flickering (%d of %d lit LEDs changed in a tick)", part[2].changed,
+          part[2].lit);
+    CHECK(beams > 10 && outward, "its beams start at the arm's root and shoot outward (%d beams)", beams);
+    CHECK(!lower, "never on the arm's lower side (%d)", lower);
+    CHECK(!part[0].some && part[2].some, "at the end the arm overloads: its LEDs flicker each on their own");
     uint32_t total = 0;
     int sony = 0;
     for (int i = from; i < nsent; i++) total += sent[i].us, sony += sent[i].kind == 'Y' && sent[i].us == 45000;

@@ -1,8 +1,9 @@
 // TVBOn: turns the TVs around you on or off, by infrared. Press A: the
 // badge sends the power-on code of each TV brand it knows (Samsung, LG,
 // Hisense, Sony, Panasonic, Philips, Toshiba): the arm to A fills up
-// green, faster and faster, then flashes while a laser flickers along its
-// outline, wilder the longer it sends. Press B: the power-off
+// green, faster and faster, then flashes; in its second half a laser
+// flickers along the arm's upper side, wilder and wilder, until the arm
+// all but bursts at the end. Press B: the power-off
 // codes, the same in red to B. Brands with only a power toggle (TCL, Xiaomi, newer
 // Hisense, Philips and Toshiba, Sharp, Telefunken and others by Vestel,
 // Hitachi)
@@ -18,6 +19,7 @@
 #define FILL_MS 700          // the arm fills up in this time, then flashes until the codes are out
 #define DONE_MS 600          // and this long after the last code
 #define ARM_HALF 26          // an arm's outline, either side of its tip's angle (1/256 turn)
+#define TIP_HALF 2           // and its tip
 #define BEAMS 4              // laser beams at once
 #define BEAM_SPEED 2         // 1/4 mm per ms: a beam runs the arm in about 50 ms
 #define BEAM_LEN 24          // its length, 6 mm
@@ -69,7 +71,6 @@ static const brand_t BRANDS[] = {
 #define BRAND_COUNT (sizeof BRANDS / sizeof *BRANDS)
 
 static const hh_api_t* hh;
-static int abs8(int8_t x) { return x < 0 ? -x : x; }
 static uint8_t mode, last;          // what goes out now (ON, OFF or IDLE), and what went out last
 static uint8_t frame, frames;       // the next frame of a run, and how many a run has
 static uint16_t buf[2][FRAME_MAX];  // two frames: the one going out, and the next
@@ -259,32 +260,40 @@ static void word(int x, int y, const char* t, uint8_t v) {
 
 // An arm from white at the centre to its colour at the button (green to
 // A, red to B). A wave runs out towards the button; lit ranks go to full.
-static void arm(uint8_t which, bool red, uint8_t level, int lit) {
+// At overload (0 .. 255) the LEDs flicker each on their own.
+static void arm(uint8_t which, bool red, uint8_t level, int lit, uint8_t overload) {
     for (int i = 0; i < HH_RGB_COUNT; i++) {
         const hh_rgb_t* l = &hh->rgb[i];
         if (l->arm != which) continue;
         uint8_t white = (uint8_t)(255 - l->rank * 255 / (RANKS - 1));
         uint8_t wave = hh->sin8((uint8_t)(l->rank * 40 - ms / 3));
         uint32_t v = l->rank < lit ? 255 : level * (160u + wave * 95u / 255) / 255;
+        if (overload && hh->random() % 256 < overload) v = hh->random() % 256;
         uint8_t full = (uint8_t)v, part = (uint8_t)(white * v / 255);
         hh->set_rgb(i, red ? full : part, red ? part : full, part);
     }
 }
 
-// The laser round the arm at angle a: beams shoot out along the arm's
-// outline, from its root to its tip, flickering at random, with crackle
-// round them; more of both as e (0 .. 255) grows, none at 0
-static void laser(uint8_t a, uint8_t e, uint32_t elapsed_ms) {
-    uint8_t root = 255;  // the outline's nearest LED on the arm (polar distance)
+// Is outline LED s on arm a's upper side (towards the top arm), or at its tip
+static bool upper(uint8_t a, uint16_t s) {
+    int off = (int8_t)(hh->polar[s][1] - a);  // clockwise from the tip
+    if (a < 128) off = -off;                    // the arm to B: the top is the other way
+    return off >= -TIP_HALF && off <= ARM_HALF;
+}
+
+// The laser on the upper side of the arm at angle a: beams shoot out along
+// the outline, from the arm's root to its tip, flickering at random, with
+// crackle round them; more of both as power (0 .. 255) grows, none at 0
+static void laser(uint8_t a, uint8_t power, uint32_t elapsed_ms) {
+    uint8_t root = 255;  // the outline's nearest LED on that side (polar distance)
     for (int j = 0; j < HH_EDGE_COUNT; j++)
-        if (abs8((int8_t)(hh->polar[hh->edge[j]][1] - a)) <= ARM_HALF && hh->polar[hh->edge[j]][0] < root)
-            root = hh->polar[hh->edge[j]][0];
+        if (upper(a, hh->edge[j]) && hh->polar[hh->edge[j]][0] < root) root = hh->polar[hh->edge[j]][0];
     for (int b = 0; b < BEAMS; b++) {
         if (!beam[b]) continue;
         uint32_t r = beam[b] + elapsed_ms * BEAM_SPEED;
         beam[b] = r > 255 ? 0 : (uint8_t)r;
     }
-    if (e && hh->random() % 256 < 24u + e / 2)
+    if (power && hh->random() % 512 < power)
         for (int b = 0; b < BEAMS; b++)
             if (!beam[b]) {
                 beam[b] = root;
@@ -292,11 +301,11 @@ static void laser(uint8_t a, uint8_t e, uint32_t elapsed_ms) {
             }
     for (int j = 0; j < HH_EDGE_COUNT; j++) {
         uint16_t s = hh->edge[j];
-        if (abs8((int8_t)(hh->polar[s][1] - a)) > ARM_HALF) continue;
+        if (!upper(a, s)) continue;
         uint8_t r = hh->polar[s][0], v = 0;
         for (int b = 0; b < BEAMS; b++)
             if (beam[b] && r <= beam[b] && r + BEAM_LEN >= beam[b]) v = (uint8_t)(96 + hh->random() % 160);
-        if (e && hh->random() % 1024 < e / 4u) v = 255;
+        if (power && hh->random() % 2048 < power) v = 255;
         hh->set(s, v);
     }
 }
@@ -315,7 +324,9 @@ static void tick(uint32_t elapsed_ms) {
 
     // The arms: dim, with a wave running out, while nothing happens. The
     // active one fills up, slowly and then faster, then blasts: it flashes,
-    // faster and faster, with a laser round it, until the codes are out.
+    // faster and faster, until the codes are out. From halfway through the
+    // blast the power builds up: a laser on the arm's upper side, and at the
+    // end an overload, the arm's LEDs flickering each on their own.
     bool busy = mode != IDLE || done_ms;
     if (mode != IDLE) run_ms += elapsed_ms;
     if (mode != IDLE && run_ms >= FILL_MS && blast_from == frames) blast_from = frame;
@@ -324,15 +335,17 @@ static void tick(uint32_t elapsed_ms) {
     if (done_ms) e = 255;
     else if (blast) e = (uint8_t)((frame - blast_from) * 255 / (frames - blast_from));
     int lit = mode != IDLE ? (int)(RANKS * run_ms * run_ms / (FILL_MS * FILL_MS)) : 0;
+    uint32_t half = e > 128 ? (e - 128u) * 2 : 0;
+    uint8_t power = (uint8_t)(half * half / 255), overload = power > 128 ? (uint8_t)((power - 128) * 2) : 0;
     uint8_t level = 120;
     if (blast) {
         bool on = ms / (150 - e * 90 / 255) % 2 == 0;
         lit = on ? RANKS : 0, level = 40;
     }
     hh->clear();
-    arm(ARM_A, false, busy ? (last == ON ? level : 40) : 90, busy && last == ON ? lit : 0);
-    arm(ARM_B, true, busy ? (last == OFF ? level : 40) : 90, busy && last == OFF ? lit : 0);
-    laser(tip_angle[last == OFF], blast ? e : 0, elapsed_ms);
+    arm(ARM_A, false, busy ? (last == ON ? level : 40) : 90, busy && last == ON ? lit : 0, last == ON ? overload : 0);
+    arm(ARM_B, true, busy ? (last == OFF ? level : 40) : 90, busy && last == OFF ? lit : 0, last == OFF ? overload : 0);
+    laser(tip_angle[last == OFF], power, elapsed_ms);
 
     // The grid: TV, then ON and OFF; while one goes out, that one bright
     word(5, 1, "TV", 255);

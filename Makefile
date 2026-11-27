@@ -2,7 +2,7 @@ all : flash
 
 TARGET:=ledmatrix
 TARGET_MCU:=CH643Q
-ADDITIONAL_C_FILES:=debug_output.c ch643_ledpwm.c buttons.c standby.c bootloader.c infrared.c ir_codec.c power.c factory.c webusb_protocol.c flash_pages.c store.c persist.c pattern_player.c la04.c app_host.c app_util.c layout.c font.c nametag.c menu.c charge.c
+ADDITIONAL_C_FILES:=debug_output.c ch643_ledpwm.c buttons.c standby.c bootloader.c infrared.c ir_codec.c power.c webusb_protocol.c flash_pages.c store.c persist.c pattern_player.c la04.c app_host.c app_util.c layout.c font.c nametag.c menu.c charge.c
 PREFIX?=riscv64-elf
 MINICHLINK:=$(dir $(shell which minichlink))
 
@@ -27,9 +27,6 @@ FIRMWARE_GP_LINE:=__global_pointer$$ = . + 0x800;
 # -dirty if the firmware's own sources differ from it
 FW_VERSION:=$(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet HEAD -- ':(glob)*.c' ':(glob)*.h' ':(glob)apps/hhapp.h' Makefile 2>/dev/null || echo -dirty)
 EXTRA_CFLAGS+=-DFW_VERSION=\"$(FW_VERSION)\"
-# The factory test's KEY step (factory.h); FACTORY_KEYS=0: the test runs by itself
-FACTORY_KEYS?=1
-EXTRA_CFLAGS+=-DFACTORY_KEYS=$(FACTORY_KEYS)
 # Smaller code: switch as compare chains, not jump tables (with -Os they
 # are smaller here); align data only as its type needs, not to words (a
 # byte array read as words says aligned(4) itself); and leave loop
@@ -58,6 +55,17 @@ webui-firmware : $(TARGET).bin
 	# the version as built into the image (its FW_INFO marker), not as of now
 	printf '{"commit": "%s", "date": "%s", "bytes": %s}\n' "$$(grep -ao 'HH27-STARFISH-FW S[0-9]* [^[:cntrl:]]*' $(TARGET).bin | cut -d' ' -f3)" "$$(git log -1 --format=%cs HEAD)" "$$(stat -c %s $(TARGET).bin)" > webui/firmware/firmware.json
 
+# The image for the flashing table (docs/FACTORY_TEST.md): the 62 KB of
+# flash but its last page (tools/factory_image.py says why). The firmware, then a store that holds only the factory test app
+# (apps/factory), and an empty persistent record, so the test runs at the
+# first power-on. FACTORY_KEYS=0 leaves the test's KEY step out.
+FACTORY_KEYS?=1
+factory-image : $(TARGET).bin
+	$(MAKE) -C apps -B build/factory.hhapp FACTORY_KEYS=$(FACTORY_KEYS)
+	python3 tools/factory_image.py $(TARGET).bin apps/build/factory.hhapp factory.bin
+
+.PHONY : factory-image
+
 flash : cv_flash
 clean : cv_clean
-	rm -f $(LINKER_SCRIPT)
+	rm -f $(LINKER_SCRIPT) factory.bin

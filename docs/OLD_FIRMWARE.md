@@ -175,7 +175,7 @@ wants the UART's RX pin.
 | `level N` | replaced | `tools/badge.py brightness N` (1 .. 255), and the web interface. |
 | `hello` | replaced: [#37] | The NAMETAG app: tap C. No USB command. |
 | `test` | partly: [#11] | `tools/badge.py bringup` walks the LEDs from the host. `docs/BRINGUP.md` has the rest as a checklist. |
-| `factory` | replaced: [#59] | `tools/badge.py factory` (USB command `0x52`). |
+| `factory` | replaced: [#59] | `tools/badge.py factory`: it stores the factory test app and starts it. |
 | `factory skip` | untracked | |
 | `sponsors` | tracked: [#12] | |
 | `progress` | tracked: [#6] | |
@@ -188,9 +188,9 @@ This one is in `docs/FACTORY_TEST.md`.
 
 | Old feature | Status now | Notes |
 |---|---|---|
-| Runs at every power-on until it passes once; kept in flash | done: [#59] | The emulator skips it at power-on, except after `--fresh` (`tools/emu/emu.py`). |
+| Runs at every power-on until it passes once; kept in flash | done: [#59] | It runs at power-on while the factory test app is stored and the test has not passed; `factory.bin` or `tools/badge.py factory` stores the app. The emulator does the same, and `--fresh` stores the app (`tools/emu/emu.py`). |
 | LED and ROW: the volunteer taps B (good) or A (bad) | replaced: [#62] | Both run by themselves. A bad LED or row means the repair pile. |
-| KEY, fails after 20 s | done: [#59] | `make FACTORY_KEYS=0` leaves it out ([#62]). |
+| KEY, fails after 20 s | done: [#59] | `make factory-image FACTORY_KEYS=0` leaves it out ([#62]). |
 | USB, fails after 10 s | done: [#59] | Also shows `CHG` while the battery charges. |
 | IR, then `IR?` after 10 s; B passes it anyway, A fails it | partly: [#62] | `IR?` after 10 s, a fail after 30 s. There is no way to pass IR untested. |
 | A failed step: tap B to try it again | done: [#59] | |
@@ -236,7 +236,7 @@ a new board.
 | `C`: USB power on and off (charging) | done: `tools/emu` | `V` plugs USB power in and out (PC3). `U` makes the battery charge, stop, or go away: then CHRG (PB22) toggles, as the charger does without a battery. Buttons under the board do the same, and `tools/emu/headless.py` has `usb_power()`, `charging()` and `no_battery()`. |
 | `R`: reset | done: [#3] | `R` powers off and on; a key held then is held at power-on (safe start). |
 | A name kept over `R`, lost when the emulator closes | done: [#3] | The flash is a file, so everything stays. |
-| `--fresh`: the factory test, then the sponsor reel | partly: `tools/emu` | `--fresh` erases the persistent record (the items stay), so the factory test runs at power-on. It runs on a copy of the flash file; `--keep` erases the record in the file itself. There is no sponsor reel yet ([#12]). |
+| `--fresh`: the factory test, then the sponsor reel | partly: `tools/emu` | `--fresh` erases the persistent record and stores the factory test app (the items stay), so the factory test runs at power-on. It runs on a copy of the flash file; `--keep` changes the file itself. There is no sponsor reel yet ([#12]). |
 | One shared infrared room (UDP 127.255.255.255:8028) | done: [#3], [#37] | |
 | stdin is the UART console | tracked: [#10] | stdin carries the emulator's own protocol now. |
 | `--web`: the setup page on localhost, any browser | done: [#3] | The whole web interface. |

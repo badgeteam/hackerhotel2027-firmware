@@ -29,6 +29,9 @@ STORE_BYTES = 31744  # the store's room for items (store.h STORE_ITEMS_SIZE)
 ITEM_HEADER = 32     # store_item_t
 PAGE = 256           # each item takes whole flash pages
 FREE_AFTER = 4096    # the recommended set leaves at least this much free
+# Not for the library: the factory test (make factory-image and
+# tools/badge.py factory store it; it deletes itself once it passed)
+NOT_IN_LIBRARY = {"factory"}
 
 
 def store_bytes(length: int) -> int:
@@ -56,6 +59,8 @@ def main() -> int:
         old.unlink()
     apps = []
     for hhapp in sorted(BUILD.glob("*.hhapp")):
+        if hhapp.stem in NOT_IN_LIBRARY:
+            continue
         data = hhapp.read_bytes()
         magic, api = struct.unpack_from("<IH", data, 0)
         if magic != 0x50414848:  # "HHAP"

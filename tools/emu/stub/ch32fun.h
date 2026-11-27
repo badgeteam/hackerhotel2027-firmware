@@ -70,6 +70,3 @@ static inline void __enable_irq(void) {}
 // the firmware's printf goes to the emulator's log
 int emu_printf(const char* fmt, ...) __attribute__((format(__printf__, 1, 2)));
 #define printf emu_printf
-
-// ledmatrix.c: run the factory test at power-on, as the badge does (hw.c)
-extern bool emu_factory_at_power_on;

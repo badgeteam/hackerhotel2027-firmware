@@ -1,13 +1,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "bootloader.h"
 #include "buttons.h"
 #include "ch32fun.h"
 #include "charge.h"
 #include "ch643_ledpwm.h"
 #include "debug_output.h"
-#include "factory.h"
 #include "infrared.h"
 #include "app_host.h"
 #include "layout.h"
@@ -45,6 +45,8 @@ static void fill_halves(uint8_t top, uint8_t bottom) {
 // A badge that has never saved a brightness starts at 32 of 255 (12.5 %),
 // as the old firmware did: full brightness dazzles and drains the battery
 #define START_BRIGHTNESS 32
+
+static uint8_t own_brightness(void) { return Persist_Brightness() ? Persist_Brightness() : START_BRIGHTNESS; }
 
 // B or D outside apps: the brightness level shows this long over what runs
 #define LEVEL_SHOW_MS 1000
@@ -107,11 +109,39 @@ static void boot_rom_arrow(uint8_t brightness) {
 // Both play from the store's flash, so the store treats them the same.
 static bool s_text_plays;
 
+// The factory test (docs/FACTORY_TEST.md) is an app, apps/factory, stored
+// as FACTORY: `make factory-image` puts it in a new badge's store, and
+// tools/badge.py factory stores it. It runs at power-on until the test has
+// passed. It runs at full brightness: that is not kept, and the badge's
+// own comes back after it.
+static bool s_factory;  // the factory app runs
+
+static void factory_end(void) {
+    if (s_factory) LEDMatrix_SetBrightness(own_brightness());
+    s_factory = false;
+}
+
+// The factory app's index in the store, or STORE_NONE. Once the test has
+// passed (the app records that, persist.h), the app goes from the store:
+// after the pass screen, or at the next power-on if the badge lost power
+// or the host stopped the app before that.
+static uint8_t factory_item(void) {
+    for (uint8_t i = 0; i < Store_Count(); i++) {
+        const store_item_t* item = Store_Item(i);
+        if (item->type != STORE_TYPE_APP || memcmp(item->name, "FACTORY", 8)) continue;
+        if (!Persist_FactoryPassed()) return i;
+        Store_Delete(i);
+        break;
+    }
+    return STORE_NONE;
+}
+
 // Starts store item `index`: an animation or a text plays, an app runs.
 // Whatever ran before stops; if the item cannot start, the badge shows the
 // name tag.
 static void run_item(uint8_t index) {
     AppHost_Stop();
+    factory_end();
     g_app_mode = APP_MODE_NAMETAG;
     const store_item_t* item = Store_Item(index);
     if (!item) return;
@@ -123,6 +153,7 @@ static void run_item(uint8_t index) {
         if (Nametag_StartText(Store_Payload(item), item->length)) g_app_mode = APP_MODE_FLASH_PATTERN;
     } else if (item->type == STORE_TYPE_APP && AppHost_Start(Store_Payload(item), item->length, item->name)) {
         g_app_mode = APP_MODE_APP;
+        s_factory = !memcmp(item->name, "FACTORY", 8);
     }
 }
 
@@ -158,21 +189,16 @@ int main(void) {
 
     Persist_Init();
     // the brightness from last time (B / D, the host or an app set it)
-    LEDMatrix_SetBrightness(Persist_Brightness() ? Persist_Brightness() : START_BRIGHTNESS);
+    LEDMatrix_SetBrightness(own_brightness());
 
     // Start the boot item from the store, unless a button is held: then
     // the badge starts without it (in case it is an app that hangs).
     // Without a boot item, the name tag.
     g_app_mode = APP_MODE_NAMETAG;
-    // A badge whose factory test has not passed yet runs that first (the
-    // emulator only when asked: its tests start on a new flash file)
-#ifndef HH_EMU
-    bool factory = !Persist_FactoryPassed();
-#else
-    bool factory = emu_factory_at_power_on && !Persist_FactoryPassed();
-#endif
-    if (factory) {
-        Factory_Start();
+    // The factory test first, while it is in the store and has not passed
+    uint8_t factory = factory_item();
+    if (factory != STORE_NONE) {
+        run_item(factory);
     } else if (buttons_raw()) {
         buttons_ignore_held();  // that press is not a command
     } else if (Store_BootItem() != STORE_NONE) {
@@ -182,7 +208,7 @@ int main(void) {
     uint32_t last_tick = funSysTick32();
     uint32_t hold_ms = 0;   // how long A has been down
     uint32_t boot_ms = 0;   // how long C + D have been down together
-    uint8_t chord_brightness = LEDMatrix_GetBrightness();  // from before C or D went down
+    uint8_t chord_brightness = own_brightness();  // from before C or D went down
     uint8_t last_mode = 0;  // to start the name tag when it comes on
     bool menu_open = false;
     uint32_t level_ms = 0;     // the brightness level shows this much longer
@@ -205,6 +231,7 @@ int main(void) {
         if (run != STORE_NONE) run_item(run);
         // a command from the host (custom mode, STOP, erase) ends the app
         if (g_app_mode != APP_MODE_APP) AppHost_Stop();
+        if (!AppHost_Running()) factory_end();
         WebUSB_Poll();
 
         uint32_t elapsed_ms = (funSysTick32() - last_tick) / DELAY_MS_TIME;
@@ -212,16 +239,16 @@ int main(void) {
         level_ms = level_ms > elapsed_ms ? level_ms - elapsed_ms : 0;
 
         // keep what the host, the app or the buttons changed (not the
-        // factory test's full brightness: factory.c puts the badge's back)
-        if (!factory) Persist_SetBrightness(LEDMatrix_GetBrightness());
+        // factory test's full brightness: factory_end() puts the badge's back)
+        if (!s_factory) Persist_SetBrightness(LEDMatrix_GetBrightness());
         Persist_Flush(elapsed_ms);
 
         if (WebUSB_BootRomDue(elapsed_ms)) enter_boot_rom();
 
         // Charging starts: the charging screen (charge.h), but not over an
-        // app, what the host drew (custom mode), the menu or the factory test
-        if (Power_Tick(elapsed_ms) && g_app_mode != APP_MODE_APP && g_app_mode != APP_MODE_CUSTOM && !factory &&
-            !menu_open) {
+        // app (the factory test is one), what the host drew (custom mode) or
+        // the menu
+        if (Power_Tick(elapsed_ms) && g_app_mode != APP_MODE_APP && g_app_mode != APP_MODE_CUSTOM && !menu_open) {
             save_leds();
             menu_mode = g_app_mode;  // the menu is closed, so its record is free
             menu_item = g_running_item;
@@ -237,8 +264,9 @@ int main(void) {
         uint8_t held = buttons_down();
 
         // Hold C + D: the boot ROM, from the name tag, the menu, an app or
-        // the factory test. The brightness is kept from before the chord.
-        if (!(held & (HH_BTN_C | HH_BTN_D))) chord_brightness = LEDMatrix_GetBrightness();
+        // the factory test. The brightness is kept from before the chord,
+        // but the badge's own from the factory test (not its full brightness).
+        if (!(held & (HH_BTN_C | HH_BTN_D))) chord_brightness = s_factory ? own_brightness() : LEDMatrix_GetBrightness();
         boot_ms = (held & (HH_BTN_C | HH_BTN_D)) == (HH_BTN_C | HH_BTN_D) ? boot_ms + elapsed_ms : 0;
         if (boot_ms >= BOOT_HOLD_MS) boot_rom_arrow(chord_brightness);
 
@@ -247,32 +275,8 @@ int main(void) {
         // while it is on (and not those left from an app: see below)
         ir_shot_t shot;
         while (g_app_mode != APP_MODE_APP && infrared_receive_shot(&shot))
-            if (g_app_mode == APP_MODE_NAMETAG && !factory && !menu_open && !charge)
+            if (g_app_mode == APP_MODE_NAMETAG && !menu_open && !charge)
                 Nametag_Shot(shot.team, shot.command);
-
-        // The factory test (factory.h) has the LEDs and the buttons until
-        // it passes or is left; USB goes on working
-        if (WebUSB_TakeFactoryRequest() && !factory) {
-            AppHost_Stop();
-            menu_open = false;
-            charge = false;
-            g_app_mode = APP_MODE_NAMETAG;
-            factory = true;
-            Factory_Start();
-        }
-        if (factory) {
-            factory_status_t f = Factory_Tick(elapsed_ms, buttons, held);
-            if (f == FACTORY_PASSED) Persist_SetFactoryPassed(true);
-            if (f == FACTORY_DONE) {
-                factory = false;
-                hold_ms = 0;
-                buttons_ignore_held();
-                g_app_mode = APP_MODE_NAMETAG;
-                if (Store_BootItem() != STORE_NONE) run_item(Store_BootItem());
-            }
-            Delay_Ms(TICK_MS);
-            continue;
-        }
 
         // The menu (menu.h). While it is open, what ran before waits; a
         // command from the host that changes what runs closes it (above).
@@ -302,8 +306,9 @@ int main(void) {
             continue;
         }
 
-        // Hold A: the menu, also from an app (which gets the press of A too)
-        hold_ms = held & HH_BTN_A ? hold_ms + elapsed_ms : 0;
+        // Hold A: the menu, also from an app (which gets the press of A too),
+        // but not from the factory test
+        hold_ms = held & HH_BTN_A && !s_factory ? hold_ms + elapsed_ms : 0;
         if (hold_ms >= (g_app_mode == APP_MODE_APP ? MENU_HOLD_APP_MS : MENU_HOLD_MS)) {
             if (charge) {  // the menu puts back what the charging screen covered (A held since before it came)
                 restore_leds();
@@ -327,6 +332,12 @@ int main(void) {
                 AppHost_Stop();
                 g_app_mode = APP_MODE_NAMETAG;
                 buttons_ignore_held();
+                if (s_factory) {  // the factory test is over: then the boot item, as at power-on
+                    factory_end();
+                    uint8_t left = factory_item();  // still stored: left, not passed
+                    uint8_t boot = Store_BootItem();
+                    if (boot != STORE_NONE && boot != left) run_item(boot);
+                }
             }
             Delay_Ms(TICK_MS);
             continue;

@@ -34,7 +34,6 @@
 #define CMD_BOOT_ROM 0x40
 #define CMD_FW_INFO 0x41
 #define CMD_IR_RAW 0x50  // reply: count, then that many marks / spaces (infrared_raw_read)
-#define CMD_FACTORY 0x52  // start the factory test (factory.h), as on a freshly flashed badge
 #define CMD_IR_SHOT 0x51  // team, trigger, command, parameter: send a shot (tools/badge.py shoot)
 #define CMD_QUERY 0xFF
 
@@ -59,7 +58,6 @@ static volatile uint8_t s_info_item;   // ITEM_INFO asked about this item
 static volatile bool s_name_reply;     // NAME_GET: the reply carries the name
 static volatile bool s_fw_reply;       // FW_INFO: the reply carries s_fw_info
 static volatile bool s_ir_raw_reply;   // IR_RAW: the reply carries the IR log
-static volatile bool s_factory_request;  // FACTORY: the main loop starts the factory test
 static volatile bool s_boot_request;   // BOOT_ROM: reboot once the reply is out
 static uint32_t s_boot_wait_ms;
 static volatile uint8_t s_run_request = STORE_NONE;
@@ -109,7 +107,7 @@ static void delete_item(uint8_t index) {
         g_running_item = running - 1;
 }
 
-// The command codes are spread over 0x01 .. 0x52: a jump table for them
+// The command codes are spread over 0x01 .. 0x51: a jump table for them
 // would be mostly empty, and is larger than the compares
 __attribute__((optimize("no-jump-tables"))) static void handle_command(const uint8_t* data, int len) {
     s_result = STORE_OK;
@@ -219,10 +217,6 @@ __attribute__((optimize("no-jump-tables"))) static void handle_command(const uin
 
         case CMD_IR_RAW:
             s_ir_raw_reply = true;
-            break;
-
-        case CMD_FACTORY:
-            s_factory_request = true;
             break;
 
         case CMD_IR_SHOT:
@@ -353,12 +347,6 @@ bool WebUSB_BootRomDue(uint32_t elapsed_ms) {
 #endif
     // once the host has the reply, or after 200 ms if it does not read it
     return reply_out || s_boot_wait_ms >= 200;
-}
-
-bool WebUSB_TakeFactoryRequest(void) {
-    bool r = s_factory_request;
-    s_factory_request = false;
-    return r;
 }
 
 uint8_t WebUSB_TakeRunRequest(void) {

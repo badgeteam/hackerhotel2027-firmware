@@ -453,6 +453,12 @@ static bool m_ir_send_raw(const uint16_t* us, uint16_t count, uint32_t carrier_h
 
 static bool mock_charging;  // what charging() returns
 static bool m_charging(void) { return mock_charging; }
+static bool mock_usb_power = true;  // what usb_power() returns
+static bool m_usb_power(void) { return mock_usb_power; }
+static bool mock_ir_loopback;  // the last ir_loopback()
+static void m_ir_loopback(bool on) { mock_ir_loopback = on; }
+static unsigned mock_factory_passed;  // factory_passed() calls
+static void m_factory_passed(void) { mock_factory_passed++; }
 
 static const hh_api_t mock_api = {
     .version = HH_API_VERSION, .size = sizeof(hh_api_t),
@@ -466,7 +472,7 @@ static const hh_api_t mock_api = {
     .isqrt = AppUtil_Isqrt, .atan8 = AppUtil_Atan8, .draw_number = m_draw_number,
     .step_brightness = m_step_brightness, .ir_send_packet = m_ir_send_packet, .ir_receive_packet = m_ir_receive_packet,
     .ir_receive_shot = m_ir_receive_shot, .ir_send_shot = m_ir_send_shot, .ir_send_raw = m_ir_send_raw,
-    .charging = m_charging,
+    .charging = m_charging, .usb_power = m_usb_power, .ir_loopback = m_ir_loopback, .factory_passed = m_factory_passed,
 };
 
 // The test's checks

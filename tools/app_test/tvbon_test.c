@@ -229,33 +229,47 @@ static int bright_ranks(int which) {
 
 // The blast: over ms, the laser on the outline (lit LEDs, summed over the
 // ticks), how often a lit LED changed from one tick to the next, how many
-// lit LEDs were on the arm's lower side (between its tip and the dip away
-// from the top arm), whether every beam started at the root of the arm's
-// upper side and only ran outward, and the arm itself: all ranks full,
-// none, or some (each on its own: the overload)
+// lit LEDs were at the bottom of the blast (the inner half of the arm's
+// outline) or off the arm, how bright the outer and inner half of the top
+// were (lit LEDs per LED), whether every beam started halfway out and only
+// ran outward, and the arm itself: all ranks full, none, or some (each on
+// its own: the overload)
 typedef struct {
-    int lit, changed, lower, beams;
+    int lit, changed, bottom, beams;
+    double outer, inner;
     bool outward, full, dark, some;
 } blast_t;
 static blast_t watch(uint32_t ms, uint8_t a, int which) {
-    blast_t b = {0, 0, 0, 0, true, false, false, false};
-    uint8_t root = 255, was[HH_EDGE_COUNT], before[BEAMS];
+    blast_t b = {0, 0, 0, 0, 0, 0, true, false, false, false};
+    uint8_t root = 255, top = 0, was[HH_EDGE_COUNT], before[BEAMS];
     for (int j = 0; j < HH_EDGE_COUNT; j++) {
         was[j] = mock_leds[layout_edge[j]];
-        int up = (int8_t)(layout_polar[layout_edge[j]][1] - a) * (a < 128 ? -1 : 1);  // towards the top arm
-        if (up >= 0 && up <= 26 && layout_polar[layout_edge[j]][0] < root) root = layout_polar[layout_edge[j]][0];
+        uint8_t r = layout_polar[layout_edge[j]][0];
+        if (abs((int8_t)(layout_polar[layout_edge[j]][1] - a)) > 26) continue;
+        if (r < root) root = r;
+        if (r > top) top = r;
+    }
+    int from = (root + top) / 2, mid = (from + top) / 2, n_outer = 0, n_inner = 0;
+    for (int j = 0; j < HH_EDGE_COUNT; j++) {
+        uint8_t r = layout_polar[layout_edge[j]][0];
+        if (abs((int8_t)(layout_polar[layout_edge[j]][1] - a)) > 26 || r < from) continue;
+        r > mid ? n_outer++ : n_inner++;
     }
     for (uint32_t t = 0; t < ms; t += 5) {
         memcpy(before, beam, sizeof before);
         run(5, 0, 0);
         for (int k = 0; k < BEAMS; k++) {  // a beam moves out, or a new one starts (also where one just ended)
             if (!beam[k] || (before[k] && beam[k] > before[k])) continue;
-            b.beams++, b.outward &= beam[k] == root;
+            b.beams++, b.outward &= beam[k] == from;
         }
         for (int j = 0; j < HH_EDGE_COUNT; j++) {
-            uint8_t v = mock_leds[layout_edge[j]];
-            int up = (int8_t)(layout_polar[layout_edge[j]][1] - a) * (a < 128 ? -1 : 1);
-            if (v) b.lit++, b.changed += v != was[j], b.lower += up <= -3 && up >= -26;
+            uint8_t v = mock_leds[layout_edge[j]], r = layout_polar[layout_edge[j]][0];
+            if (v) {
+                b.lit++, b.changed += v != was[j];
+                if (abs((int8_t)(layout_polar[layout_edge[j]][1] - a)) > 26 || r < from) b.bottom++;
+                else if (r > mid) b.outer += 1.0 / n_outer;
+                else b.inner += 1.0 / n_inner;
+            }
             was[j] = v;
         }
         int n = bright_ranks(which);
@@ -364,12 +378,14 @@ int main(void) {
     while ((mode != IDLE || done_ms) && ns < 40) slice[ns++] = watch(100, tip(ARM_A), ARM_A);
     idle(3000);
     bool outward = true, flash = true;
-    int beams = 0, lower = 0;
+    int beams = 0, bottom = 0;
+    double outer = 0, inner = 0;
     for (int i = 0; i < ns; i++) {
         blast_t* p = &part[i * 3 / ns];
         p->lit += slice[i].lit, p->changed += slice[i].changed, p->some |= slice[i].some;
         p->full |= slice[i].full, p->dark |= slice[i].dark;
-        beams += slice[i].beams, outward &= slice[i].outward, lower += slice[i].lower;
+        beams += slice[i].beams, outward &= slice[i].outward, bottom += slice[i].bottom;
+        outer += slice[i].outer, inner += slice[i].inner;
     }
     for (int i = 0; i < 2; i++) flash &= part[i].full && part[i].dark;  // the last third overloads
     CHECK(run_was(from, true, &frames) && nsent == from + frames, "A sends the power-on codes (%d frames)",
@@ -381,8 +397,9 @@ int main(void) {
           "a laser only from halfway, building up to the end (%d, %d, %d lit)", part[0].lit, part[1].lit, part[2].lit);
     CHECK(part[2].changed * 2 > part[2].lit, "flickering (%d of %d lit LEDs changed in a tick)", part[2].changed,
           part[2].lit);
-    CHECK(beams > 10 && outward, "its beams start at the arm's root and shoot outward (%d beams)", beams);
-    CHECK(!lower, "never on the arm's lower side (%d)", lower);
+    CHECK(beams > 10 && outward, "its beams start halfway out and shoot to the tip (%d beams)", beams);
+    CHECK(!bottom, "only at the top of the blast: never on the arm's inner half, or off the arm (%d)", bottom);
+    CHECK(outer > 1.5 * inner, "most at the tip (%.0f against %.0f per LED)", outer, inner);
     CHECK(!part[0].some && part[2].some, "at the end the arm overloads: its LEDs flicker each on their own");
     uint32_t total = 0;
     int sony = 0;

@@ -115,7 +115,7 @@ def run(e):
 
     # An app keeps C. Leave it as a person does: hold A, then NAME TAG in
     # the menu (it opens on NAMETAG, item 2: C four times goes back past
-    # FIRE, ONE and SAY HI to NAME TAG). From there a tap starts the first
+    # ONE, FIRE and SAY HI to NAME TAG). From there a tap starts the first
     # text, not the item after the app.
     e.usb(ITEM_RUN, 2, 0)
     time.sleep(0.15)
@@ -232,9 +232,29 @@ def run_apps_only(e):
     check(state(e)[0] == MODE_NAMETAG and shows_still(e.wait_frames(), NAME), "apps only: a tap of C there gives the name tag, no app")
 
 
+def run_unplayable(e):
+    """An animation the store takes (it checks the LA04 magic and length)
+    but the player cannot start: C skips it, and the items after it stay
+    in the ring"""
+    e.wait_frames()
+    e.set_name(NAME)
+    check(e.store(TYPE_TEXT, "ONE", text("ONE"))[2] == 0, "unplayable: store ONE (item 0, a text)")
+    check(e.store(TYPE_ANIMATION, "BAD", b"LA04" + bytes(8))[2] == 0, "unplayable: store BAD (item 1, no frames)")
+    check(e.store(TYPE_TEXT, "TWO", text("TWO"))[2] == 0, "unplayable: store TWO (item 2, a text)")
+    e.usb(STOP)
+    time.sleep(0.2)
+    tap_c(e)
+    check(state(e) == (MODE_ITEM, 0), "unplayable: a tap of C on the name tag: ONE")
+    tap_c(e)
+    check(state(e) == (MODE_ITEM, 2), "unplayable: from ONE, a tap of C: TWO (BAD cannot start, so it is skipped)")
+    tap_c(e)
+    check(state(e)[0] == MODE_NAMETAG, "unplayable: from TWO, a tap of C: the name tag")
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
-        for test, flash in ((run, "flash.bin"), (run_apps_only, "apps_only.bin")):
+        for test, flash in ((run, "flash.bin"), (run_apps_only, "apps_only.bin"),
+                            (run_unplayable, "unplayable.bin")):
             e = Emu(os.path.join(tmp, flash))
             try:
                 test(e)

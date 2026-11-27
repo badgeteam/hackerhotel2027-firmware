@@ -104,14 +104,16 @@ static void run_item(uint8_t index) {
 // every animation and text in store order, then the name tag again. Apps
 // are not in the ring: an app keeps C for itself, so browsing into one
 // would end the browsing (leave an app with the menu). From the name tag or
-// the host's drawing (custom mode): the first animation or text.
+// the host's drawing (custom mode): the first animation or text. An item
+// that cannot start (the store checks less than the player) is skipped too,
+// so it does not hide the items after it.
 static void browse_next(void) {
     int next = g_app_mode == APP_MODE_FLASH_PATTERN ? g_running_item + 1 : 0;
     for (; next < Store_Count(); next++) {
         const store_item_t* item = Store_Item((uint8_t)next);
         if (item && item->type != STORE_TYPE_APP) {
             run_item((uint8_t)next);
-            return;
+            if (g_app_mode == APP_MODE_FLASH_PATTERN) return;
         }
     }
     g_app_mode = APP_MODE_NAMETAG;

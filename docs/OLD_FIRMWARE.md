@@ -55,7 +55,7 @@ notes.
 | The same chord, held while USB is plugged in ([BRINGUP][bringup], steps 3 and 10) | untracked | To reach the boot ROM, the menu must work. A button held at power-on is now the safe start: the badge skips the boot item ([#1]). |
 | Hold A + B for 3 s: the bring-up test ([USAGE][u-bringup]) | partly: [#59] | The same two switches now only leave the factory test. See [Bring-up test](#bring-up-test). |
 | Tap A on the name tag or an animation: brightness ([USAGE][u-nametag]) | replaced | Outside apps, B is brighter and D dimmer. The level shows on the grid for a second. |
-| ◀ / ▶ on the name tag or an animation: previous / next screen ([USAGE][u-nametag]) | done: `ledmatrix.c` | A tap of C shows the next: the name tag, then every animation and text in store order, then the name tag again. Apps are skipped: an app keeps C, so browsing into one would end the browsing. Only forward: B and D stay the brightness, and C + D is a chord. NAME TAG in the menu leaves an app, and the next tap of C starts the first animation or text. |
+| ◀ / ▶ on the name tag or an animation: previous / next screen ([USAGE][u-nametag]) | partly: `ledmatrix.c` | A tap of C shows the next: the name tag, then every animation and text in store order, then the name tag again. Apps are skipped: an app keeps C, so browsing into one would end the browsing. The old animations are apps now, and the recommended set holds only apps, so on a new badge C has nothing to browse until people store their own animations or texts. Only forward: B and D stay the brightness, and C + D is a chord. NAME TAG in the menu leaves an app, and the next tap of C starts the first animation or text. |
 
 ## Menu and settings
 
@@ -308,8 +308,10 @@ decision first: is it worth the flash, and is it worth the work?
 2. **Brightness on the badge.** Done: a new badge starts at 12.5 %, as
    the old firmware did, and BRIGHTNESS shows the level on the grid, as
    B / D outside apps do for a second (`menu.c`, `ledmatrix.c`).
-3. **Browse without the menu.** Done: a tap of C outside apps starts
-   the next animation or text, as ◀ / ▶ did. C skips apps: an app keeps
+3. **Browse without the menu.** Partly done: a tap of C outside apps
+   starts the next animation or text, as ◀ / ▶ did. But the old
+   animations are apps now, and the recommended set holds only apps, so
+   on a new badge C has nothing to browse. C skips apps: an app keeps
    C, so a tap that started one would end the browsing (the NAMETAG app
    that the recommended set starts at power-on looks like the name tag,
    so it would look as if C stopped working). Apps start from the menu.

@@ -36,15 +36,10 @@ static void DMA7FastCopy( uint8_t * dest, const uint8_t * src, int len ) { memcp
 
 static inline void DMA7FastCopyComplete() { while( DMA1_Channel7->CNTR ); }
 
-#if FUSB_USE_HPE
-void USBFS_IRQHandler() __attribute__((section(".text.vector_handler")))  __attribute((naked));
-#else
-void USBFS_IRQHandler() __attribute__((section(".text.vector_handler")))  __attribute((interrupt));
-#endif
-
 void USBFS_InternalFinishSetup();
 
-void USBFS_IRQHandler()
+// HPE or not: see IRQ_HANDLER in funconfig.h (FUSB_USE_HPE stays 0)
+IRQ_HANDLER(USBFS_IRQHandler)
 {
 #if FUSB_IO_PROFILE
 	GPIOA->BSHR = 1;
@@ -491,9 +486,6 @@ void USBFS_IRQHandler()
 	GPIOA->BSHR = 1<<16;
 #endif
 
-#if FUSB_USE_HPE
-	asm volatile( "mret" );
-#endif
 }
 
 void USBFS_InternalFinishSetup()

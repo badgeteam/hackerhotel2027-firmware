@@ -9,7 +9,9 @@
 #define FUSB_HID_INTERFACES   0
 #define FUSB_HID_USER_REPORTS 0
 #define FUSB_IO_PROFILE       0
-#define FUSB_USE_HPE          FUNCONF_ENABLE_HPE
+// 0 also with HPE on: ch32fun's HPE handler is C in a naked function (no
+// stack frame, s registers not saved). fsusb.c uses IRQ_HANDLER instead.
+#define FUSB_USE_HPE          0
 #define FUSB_5V_OPERATION     FUNCONF_USE_5V_VDD
 #define FUSB_CURSED_TURBO_DMA 0
 

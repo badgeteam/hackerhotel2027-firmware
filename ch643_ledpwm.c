@@ -83,8 +83,7 @@ __attribute__((optimize("move-loop-invariants"))) static void ledpwm_load_row(un
     s_next_row = (row + 1 < LED_MATRIX_ROWS) ? row + 1 : 0;
 }
 
-void LEDPWM_IRQHandler(void) __attribute__((interrupt));
-void LEDPWM_IRQHandler(void) {
+IRQ_HANDLER(LEDPWM_IRQHandler) {
     ledpwm_load_row(s_next_row);
 }
 

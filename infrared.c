@@ -72,8 +72,7 @@ static void tx_start(void) {
     TIM2->CTLR1 |= TIM_CEN;
 }
 
-void TIM2_IRQHandler(void) __attribute__((interrupt));
-void TIM2_IRQHandler(void) {
+IRQ_HANDLER(TIM2_IRQHandler) {
     TIM2->INTFR = (uint16_t)~TIM_UIF;
     if (s_tx_index >= s_tx_count) {
         // The carrier-off period has started: stop, output stays inactive (LED off)
@@ -234,8 +233,7 @@ unsigned infrared_raw_read(uint16_t* out, unsigned max) {
 
 // Only EXTI line 19 is used as an interrupt in lines 16-25 (the buttons use
 // lines 18/20 as wake-up events only, see standby.c)
-void EXTI25_16_IRQHandler(void) __attribute__((interrupt));
-void EXTI25_16_IRQHandler(void) {
+IRQ_HANDLER(EXTI25_16_IRQHandler) {
     uint32_t now = SysTick->CNTL;
     if (!(EXTI->INTFR & IR_RX_LINE)) return;
     EXTI->INTFR = IR_RX_LINE;

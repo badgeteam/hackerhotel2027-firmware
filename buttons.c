@@ -5,31 +5,15 @@
 #define BTN2_PIN PC4
 #define BTN3_PIN PC5
 
-typedef struct {
-    int (*read_raw)(void);  // returns 1 when pressed
-    uint8_t debounce_count;
-    uint8_t pressed;
-} Button;
-
-static int btn1_read_raw(void) {
-    return !((GPIOB->INDR >> 20) & 1);
-}
-static int btn2_read_raw(void) {
-    return !funDigitalRead(BTN2_PIN);
-}
-static int btn3_read_raw(void) {
-    return !funDigitalRead(BTN3_PIN);
-}
-static int btn4_read_raw(void) {
-    return !((GPIOB->INDR >> 18) & 1);
+// Bit i set: button i is down (the buttons pull their pin low).
+// BTN1: PB20, BTN2: PC4, BTN3: PC5, BTN4: PB18; one read of each port
+static unsigned read_all(void) {
+    uint32_t b = ~GPIOB->INDR, c = ~GPIOC->INDR;
+    return (b >> 20 & 1) | (c >> 3 & 6) | (b >> 15 & 8);
 }
 
-static Button s_buttons[4] = {
-    {btn1_read_raw, 0, 0},
-    {btn2_read_raw, 0, 0},
-    {btn3_read_raw, 0, 0},
-    {btn4_read_raw, 0, 0},
-};
+static uint8_t s_count[4];  // ticks each button has been down, up to DEBOUNCE_TICKS
+static uint8_t s_pressed;   // bit i: button i counts as pressed (debounced)
 
 #define DEBOUNCE_TICKS 3  // 3 * TICK_MS = 15ms of stable level before it counts
 
@@ -47,45 +31,25 @@ void buttons_init(void) {
 
 // Returns a bitmask of buttons that were freshly pressed this tick
 uint8_t buttons_poll(void) {
-    uint8_t pressed_edges = 0;
+    unsigned raw = read_all(), edges = 0;
     for (int i = 0; i < 4; i++) {
-        Button* b = &s_buttons[i];
-        if (b->read_raw()) {
-            if (b->debounce_count < DEBOUNCE_TICKS) b->debounce_count++;
+        if (raw >> i & 1) {
+            if (s_count[i] < DEBOUNCE_TICKS && ++s_count[i] == DEBOUNCE_TICKS) edges |= 1u << i;
         } else {
-            b->debounce_count = 0;
-            b->pressed = 0;
-        }
-
-        if (b->debounce_count == DEBOUNCE_TICKS && !b->pressed) {
-            b->pressed = 1;
-            pressed_edges |= (1u << i);
+            s_count[i] = 0;
         }
     }
-    return pressed_edges;
+    s_pressed = (uint8_t)((s_pressed | edges) & raw);
+    return (uint8_t)edges;
 }
 
-uint8_t buttons_down(void) {
-    uint8_t down = 0;
-    for (int i = 0; i < 4; i++) {
-        if (s_buttons[i].pressed) down |= (1u << i);
-    }
-    return down;
-}
+uint8_t buttons_down(void) { return s_pressed; }
 
-uint8_t buttons_raw(void) {
-    uint8_t down = 0;
-    for (int i = 0; i < 4; i++) {
-        if (s_buttons[i].read_raw()) down |= (1u << i);
-    }
-    return down;
-}
+uint8_t buttons_raw(void) { return (uint8_t)read_all(); }
 
 // Treat every button as already pressed, so a press that is still held (e.g.
 // the one that woke us from standby) doesn't register until it's released
 void buttons_ignore_held(void) {
-    for (int i = 0; i < 4; i++) {
-        s_buttons[i].debounce_count = DEBOUNCE_TICKS;
-        s_buttons[i].pressed = 1;
-    }
+    for (int i = 0; i < 4; i++) s_count[i] = DEBOUNCE_TICKS;
+    s_pressed = 15;
 }

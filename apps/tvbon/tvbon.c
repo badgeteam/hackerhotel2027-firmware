@@ -3,13 +3,12 @@
 // Hisense, Sony, Panasonic, Philips, Toshiba): the arm to A fills up
 // green, faster and faster, then flashes; in its second half a laser
 // flickers at the arm's tip, wilder and wilder, until the arm all but
-// bursts at the end. Press B: the power-off
-// codes, the same in red to B. Brands with only a power toggle (TCL, Xiaomi, newer
-// Hisense, Philips and Toshiba, Sharp, Telefunken and others by Vestel,
-// Hitachi)
-// get it with A and with B, first, so a TV that knows both ends with its
-// own on or off. Philips's off is the standby button, which toggles on
-// newer Philips TVs. A press takes about two seconds.
+// bursts at the end. Press B: the power-off codes, the same in red to B.
+// Brands with only a power toggle (TCL, Xiaomi, newer Hisense, Philips and
+// Toshiba, Sharp, Telefunken and others by Vestel, Hitachi) get it with A
+// and with B, first, so a TV that knows both ends with its own on or off.
+// Philips's off is the standby button, which toggles on newer Philips TVs.
+// A press takes about two seconds.
 #include "hhapp.h"
 
 #define ARM_A 4              // the upper left arm, with A at its tip
@@ -31,8 +30,24 @@
 #define RC_GAP_US 65000      // after RC5 and RC6 (RC5 repeats every 114 ms; a space holds at most 65 ms)
 #define FRAME_MAX 100        // a Panasonic frame: leader, 48 bits, stop mark, gap
 
-enum { NEC, SAMSUNG, SONY, PANASONIC, RC5, RC6, XIAOMI };
+enum { NEC, SAMSUNG, PANASONIC, SONY, RC5, RC6, XIAOMI };
 enum { IDLE, ON, OFF };
+
+// The carrier of each protocol, Hz. Xiaomi: the JP1 forum's capture says
+// 36 kHz, Xiaomi's own Mi Remote database 38.
+static const uint16_t CARRIER[] = {38000, 38000, 36700, 40000, 36000, 36000, 38000};
+
+// Pulse distance coding (NEC, Samsung, Panasonic): a leader, then bytes
+// LSB first, each bit a mark of t and a space of t (0) or one (1), then a
+// stop mark and GAP_US
+typedef struct {
+    uint16_t lead_mark, lead_space, t, one;
+} distance_t;
+static const distance_t DISTANCE[] = {
+    [NEC] = {9000, 4500, 560, 1690},
+    [SAMSUNG] = {4500, 4500, 560, 1690},
+    [PANASONIC] = {3456, 1728, 432, 1296},
+};
 
 // The brands: a protocol, how often each frame goes out, the address and
 // the power-on and power-off commands, or the power toggle twice for a
@@ -40,11 +55,11 @@ enum { IDLE, ON, OFF };
 // Samsung send the address bytes a0 a1, then the command and its inverse.
 // Sony sends the command's 7 bits, then a1 bits of the address a0.
 // Panasonic sends its vendor code, a0 a1, the command and a check byte.
-// RC5, RC6 (Philips) and Xiaomi send the address a0 and the command. A toggle has
-// the same command for on and off, and goes out once: twice could count as
-// two presses. The toggles go first. LG goes before Hisense: on an LG,
-// Hisense's on and off are the green and red buttons, so after LG's off
-// the red one finds the TV off.
+// RC5, RC6 (Philips) and Xiaomi send the address a0 and the command. A
+// toggle has the same command for on and off, and goes out once: twice
+// could count as two presses. The toggles go first. LG goes before
+// Hisense: on an LG, Hisense's on and off are the green and red buttons,
+// so after LG's off the red one finds the TV off.
 typedef struct {
     uint8_t proto, repeats;
     uint8_t a0, a1;
@@ -69,6 +84,24 @@ static const brand_t BRANDS[] = {
 };
 #define BRAND_COUNT (sizeof BRANDS / sizeof *BRANDS)
 
+// TV, ON and OFF on the grid: a word to 4 rows from row 1, 6 and 11, each
+// row the columns 3 to 13, the left one in bit 10. OFF's O loses its
+// bottom left corner, where the octagon has no LED.
+static const uint16_t WORDS[3][4] = {
+    {0b00111010100,  // TV
+     0b00010010100,
+     0b00010010100,
+     0b00010001000},
+    {0b00111011000,  // ON
+     0b00101010100,
+     0b00101010100,
+     0b00111010100},
+    {0b11101110111,  // OFF
+     0b10101000100,
+     0b10101100110,
+     0b11101000100},
+};
+
 static const hh_api_t* hh;
 static uint8_t mode, last;          // what goes out now (ON, OFF or IDLE), and what went out last
 static uint8_t frame, frames;       // the next frame of a run, and how many a run has
@@ -79,25 +112,22 @@ static uint8_t next;  // the buffer for the next frame
 static bool built;    // buf[next] holds frame `frame`
 static uint32_t ms, a_down, done_ms;
 static bool a_tap;
-static uint8_t toggle;  // RC5's and RC6's toggle bit, new for each press
-static uint32_t run_ms;  // since the press
+static uint8_t toggle;      // RC5's and RC6's toggle bit, new for each press
+static uint32_t run_ms;     // since the press
 static uint8_t blast_from;  // the frame the blast started at, frames while it fills up
 static uint8_t beam[BEAMS];   // the front of each laser beam (polar distance), 0: none
 static uint8_t tip_angle[2];  // where the arms to A and B point (polar)
 
-// A frame of pulse distance coding (NEC, Samsung, Panasonic): a leader,
-// then n bytes LSB first, each bit a mark of t and a space of t (0) or
-// one (1), then a stop mark and the gap
-static uint16_t distance(uint16_t* f, uint16_t lead_mark, uint16_t lead_space, uint16_t t, uint16_t one,
-                         const uint8_t* bytes, int n) {
+// A frame of n bytes in pulse distance coding d
+static uint16_t distance(uint16_t* f, const distance_t* d, const uint8_t* bytes, int n) {
     uint16_t k = 0;
-    f[k++] = lead_mark;
-    f[k++] = lead_space;
+    f[k++] = d->lead_mark;
+    f[k++] = d->lead_space;
     for (int i = 0; i < n * 8; i++) {
-        f[k++] = t;
-        f[k++] = bytes[i / 8] >> (i % 8) & 1 ? one : t;
+        f[k++] = d->t;
+        f[k++] = bytes[i / 8] >> (i % 8) & 1 ? d->one : d->t;
     }
-    f[k++] = t;
+    f[k++] = d->t;
     f[k++] = GAP_US;
     return k;
 }
@@ -136,9 +166,9 @@ static uint16_t rc_gap(uint16_t* f, uint16_t k) {
     return k;
 }
 
-// A Philips RC5 frame at 36 kHz: 14 bits of 2 x 889 us, MSB first, each a
-// space and a mark (1) or a mark and a space (0): two start bits (both 1
-// for commands below 64), the toggle bit, 5 address bits, 6 command bits
+// A Philips RC5 frame: 14 bits of 2 x 889 us, MSB first, each a space and
+// a mark (1) or a mark and a space (0): two start bits (both 1 for
+// commands below 64), the toggle bit, 5 address bits, 6 command bits
 static uint16_t rc5(uint16_t* f, uint8_t address, uint8_t command) {
     uint16_t bits = (uint16_t)(3 << 12 | toggle << 11 | (address & 31) << 6 | (command & 63));
     uint16_t k = 0;
@@ -150,10 +180,10 @@ static uint16_t rc5(uint16_t* f, uint8_t address, uint8_t command) {
     return rc_gap(f, k);
 }
 
-// A Philips RC6 (mode 0) frame at 36 kHz: a leader of 2666 us mark and 889
-// us space, then bits of 2 x 444 us, MSB first, each a mark and a space
-// (1) or a space and a mark (0): the start bit (1), 3 mode bits (0), the
-// toggle bit at twice the length, 8 address bits, 8 command bits
+// A Philips RC6 (mode 0) frame: a leader of 2666 us mark and 889 us space,
+// then bits of 2 x 444 us, MSB first, each a mark and a space (1) or a
+// space and a mark (0): the start bit (1), 3 mode bits (0), the toggle bit
+// at twice the length, 8 address bits, 8 command bits
 static uint16_t rc6(uint16_t* f, uint8_t address, uint8_t command) {
     uint32_t bits = 1u << 20 | (uint32_t)toggle << 16 | (uint32_t)address << 8 | command;
     uint16_t k = level(f, 0, true, 6 * RC6_UNIT_US);
@@ -194,31 +224,25 @@ static uint16_t build(uint16_t* f, uint8_t i, uint8_t m, uint32_t* hz) {
     const brand_t* b = BRANDS;
     while (i >= b->repeats) i -= b->repeats, b++;
     uint8_t c = m == ON ? b->on : b->off;
-    uint8_t bytes[6] = {b->a0, b->a1, c, (uint8_t)~c};
+    *hz = CARRIER[b->proto];
     switch (b->proto) {
         case SONY:
-            *hz = 40000;
             return sony(f, c, b->a0, b->a1);
-        case PANASONIC:
-            bytes[0] = 0x02, bytes[1] = 0x20;  // the vendor code, 0x2002
-            bytes[2] = b->a0, bytes[3] = b->a1, bytes[4] = c, bytes[5] = b->a0 ^ b->a1 ^ c;
-            *hz = 36700;
-            return distance(f, 3456, 1728, 432, 1296, bytes, 6);
         case RC5:
-            *hz = 36000;
             return rc5(f, b->a0, c);
         case RC6:
-            *hz = 36000;
             return rc6(f, b->a0, c);
         case XIAOMI:
-            *hz = 38000;  // the JP1 forum's capture says 36 kHz, Xiaomi's own Mi Remote database 38
             return xiaomi(f, b->a0, c);
-        case SAMSUNG:
-            *hz = 38000;
-            return distance(f, 4500, 4500, 560, 1690, bytes, 4);
-        default:
-            *hz = 38000;
-            return distance(f, 9000, 4500, 560, 1690, bytes, 4);
+        case PANASONIC: {
+            // the vendor code 0x2002, the address, the command, a check byte
+            uint8_t bytes[6] = {0x02, 0x20, b->a0, b->a1, c, (uint8_t)(b->a0 ^ b->a1 ^ c)};
+            return distance(f, &DISTANCE[PANASONIC], bytes, 6);
+        }
+        default: {
+            uint8_t bytes[4] = {b->a0, b->a1, c, (uint8_t)~c};
+            return distance(f, &DISTANCE[b->proto], bytes, 4);
+        }
     }
 }
 
@@ -239,22 +263,6 @@ static void send(void) {
     next ^= 1;
     built = false;
     if (++frame == frames) mode = IDLE, done_ms = DONE_MS;
-}
-
-// The words, 3 x 4 pixels a letter: a row per nibble, bit 0 the left column.
-// OFF loses the O's bottom left corner, where the octagon has no LED.
-static const char LETTERS[] = "TVONF";
-static const uint16_t GLYPHS[] = {0x2227, 0x2555, 0x7557, 0x5553, 0x1317};
-
-static void word(int x, int y, const char* t, uint8_t v) {
-    for (; *t; t++) {
-        int g = 0;
-        while (LETTERS[g] != *t) g++;
-        for (int r = 0; r < 4; r++)
-            for (int c = 0; c < 3; c++)
-                if (GLYPHS[g] >> (r * 4 + c) & 1) hh->set(hh->grid[y + r][x + c], v);
-        x += 4;
-    }
 }
 
 // An arm from white at the centre to its colour at the button (green to
@@ -353,9 +361,11 @@ static void tick(uint32_t elapsed_ms) {
     laser(tip_angle[last == OFF], power, elapsed_ms);
 
     // The grid: TV, then ON and OFF; while one goes out, that one bright
-    word(5, 1, "TV", 255);
-    word(5, 6, "ON", busy ? (last == ON ? 255 : 40) : 150);
-    word(3, 11, "OFF", busy ? (last == OFF ? 255 : 40) : 150);
+    uint8_t v[3] = {255, busy ? (last == ON ? 255 : 40) : 150, busy ? (last == OFF ? 255 : 40) : 150};
+    for (int w = 0; w < 3; w++)
+        for (int r = 0; r < 4; r++)
+            for (int c = 0; c < 11; c++)
+                if (WORDS[w][r] >> (10 - c) & 1) hh->set(hh->grid[1 + 5 * w + r][3 + c], v[w]);
 }
 
 static void init(const hh_api_t* api) {
